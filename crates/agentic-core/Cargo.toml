@@ -9,7 +9,9 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
+directories = { workspace = true }
 
 [dev-dependencies]
 tracing-test = "0.2"
 serial_test = "3"
+tempfile = "3"

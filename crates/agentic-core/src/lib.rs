@@ -4,6 +4,7 @@ pub mod error;
 pub use error::{CoreError, Result};
 pub mod logging;
 pub use logging::{init, init_test_subscriber};
+pub mod paths;
 
 /// The semver version string of the `agentic-core` crate.
 ///
