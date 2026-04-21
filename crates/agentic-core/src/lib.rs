@@ -6,6 +6,7 @@ pub mod logging;
 pub use logging::{init, init_test_subscriber};
 pub mod paths;
 pub use paths::Paths;
+pub mod db;
 
 /// The semver version string of the `agentic-core` crate.
 ///
