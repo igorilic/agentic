@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/agentic-meta-tests",
+    "crates/agentic-core",
 ]
 
 [workspace.package]
