@@ -85,3 +85,13 @@ fn test_job_installs_pnpm_and_node() {
         "test job must use actions/setup-node; uses: {uses:?}"
     );
 }
+
+#[test]
+fn workflow_has_workflow_dispatch_trigger() {
+    let wf = load_workflow();
+    let on = wf.get("on").expect("workflow has no 'on' block");
+    assert!(
+        on.get("workflow_dispatch").is_some(),
+        "workflow missing workflow_dispatch trigger (YAML 'on' block: {on:?})"
+    );
+}
