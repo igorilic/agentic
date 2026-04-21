@@ -1,5 +1,5 @@
-use agentic_core::db::Db;
 use agentic_core::Paths;
+use agentic_core::db::Db;
 
 fn setup_paths() -> (tempfile::TempDir, Paths) {
     let tmp = tempfile::tempdir().unwrap();

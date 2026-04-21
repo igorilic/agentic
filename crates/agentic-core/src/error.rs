@@ -25,4 +25,16 @@ pub enum CoreError {
     Other(#[from] anyhow::Error),
 }
 
+impl From<rusqlite::Error> for CoreError {
+    fn from(e: rusqlite::Error) -> Self {
+        CoreError::Db(e.to_string())
+    }
+}
+
+impl From<r2d2::Error> for CoreError {
+    fn from(e: r2d2::Error) -> Self {
+        CoreError::Db(e.to_string())
+    }
+}
+
 pub type Result<T> = std::result::Result<T, CoreError>;
