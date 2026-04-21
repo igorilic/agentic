@@ -1,5 +1,7 @@
 use crate::{Paths, Result};
 
+pub mod migrations;
+
 #[derive(Clone)]
 pub struct Db {
     pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
