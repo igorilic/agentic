@@ -1,5 +1,8 @@
 #![deny(unsafe_code)]
 
+pub mod logging;
+pub use logging::{init, init_test_subscriber};
+
 /// The semver version string of the `agentic-core` crate.
 ///
 /// # Examples
