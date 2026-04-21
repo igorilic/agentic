@@ -1,1 +1,50 @@
+use crate::Result;
+
+struct Migration {
+    version: i64,
+    #[allow(dead_code)]
+    // name documents the migration; used for observability when logging is added
+    name: &'static str,
+    sql: &'static str,
+}
+
+const MIGRATIONS: &[Migration] = &[Migration {
+    version: 1,
+    name: "workspaces",
+    sql: include_str!("0001_workspaces.sql"),
+}];
+
 pub struct Migrator;
+
+impl Migrator {
+    /// Run all pending migrations against `db`. Idempotent: already-applied
+    /// migrations (by version) are skipped.
+    pub fn run(db: &super::Db) -> Result<()> {
+        let mut conn = db.conn()?;
+        let tx = conn.transaction()?;
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS _migrations (
+                version    INTEGER PRIMARY KEY,
+                applied_at INTEGER NOT NULL
+             );",
+        )?;
+        let current: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM _migrations",
+            [],
+            |r| r.get(0),
+        )?;
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        for m in MIGRATIONS.iter().filter(|m| m.version > current) {
+            tx.execute_batch(m.sql)?;
+            tx.execute(
+                "INSERT INTO _migrations (version, applied_at) VALUES (?1, ?2)",
+                rusqlite::params![m.version, now_secs],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+}

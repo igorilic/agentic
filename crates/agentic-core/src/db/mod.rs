@@ -15,7 +15,9 @@ impl Db {
         let manager =
             r2d2_sqlite::SqliteConnectionManager::file(paths.db_file()).with_init(apply_pragmas);
         let pool = r2d2::Pool::builder().build(manager)?;
-        Ok(Db { pool })
+        let db = Db { pool };
+        migrations::Migrator::run(&db)?;
+        Ok(db)
     }
 
     /// In-memory database for tests that don't need on-disk persistence
@@ -24,7 +26,9 @@ impl Db {
     pub fn open_in_memory() -> Result<Db> {
         let manager = r2d2_sqlite::SqliteConnectionManager::memory().with_init(apply_pragmas);
         let pool = r2d2::Pool::builder().max_size(1).build(manager)?;
-        Ok(Db { pool })
+        let db = Db { pool };
+        migrations::Migrator::run(&db)?;
+        Ok(db)
     }
 
     /// Borrow a pooled connection. Returns `CoreError::Db` if the pool

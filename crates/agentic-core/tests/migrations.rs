@@ -41,7 +41,10 @@ fn migrator_is_idempotent_when_run_twice() {
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM _migrations", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(count, 1, "_migrations should have exactly 1 row, not {count}");
+    assert_eq!(
+        count, 1,
+        "_migrations should have exactly 1 row, not {count}"
+    );
 }
 
 #[test]
@@ -57,9 +60,16 @@ fn each_applied_migration_has_a_row_in_migrations_table() {
         .unwrap();
     assert_eq!(versions, vec![1], "expected exactly version 1 applied");
     let applied_at: i64 = conn
-        .query_row("SELECT applied_at FROM _migrations WHERE version = 1", [], |r| r.get(0))
+        .query_row(
+            "SELECT applied_at FROM _migrations WHERE version = 1",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
-    assert!(applied_at > 0, "applied_at should be a positive unix timestamp");
+    assert!(
+        applied_at > 0,
+        "applied_at should be a positive unix timestamp"
+    );
 }
 
 #[test]
@@ -72,9 +82,9 @@ fn workspaces_schema_matches_spec() {
         .unwrap()
         .query_map([], |row| {
             Ok((
-                row.get::<_, String>(1)?,       // name
-                row.get::<_, String>(2)?,       // declared type
-                row.get::<_, i64>(3)? == 1,     // notnull
+                row.get::<_, String>(1)?,   // name
+                row.get::<_, String>(2)?,   // declared type
+                row.get::<_, i64>(3)? == 1, // notnull
             ))
         })
         .unwrap()
@@ -83,13 +93,13 @@ fn workspaces_schema_matches_spec() {
     // Spec §13.1 order and shape. Note: `id TEXT PRIMARY KEY` without explicit
     // NOT NULL — SQLite quirk allows NULL for non-INTEGER PK, so notnull is 0.
     let expected: Vec<(&str, &str, bool)> = vec![
-        ("id",           "TEXT",    false),
-        ("name",         "TEXT",    true),
-        ("root_path",    "TEXT",    true),
-        ("remote_url",   "TEXT",    false),
-        ("profile",      "TEXT",    true),
-        ("created_at",   "INTEGER", true),
-        ("last_opened",  "INTEGER", true),
+        ("id", "TEXT", false),
+        ("name", "TEXT", true),
+        ("root_path", "TEXT", true),
+        ("remote_url", "TEXT", false),
+        ("profile", "TEXT", true),
+        ("created_at", "INTEGER", true),
+        ("last_opened", "INTEGER", true),
     ];
     let actual_ref: Vec<(&str, &str, bool)> = cols
         .iter()
