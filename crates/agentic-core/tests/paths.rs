@@ -26,6 +26,12 @@ fn config_file_ends_with_settings_toml() {
     let tmp = tempfile::tempdir().unwrap();
     let p = Paths::for_tests(tmp.path());
     assert_eq!(p.config_file().file_name().unwrap(), "settings.toml");
+    assert!(
+        p.config_file().starts_with(p.config_dir()),
+        "config_file {:?} should be under config_dir {:?}",
+        p.config_file(),
+        p.config_dir()
+    );
 }
 
 #[test]
@@ -33,6 +39,12 @@ fn db_file_ends_with_state_db() {
     let tmp = tempfile::tempdir().unwrap();
     let p = Paths::for_tests(tmp.path());
     assert_eq!(p.db_file().file_name().unwrap(), "state.db");
+    assert!(
+        p.db_file().starts_with(p.data_dir()),
+        "db_file {:?} should be under data_dir {:?}",
+        p.db_file(),
+        p.data_dir()
+    );
 }
 
 #[test]

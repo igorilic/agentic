@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::{CoreError, Result};
 
+#[derive(Debug)]
 pub struct Paths {
     root: PathBuf,
     data_root: PathBuf,
