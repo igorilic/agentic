@@ -5,7 +5,6 @@
 /// # Examples
 ///
 /// ```
-/// assert!(!agentic_core::VERSION.is_empty());
-/// assert!(agentic_core::VERSION.chars().next().unwrap().is_ascii_digit());
+/// assert_eq!(agentic_core::VERSION, env!("CARGO_PKG_VERSION"));
 /// ```
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
