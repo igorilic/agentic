@@ -1,5 +1,6 @@
-use crate::{CoreError, Paths, Result};
+use crate::{Paths, Result};
 
+#[derive(Clone)]
 pub struct Db {
     pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
 }
@@ -11,9 +12,7 @@ impl Db {
     pub fn open(paths: &Paths) -> Result<Db> {
         let manager =
             r2d2_sqlite::SqliteConnectionManager::file(paths.db_file()).with_init(apply_pragmas);
-        let pool = r2d2::Pool::builder()
-            .build(manager)
-            .map_err(|e| CoreError::Db(format!("r2d2 pool: {e}")))?;
+        let pool = r2d2::Pool::builder().build(manager)?;
         Ok(Db { pool })
     }
 
@@ -22,17 +21,14 @@ impl Db {
     /// in-memory connection is independent by default.
     pub fn open_in_memory() -> Result<Db> {
         let manager = r2d2_sqlite::SqliteConnectionManager::memory().with_init(apply_pragmas);
-        let pool = r2d2::Pool::builder()
-            .max_size(1)
-            .build(manager)
-            .map_err(|e| CoreError::Db(format!("r2d2 pool: {e}")))?;
+        let pool = r2d2::Pool::builder().max_size(1).build(manager)?;
         Ok(Db { pool })
     }
 
     /// Borrow a pooled connection. Returns `CoreError::Db` if the pool
     /// is exhausted or a connection can't be established.
     pub fn conn(&self) -> Result<r2d2::PooledConnection<r2d2_sqlite::SqliteConnectionManager>> {
-        self.pool.get().map_err(|e| CoreError::Db(e.to_string()))
+        Ok(self.pool.get()?)
     }
 }
 
