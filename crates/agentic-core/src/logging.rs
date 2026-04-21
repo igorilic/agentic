@@ -11,10 +11,10 @@ pub fn resolved_filter(filter: Option<&str>, default_level: &str) -> String {
     if let Some(f) = filter {
         return f.to_owned();
     }
-    if let Ok(env_val) = std::env::var("AGENTIC_LOG") {
-        if !env_val.is_empty() {
-            return env_val;
-        }
+    if let Ok(env_val) = std::env::var("AGENTIC_LOG")
+        && !env_val.is_empty()
+    {
+        return env_val;
     }
     default_level.to_owned()
 }

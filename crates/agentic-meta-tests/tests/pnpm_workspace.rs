@@ -30,8 +30,7 @@ fn pnpm_workspace_yaml_exists_and_lists_apps_glob() {
         yaml_path
     );
 
-    let content = std::fs::read_to_string(&yaml_path)
-        .expect("could not read pnpm-workspace.yaml");
+    let content = std::fs::read_to_string(&yaml_path).expect("could not read pnpm-workspace.yaml");
 
     assert!(
         content.contains("packages:"),
@@ -64,8 +63,8 @@ fn app_package_jsons_exist_with_expected_names() {
         vscode_ext_path
     );
 
-    let web_ui_content = std::fs::read_to_string(&web_ui_path)
-        .expect("could not read apps/web-ui/package.json");
+    let web_ui_content =
+        std::fs::read_to_string(&web_ui_path).expect("could not read apps/web-ui/package.json");
     let vscode_ext_content = std::fs::read_to_string(&vscode_ext_path)
         .expect("could not read apps/vscode-extension/package.json");
 

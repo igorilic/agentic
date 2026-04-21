@@ -3,7 +3,12 @@ use std::path::PathBuf;
 fn workflow_yaml_path() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     // agentic-meta-tests/Cargo.toml -> repo root is two parents up.
-    manifest.parent().unwrap().parent().unwrap().join(".github/workflows/test.yml")
+    manifest
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join(".github/workflows/test.yml")
 }
 
 fn load_workflow() -> serde_yaml::Value {
@@ -36,8 +41,10 @@ fn workflow_defines_fmt_clippy_test_jobs() {
 fn test_job_matrix_includes_macos_and_linux() {
     let wf = load_workflow();
     let matrix = wf
-        .get("jobs").and_then(|j| j.get("test"))
-        .and_then(|t| t.get("strategy")).and_then(|s| s.get("matrix"))
+        .get("jobs")
+        .and_then(|j| j.get("test"))
+        .and_then(|t| t.get("strategy"))
+        .and_then(|s| s.get("matrix"))
         .and_then(|m| m.get("os"))
         .expect("test job has no strategy.matrix.os");
     let os_list: Vec<String> = matrix
@@ -60,7 +67,8 @@ fn test_job_installs_pnpm_and_node() {
     // pnpm_install_succeeds_on_clean_workspace test exercises the real path.
     let wf = load_workflow();
     let steps = wf
-        .get("jobs").and_then(|j| j.get("test"))
+        .get("jobs")
+        .and_then(|j| j.get("test"))
         .and_then(|t| t.get("steps"))
         .and_then(|s| s.as_sequence())
         .expect("test job has no steps sequence");
