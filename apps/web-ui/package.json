@@ -1,0 +1,9 @@
+{
+  "name": "@agentic/web-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared web UI for Agentic desktop (Tauri) and VS Code webview (post-MVP-shared).",
+  "scripts": {},
+  "dependencies": {},
+  "devDependencies": {}
+}

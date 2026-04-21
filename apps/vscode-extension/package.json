@@ -1,0 +1,9 @@
+{
+  "name": "@agentic/vscode-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VS Code / VSCodium / Cursor / Windsurf extension entrypoint for Agentic.",
+  "scripts": {},
+  "dependencies": {},
+  "devDependencies": {}
+}
