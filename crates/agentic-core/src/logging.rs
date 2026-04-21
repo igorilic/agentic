@@ -4,10 +4,10 @@ use tracing_subscriber::{EnvFilter, fmt};
 
 static SUBSCRIBER_INSTALLED: OnceLock<()> = OnceLock::new();
 
-/// Returns the resolved log filter string based on precedence:
-/// explicit `filter` arg > `AGENTIC_LOG` env var > default `"info"`.
+/// Resolve the tracing filter string with precedence:
+/// explicit `filter` arg > `AGENTIC_LOG` env var > `default_level`.
 #[doc(hidden)]
-pub fn resolved_filter(filter: Option<&str>) -> String {
+pub fn resolved_filter(filter: Option<&str>, default_level: &str) -> String {
     if let Some(f) = filter {
         return f.to_owned();
     }
@@ -16,7 +16,7 @@ pub fn resolved_filter(filter: Option<&str>) -> String {
             return env_val;
         }
     }
-    "info".to_owned()
+    default_level.to_owned()
 }
 
 /// Installs a global tracing subscriber configured for production use.
@@ -28,7 +28,7 @@ pub fn resolved_filter(filter: Option<&str>) -> String {
 /// process.
 pub fn init(filter: Option<&str>) {
     SUBSCRIBER_INSTALLED.get_or_init(|| {
-        let filter_str = resolved_filter(filter);
+        let filter_str = resolved_filter(filter, "info");
         let env_filter = EnvFilter::new(filter_str);
         fmt().with_env_filter(env_filter).init();
     });
@@ -43,12 +43,10 @@ pub fn init(filter: Option<&str>) {
 /// no other `init`/`init_test_subscriber` call precedes this one in the process.
 pub fn init_test_subscriber() {
     SUBSCRIBER_INSTALLED.get_or_init(|| {
+        let filter_str = resolved_filter(None, "debug");
         fmt()
             .with_test_writer()
-            .with_env_filter(
-                EnvFilter::try_from_env("AGENTIC_LOG")
-                    .unwrap_or_else(|_| EnvFilter::new("debug")),
-            )
+            .with_env_filter(EnvFilter::new(filter_str))
             .init();
     });
 }
