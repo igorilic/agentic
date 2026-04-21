@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 
+pub mod error;
 pub mod logging;
 pub use logging::{init, init_test_subscriber};
 
