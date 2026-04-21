@@ -1,4 +1,5 @@
 use agentic_core::logging;
+use serial_test::serial;
 
 /// Calling init_test_subscriber twice in the same process must not panic.
 #[test]
@@ -20,6 +21,7 @@ fn cross_call_init_then_test_subscriber_does_not_panic() {
 
 /// resolved_filter honors explicit arg > AGENTIC_LOG env > default_level.
 #[test]
+#[serial]
 fn init_honors_agentic_log_env_var() {
     // Explicit arg wins over env var.
     // SAFETY: test-only single-threaded env mutation; no concurrent env reads.
@@ -42,6 +44,7 @@ fn init_honors_agentic_log_env_var() {
 /// resolved_filter returns the caller-supplied default when no env and no explicit arg.
 /// Locks in the divergent-default contract: prod path uses "info", test path uses "debug".
 #[test]
+#[serial]
 fn resolved_filter_returns_custom_default_when_no_env_and_no_arg() {
     // Ensure AGENTIC_LOG is NOT set for this test.
     unsafe { std::env::remove_var("AGENTIC_LOG") };

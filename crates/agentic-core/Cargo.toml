@@ -10,3 +10,4 @@ tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 tracing-test = "0.2"
+serial_test = "3"
