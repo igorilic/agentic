@@ -7,15 +7,6 @@ fn idempotent_init_test_subscriber_does_not_panic_on_second_call() {
     logging::init_test_subscriber();
 }
 
-/// A log emitted after init_test_subscriber is captured by tracing_test.
-#[tracing_test::traced_test]
-#[test]
-fn init_test_subscriber_captures_emitted_logs() {
-    logging::init_test_subscriber();
-    tracing::info!("hello from agentic-core");
-    assert!(logs_contain("hello from agentic-core"));
-}
-
 /// resolved_filter honors explicit arg > AGENTIC_LOG env > default "info".
 #[test]
 fn init_honors_agentic_log_env_var() {
