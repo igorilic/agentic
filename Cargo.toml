@@ -1,0 +1,12 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/agentic-meta-tests",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+
+# Shared workspace dependencies will be declared here as the project grows.
+[workspace.dependencies]
