@@ -3,6 +3,9 @@ pub enum CoreError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error("invalid state transition from {from:?} to {to:?}")]
+    InvalidStateTransition { from: String, to: String },
+
     #[error("database error: {0}")]
     Db(String),
 

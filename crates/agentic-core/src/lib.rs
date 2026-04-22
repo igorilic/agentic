@@ -14,6 +14,8 @@ pub mod paths;
 pub use paths::Paths;
 pub mod db;
 pub use db::Db;
+pub use db::runs::{Run, RunRepo};
+pub use db::steps::{Step, StepRepo};
 pub use db::workspaces::{Workspace, WorkspaceRepo};
 pub mod settings;
 pub use settings::{EnvProvider, Key, MockEnv, RealEnv, Resolver, Setting, Source};
