@@ -9,8 +9,8 @@ pub use paths::Paths;
 pub mod db;
 pub use db::Db;
 pub use db::workspaces::{Workspace, WorkspaceRepo};
-mod time;
 pub mod settings;
+mod time;
 
 /// The semver version string of the `agentic-core` crate.
 ///

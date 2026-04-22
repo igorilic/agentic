@@ -23,7 +23,12 @@ theme = "light"
     let r = Resolver::new(env, Some(workspace), None, defaults_with_theme("auto"));
     let Setting { value, source } = r.resolve(Key::UiTheme).expect("resolved");
     assert_eq!(value, "dark");
-    assert_eq!(source, Source::Env { var: "AGENTIC_THEME" });
+    assert_eq!(
+        source,
+        Source::Env {
+            var: "AGENTIC_THEME"
+        }
+    );
 }
 
 #[test]
@@ -39,7 +44,12 @@ theme = "light"
 theme = "dark"
 "#,
     );
-    let r = Resolver::new(env, Some(workspace), Some(user), defaults_with_theme("auto"));
+    let r = Resolver::new(
+        env,
+        Some(workspace),
+        Some(user),
+        defaults_with_theme("auto"),
+    );
     let Setting { value, source } = r.resolve(Key::UiTheme).expect("resolved");
     assert_eq!(value, "light");
     assert_eq!(source, Source::Workspace);
