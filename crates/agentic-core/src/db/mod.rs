@@ -9,6 +9,14 @@ pub struct Db {
 
 impl Db {
     /// Open the on-disk database at `paths.db_file()`.
+    ///
+    /// Runs any pending migrations before returning. Idempotent on
+    /// subsequent opens — already-applied migrations (tracked in
+    /// `_migrations`) are skipped. Returns `Err(CoreError::Db(_))` if the
+    /// pool cannot be built or a migration fails; the database is left in
+    /// a consistent state either way (migrations run inside a single
+    /// transaction).
+    ///
     /// Caller is responsible for ensuring the parent directory exists
     /// (typically via `paths.ensure_dirs()` first).
     pub fn open(paths: &Paths) -> Result<Db> {
@@ -23,6 +31,8 @@ impl Db {
     /// In-memory database for tests that don't need on-disk persistence
     /// or WAL semantics. Pool max size is 1 because each r2d2_sqlite
     /// in-memory connection is independent by default.
+    ///
+    /// Runs pending migrations on open, same as `Db::open`.
     pub fn open_in_memory() -> Result<Db> {
         let manager = r2d2_sqlite::SqliteConnectionManager::memory().with_init(apply_pragmas);
         let pool = r2d2::Pool::builder().max_size(1).build(manager)?;

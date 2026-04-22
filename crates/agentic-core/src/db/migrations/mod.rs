@@ -2,8 +2,6 @@ use crate::Result;
 
 struct Migration {
     version: i64,
-    #[allow(dead_code)]
-    // name documents the migration; used for observability when logging is added
     name: &'static str,
     sql: &'static str,
 }
@@ -39,6 +37,7 @@ impl Migrator {
             .unwrap_or(0);
         for m in MIGRATIONS.iter().filter(|m| m.version > current) {
             tx.execute_batch(m.sql)?;
+            tracing::info!(version = m.version, name = m.name, "applied migration");
             tx.execute(
                 "INSERT INTO _migrations (version, applied_at) VALUES (?1, ?2)",
                 rusqlite::params![m.version, now_secs],
