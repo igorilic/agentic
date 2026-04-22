@@ -6,6 +6,17 @@ pub use bus::{DEFAULT_CAPACITY, EventBus};
 mod persist;
 pub use persist::EventPersister;
 
+/// Current wire-format schema version for `EventEnvelope`. Bump when the
+/// envelope or any Event variant shape changes in a way that's not
+/// backward-compatible (renamed fields, changed types, removed variants).
+/// Bumping additively (new optional fields, new variants) does NOT require
+/// a version bump — serde's `#[serde(default)]` handles those.
+pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+
+fn default_schema_version() -> u32 {
+    CURRENT_SCHEMA_VERSION
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ProfileId(pub String);
@@ -168,6 +179,10 @@ pub enum Event {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EventEnvelope {
+    /// Envelope schema version. See [`CURRENT_SCHEMA_VERSION`]. Defaults to
+    /// 1 on deserialization of old BLOBs/JSON that predate this field.
+    #[serde(default = "default_schema_version")]
+    pub schema_version: u32,
     pub event_id: String,
     pub run_id: String,
     pub step_id: Option<String>,
@@ -180,6 +195,7 @@ impl EventEnvelope {
     /// set to `crate::time::now_ms()`.
     pub fn now(run_id: String, step_id: Option<String>, event: Event) -> Self {
         Self {
+            schema_version: CURRENT_SCHEMA_VERSION,
             event_id: ulid::Ulid::new().to_string(),
             run_id,
             step_id,

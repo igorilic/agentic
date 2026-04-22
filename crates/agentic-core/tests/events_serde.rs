@@ -1,6 +1,6 @@
 use agentic_core::{
-    ActionRequired, BackendId, Event, EventEnvelope, ModelId, ProfileId, RunStatus, Severity,
-    StepStatus, TicketKind, TicketRef, TokenUsage, ToolStream,
+    ActionRequired, BackendId, CURRENT_SCHEMA_VERSION, Event, EventEnvelope, ModelId, ProfileId,
+    RunStatus, Severity, StepStatus, TicketKind, TicketRef, TokenUsage, ToolStream,
 };
 
 fn sample_events() -> Vec<Event> {
@@ -172,6 +172,7 @@ fn retry_started_envelope_serializes_to_exact_wire_format() {
     // Any change to serde attributes on Event or EventEnvelope that
     // alters the wire format will fail this test.
     let envelope = EventEnvelope {
+        schema_version: CURRENT_SCHEMA_VERSION,
         event_id: "01J8RZYX1K3PQXGT1WJYR8AZ7Q".to_string(),
         run_id: "run1".to_string(),
         step_id: None,
@@ -184,6 +185,78 @@ fn retry_started_envelope_serializes_to_exact_wire_format() {
     let json = serde_json::to_string(&envelope).expect("serialize");
     assert_eq!(
         json,
-        r#"{"event_id":"01J8RZYX1K3PQXGT1WJYR8AZ7Q","run_id":"run1","step_id":null,"timestamp_ms":1234567890,"event":{"type":"RetryStarted","data":{"attempt":2,"reason":"rate limited"}}}"#
+        r#"{"schema_version":1,"event_id":"01J8RZYX1K3PQXGT1WJYR8AZ7Q","run_id":"run1","step_id":null,"timestamp_ms":1234567890,"event":{"type":"RetryStarted","data":{"attempt":2,"reason":"rate limited"}}}"#
+    );
+}
+
+#[test]
+fn step_complete_envelope_serializes_to_exact_wire_format() {
+    let envelope = EventEnvelope {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        event_id: "01J8RZYX1K3PQXGT1WJYR8AZ7Q".to_string(),
+        run_id: "run1".to_string(),
+        step_id: Some("step1".to_string()),
+        timestamp_ms: 1234567890,
+        event: Event::StepComplete {
+            status: StepStatus::Passed,
+            summary: "ok".to_string(),
+            token_usage: TokenUsage {
+                input_tokens: 100,
+                output_tokens: 50,
+                cache_read_input_tokens: 10,
+                cache_creation_input_tokens: 5,
+            },
+            cost_usd: Some(0.012),
+        },
+    };
+    let json = serde_json::to_string(&envelope).expect("serialize");
+    assert_eq!(
+        json,
+        r#"{"schema_version":1,"event_id":"01J8RZYX1K3PQXGT1WJYR8AZ7Q","run_id":"run1","step_id":"step1","timestamp_ms":1234567890,"event":{"type":"StepComplete","data":{"status":"passed","summary":"ok","token_usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":10,"cache_creation_input_tokens":5},"cost_usd":0.012}}}"#
+    );
+}
+
+#[test]
+fn finding_envelope_serializes_to_exact_wire_format() {
+    let envelope = EventEnvelope {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        event_id: "01J8RZYX1K3PQXGT1WJYR8AZ7Q".to_string(),
+        run_id: "run1".to_string(),
+        step_id: Some("step1".to_string()),
+        timestamp_ms: 1234567890,
+        event: Event::Finding {
+            finding_id: "f1".to_string(),
+            severity: Severity::Warning,
+            file: Some(std::path::PathBuf::from("src/lib.rs")),
+            line: Some(42),
+            message: "watch out".to_string(),
+            suggestion: Some("use ?".to_string()),
+        },
+    };
+    let json = serde_json::to_string(&envelope).expect("serialize");
+    assert_eq!(
+        json,
+        r#"{"schema_version":1,"event_id":"01J8RZYX1K3PQXGT1WJYR8AZ7Q","run_id":"run1","step_id":"step1","timestamp_ms":1234567890,"event":{"type":"Finding","data":{"finding_id":"f1","severity":"warning","file":"src/lib.rs","line":42,"message":"watch out","suggestion":"use ?"}}}"#
+    );
+}
+
+#[test]
+fn user_action_needed_envelope_serializes_to_exact_wire_format() {
+    let envelope = EventEnvelope {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        event_id: "01J8RZYX1K3PQXGT1WJYR8AZ7Q".to_string(),
+        run_id: "run1".to_string(),
+        step_id: None,
+        timestamp_ms: 1234567890,
+        event: Event::UserActionNeeded {
+            action: ActionRequired::TriageFindings {
+                finding_ids: vec!["f1".to_string(), "f2".to_string()],
+            },
+        },
+    };
+    let json = serde_json::to_string(&envelope).expect("serialize");
+    assert_eq!(
+        json,
+        r#"{"schema_version":1,"event_id":"01J8RZYX1K3PQXGT1WJYR8AZ7Q","run_id":"run1","step_id":null,"timestamp_ms":1234567890,"event":{"type":"UserActionNeeded","data":{"action":{"type":"triage_findings","data":{"finding_ids":["f1","f2"]}}}}}"#
     );
 }
