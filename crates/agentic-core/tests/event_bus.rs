@@ -51,9 +51,30 @@ async fn slow_subscriber_lagging_past_capacity_yields_lagged_and_fresh_subscribe
 
     match slow.recv().await {
         Err(RecvError::Lagged(n)) => {
-            assert!(n > 0, "expected positive lag count, got {n}");
+            // Capacity 4, 10 publishes, 0 consumed → skipped exactly 6.
+            // Tokio broadcast lag count is deterministic per-subscriber.
+            assert_eq!(
+                n, 6,
+                "expected exactly 6 skipped events (10 publish - 4 capacity), got {n}"
+            );
         }
         other => panic!("expected Lagged error, got {other:?}"),
+    }
+
+    // After a Lagged error, recv() resumes at the oldest still-buffered message.
+    // Buffer holds events 7, 8, 9, 10 (the last `capacity` = 4 publishes).
+    let recovered = slow
+        .recv()
+        .await
+        .expect("slow subscriber recovers after Lagged");
+    match recovered.event {
+        Event::RetryStarted { attempt, .. } => {
+            assert_eq!(
+                attempt, 7,
+                "expected oldest still-buffered event (7), got {attempt}"
+            );
+        }
+        other => panic!("expected RetryStarted(7) on recovery, got {other:?}"),
     }
 
     // Subscribe fresh AFTER the lag. Publish a new event.

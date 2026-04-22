@@ -35,12 +35,25 @@ impl EventBus {
     }
 
     /// Publish an envelope. Returns the number of active receivers that the
-    /// value was sent to (0 if no one is subscribed). Never errors: the "no
-    /// receivers" case is normal for an event bus.
+    /// value was sent to (0 if no one is subscribed).
+    ///
+    /// **Observability**: when no subscribers are active, the envelope is
+    /// silently dropped and a `tracing::warn!` is emitted with `run_id`,
+    /// `event_id`, and the dropping site. Callers that require delivery
+    /// guarantees (e.g. the event persister in Step 2.3) must subscribe
+    /// before the first publish.
     pub fn publish(&self, envelope: EventEnvelope) -> usize {
-        // broadcast::Sender::send returns Result<usize, SendError<T>>.
-        // Err means no subscribers — return 0 (not an error for a bus).
-        self.sender.send(envelope).unwrap_or(0)
+        match self.sender.send(envelope) {
+            Ok(n) => n,
+            Err(tokio::sync::broadcast::error::SendError(dropped)) => {
+                tracing::warn!(
+                    run_id = %dropped.run_id,
+                    event_id = %dropped.event_id,
+                    "EventBus::publish: no active subscribers, event dropped"
+                );
+                0
+            }
+        }
     }
 }
 
