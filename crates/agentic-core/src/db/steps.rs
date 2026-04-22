@@ -85,8 +85,12 @@ impl StepRepo {
     }
 
     pub fn transition(&self, id: &str, to: StepStatus) -> Result<()> {
-        let conn = self.pool.get()?;
-        let current_str: String = conn.query_row(
+        let mut conn = self.pool.get()?;
+        // Default DEFERRED transaction. Under WAL + "serial concurrency" contract
+        // (spec §9.2: one active run per workspace) DEFERRED is sufficient; the
+        // read + validate + write sequence is atomic within the transaction.
+        let tx = conn.transaction()?;
+        let current_str: String = tx.query_row(
             "SELECT status FROM run_steps WHERE id = ?1",
             params![id],
             |r| r.get(0),
@@ -99,10 +103,11 @@ impl StepRepo {
                 to: step_status_to_str(to).to_string(),
             });
         }
-        conn.execute(
+        tx.execute(
             "UPDATE run_steps SET status = ?1 WHERE id = ?2",
             params![step_status_to_str(to), id],
         )?;
+        tx.commit()?;
         Ok(())
     }
 }
@@ -110,7 +115,13 @@ impl StepRepo {
 fn row_to_step(r: &rusqlite::Row<'_>) -> rusqlite::Result<Step> {
     let status_str: String = r.get(4)?;
     let status = step_status_from_str(&status_str).ok_or_else(|| {
-        rusqlite::Error::InvalidColumnName(format!("unknown status: {status_str}"))
+        rusqlite::Error::FromSqlConversionFailure(
+            4,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::other(format!(
+                "unknown step status: {status_str}"
+            ))),
+        )
     })?;
     Ok(Step {
         id: r.get(0)?,

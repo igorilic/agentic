@@ -113,6 +113,72 @@ fn list_by_workspace_returns_desc_by_started_at() {
 }
 
 #[test]
+fn step_full_happy_path_pending_to_running_to_passed() {
+    let (_tmp, _db, runs, steps) = setup();
+    runs.insert(sample_run("r1", "ws1", 100)).unwrap();
+    let step = steps
+        .insert(sample_step("s1", "r1", 0))
+        .expect("insert step");
+    assert_eq!(step.status, StepStatus::Pending);
+
+    steps
+        .transition("s1", StepStatus::Running)
+        .expect("pending -> running");
+    let after_running = steps.get("s1").unwrap().unwrap();
+    assert_eq!(after_running.status, StepStatus::Running);
+
+    steps
+        .transition("s1", StepStatus::Passed)
+        .expect("running -> passed");
+    let final_state = steps.get("s1").unwrap().unwrap();
+    assert_eq!(final_state.status, StepStatus::Passed);
+}
+
+#[test]
+fn step_invalid_transition_pending_to_passed_returns_invalid_state_transition() {
+    let (_tmp, _db, runs, steps) = setup();
+    runs.insert(sample_run("r1", "ws1", 100)).unwrap();
+    steps.insert(sample_step("s1", "r1", 0)).unwrap();
+
+    let result = steps.transition("s1", StepStatus::Passed);
+    match result {
+        Err(CoreError::InvalidStateTransition { from, to }) => {
+            assert_eq!(from, "pending");
+            assert_eq!(to, "passed");
+        }
+        Ok(_) => panic!("expected InvalidStateTransition, got Ok"),
+        Err(other) => panic!("expected InvalidStateTransition, got {other:?}"),
+    }
+    // Confirm state didn't change
+    let step = steps.get("s1").unwrap().unwrap();
+    assert_eq!(step.status, StepStatus::Pending);
+}
+
+#[test]
+fn run_transition_on_nonexistent_id_returns_db_error() {
+    let (_tmp, _db, runs, _steps) = setup();
+    let result = runs.transition("does-not-exist", RunStatus::Running);
+    match result {
+        Err(CoreError::Db(_)) => {
+            // QueryReturnedNoRows from rusqlite → mapped via From<rusqlite::Error>
+        }
+        Ok(_) => panic!("expected Db error, got Ok"),
+        Err(other) => panic!("expected Db error, got {other:?}"),
+    }
+}
+
+#[test]
+fn step_transition_on_nonexistent_id_returns_db_error() {
+    let (_tmp, _db, _runs, steps) = setup();
+    let result = steps.transition("does-not-exist", StepStatus::Running);
+    match result {
+        Err(CoreError::Db(_)) => {}
+        Ok(_) => panic!("expected Db error, got Ok"),
+        Err(other) => panic!("expected Db error, got {other:?}"),
+    }
+}
+
+#[test]
 fn creating_step_for_nonexistent_run_fails_fk() {
     let (_tmp, _db, _runs, steps) = setup();
     // No run inserted first — FK reference to runs(id) should fail.

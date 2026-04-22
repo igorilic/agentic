@@ -98,9 +98,13 @@ impl RunRepo {
     }
 
     pub fn transition(&self, id: &str, to: RunStatus) -> Result<()> {
-        let conn = self.pool.get()?;
+        let mut conn = self.pool.get()?;
+        // Default DEFERRED transaction. Under WAL + "serial concurrency" contract
+        // (spec §9.2: one active run per workspace) DEFERRED is sufficient; the
+        // read + validate + write sequence is atomic within the transaction.
+        let tx = conn.transaction()?;
         let current_str: String =
-            conn.query_row("SELECT status FROM runs WHERE id = ?1", params![id], |r| {
+            tx.query_row("SELECT status FROM runs WHERE id = ?1", params![id], |r| {
                 r.get(0)
             })?;
         let from = run_status_from_str(&current_str)
@@ -111,10 +115,11 @@ impl RunRepo {
                 to: run_status_to_str(to).to_string(),
             });
         }
-        conn.execute(
+        tx.execute(
             "UPDATE runs SET status = ?1 WHERE id = ?2",
             params![run_status_to_str(to), id],
         )?;
+        tx.commit()?;
         Ok(())
     }
 }
@@ -122,7 +127,13 @@ impl RunRepo {
 fn row_to_run(r: &rusqlite::Row<'_>) -> rusqlite::Result<Run> {
     let status_str: String = r.get(3)?;
     let status = run_status_from_str(&status_str).ok_or_else(|| {
-        rusqlite::Error::InvalidColumnName(format!("unknown status: {status_str}"))
+        rusqlite::Error::FromSqlConversionFailure(
+            3,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::other(format!(
+                "unknown run status: {status_str}"
+            ))),
+        )
     })?;
     Ok(Run {
         id: r.get(0)?,
