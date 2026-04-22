@@ -52,7 +52,11 @@ async fn publishing_100_events_produces_100_rows_with_seq_0_to_99() {
         .unwrap()
         .collect::<std::result::Result<_, _>>()
         .unwrap();
-    assert_eq!(seqs, (0..100i64).collect::<Vec<_>>(), "seq must be 0..=99 contiguous");
+    assert_eq!(
+        seqs,
+        (0..100i64).collect::<Vec<_>>(),
+        "seq must be 0..=99 contiguous"
+    );
 }
 
 #[tokio::test]
@@ -110,7 +114,11 @@ async fn persisted_payload_roundtrips_through_rmp_serde() {
         message: "watch out".to_string(),
         suggestion: Some("use ?".to_string()),
     };
-    let envelope = EventEnvelope::now("run-X".to_string(), Some("step-Y".to_string()), original.clone());
+    let envelope = EventEnvelope::now(
+        "run-X".to_string(),
+        Some("step-Y".to_string()),
+        original.clone(),
+    );
     bus.publish(envelope.clone());
 
     drop(bus);
