@@ -16,8 +16,20 @@ fn write_agent(repo_root: &Path, subdir: &str, filename: &str, name: &str, marke
 fn agentic_agents_dir_wins_over_claude_and_legacy() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
-    write_agent(root, ".agentic/agents", "architect.md", "architect", "AGENTIC");
-    write_agent(root, ".claude/agents", "architect.md", "architect", "CLAUDE");
+    write_agent(
+        root,
+        ".agentic/agents",
+        "architect.md",
+        "architect",
+        "AGENTIC",
+    );
+    write_agent(
+        root,
+        ".claude/agents",
+        "architect.md",
+        "architect",
+        "CLAUDE",
+    );
     write_agent(root, "agents", "architect.md", "architect", "LEGACY");
 
     let agent = discover_agent(root, "architect").expect("discover");
@@ -39,8 +51,20 @@ fn claude_agents_dir_wins_over_legacy_when_agentic_absent() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     // Intentionally omit .agentic/agents/
-    write_agent(root, ".claude/agents", "tdd-developer.md", "tdd-developer", "CLAUDE");
-    write_agent(root, "agents", "tdd-developer.md", "tdd-developer", "LEGACY");
+    write_agent(
+        root,
+        ".claude/agents",
+        "tdd-developer.md",
+        "tdd-developer",
+        "CLAUDE",
+    );
+    write_agent(
+        root,
+        "agents",
+        "tdd-developer.md",
+        "tdd-developer",
+        "LEGACY",
+    );
 
     let agent = discover_agent(root, "tdd-developer").expect("discover");
     assert_eq!(agent.name, "tdd-developer");
@@ -66,8 +90,16 @@ fn missing_agent_returns_agent_not_found_with_all_searched_paths() {
                 .iter()
                 .map(|p| p.to_string_lossy().to_string())
                 .collect();
-            assert!(paths_as_str[0].contains(".agentic/agents"), "first: {}", paths_as_str[0]);
-            assert!(paths_as_str[1].contains(".claude/agents"), "second: {}", paths_as_str[1]);
+            assert!(
+                paths_as_str[0].contains(".agentic/agents"),
+                "first: {}",
+                paths_as_str[0]
+            );
+            assert!(
+                paths_as_str[1].contains(".claude/agents"),
+                "second: {}",
+                paths_as_str[1]
+            );
             assert!(
                 paths_as_str[2].ends_with("agents/nonexistent.md"),
                 "third (legacy): {}",
