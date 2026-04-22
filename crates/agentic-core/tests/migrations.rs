@@ -281,3 +281,131 @@ fn run_steps_index_exists() {
         "idx_run_steps_run_seq column set drifted from spec"
     );
 }
+
+#[test]
+fn artifact_tables_exist() {
+    let (_tmp, _paths, db) = setup();
+    for t in ["findings", "clarifying_questions", "file_changes"] {
+        assert!(has_table(&db, t), "{t} table missing");
+    }
+}
+
+#[test]
+fn idx_findings_run_triage_exists_and_covers_correct_columns() {
+    let (_tmp, _paths, db) = setup();
+    assert!(has_index(&db, "idx_findings_run_triage"), "idx_findings_run_triage missing");
+    assert_eq!(
+        index_columns(&db, "idx_findings_run_triage"),
+        vec!["run_id".to_string(), "triage".to_string()],
+        "idx_findings_run_triage column set drifted from spec"
+    );
+}
+
+#[test]
+fn deleting_run_cascades_to_artifact_tables() {
+    let (_tmp, _paths, db) = setup();
+    assert!(foreign_keys_on(&db));
+    let conn = db.conn().unwrap();
+    // Seed: workspace -> run -> step -> one row per artifact table.
+    conn.execute(
+        "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
+         VALUES ('ws1', 'test', '/tmp/test', 'github', 100, 100)",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO runs \
+         (id, workspace_id, pipeline_name, status, backend, model, started_at) \
+         VALUES ('run1', 'ws1', 'default', 'pending', 'claude-code', 'claude-opus-4-7', 200)",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO run_steps (id, run_id, seq, agent_name, status) \
+         VALUES ('step1', 'run1', 1, 'architect', 'pending')",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO findings (id, run_id, step_id, severity, message, created_at) \
+         VALUES ('f1', 'run1', 'step1', 'warning', 'msg', 300)",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO clarifying_questions (id, run_id, step_id, question, created_at) \
+         VALUES ('q1', 'run1', 'step1', 'why?', 300)",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO file_changes (id, run_id, step_id, path, created_at) \
+         VALUES ('fc1', 'run1', 'step1', 'src/foo.rs', 300)",
+        [],
+    ).unwrap();
+    // Pre-counts
+    for t in ["findings", "clarifying_questions", "file_changes"] {
+        let n: i64 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM {t} WHERE run_id='run1'"), [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1, "{t}: expected 1 row before delete, got {n}");
+    }
+    // Cascade
+    conn.execute("DELETE FROM runs WHERE id='run1'", []).unwrap();
+    // Post-counts (all cascaded to 0)
+    for t in ["findings", "clarifying_questions", "file_changes"] {
+        let n: i64 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM {t} WHERE run_id='run1'"), [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0, "{t}: expected 0 rows after run delete, got {n}");
+    }
+}
+
+#[test]
+fn deleting_step_cascades_to_artifact_tables() {
+    let (_tmp, _paths, db) = setup();
+    assert!(foreign_keys_on(&db));
+    let conn = db.conn().unwrap();
+    // Seed: workspace -> run -> two steps -> one artifact row per step in each table.
+    conn.execute(
+        "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
+         VALUES ('ws1', 'test', '/tmp/test', 'github', 100, 100)",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO runs \
+         (id, workspace_id, pipeline_name, status, backend, model, started_at) \
+         VALUES ('run1', 'ws1', 'default', 'pending', 'claude-code', 'claude-opus-4-7', 200)",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO run_steps (id, run_id, seq, agent_name, status) \
+         VALUES ('step1', 'run1', 1, 'architect', 'pending'), \
+                ('step2', 'run1', 2, 'tdd-developer', 'pending')",
+        [],
+    ).unwrap();
+    for step in ["step1", "step2"] {
+        conn.execute(
+            &format!("INSERT INTO findings (id, run_id, step_id, severity, message, created_at) \
+                      VALUES ('f-{step}', 'run1', '{step}', 'info', 'm', 300)"),
+            [],
+        ).unwrap();
+        conn.execute(
+            &format!("INSERT INTO clarifying_questions (id, run_id, step_id, question, created_at) \
+                      VALUES ('q-{step}', 'run1', '{step}', 'w?', 300)"),
+            [],
+        ).unwrap();
+        conn.execute(
+            &format!("INSERT INTO file_changes (id, run_id, step_id, path, created_at) \
+                      VALUES ('fc-{step}', 'run1', '{step}', 'p', 300)"),
+            [],
+        ).unwrap();
+    }
+    // Delete step1 only; step2's rows must survive, step1's must vanish.
+    conn.execute("DELETE FROM run_steps WHERE id='step1'", []).unwrap();
+    for t in ["findings", "clarifying_questions", "file_changes"] {
+        let step1_rows: i64 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM {t} WHERE step_id='step1'"), [], |r| r.get(0))
+            .unwrap();
+        let step2_rows: i64 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM {t} WHERE step_id='step2'"), [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(step1_rows, 0, "{t}: step1 rows should cascade-delete");
+        assert_eq!(step2_rows, 1, "{t}: step2 rows should survive");
+    }
+}
