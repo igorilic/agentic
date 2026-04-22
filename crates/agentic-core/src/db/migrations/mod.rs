@@ -27,6 +27,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "stream_events",
         sql: include_str!("0004_stream_events.sql"),
     },
+    Migration {
+        version: 5,
+        name: "chat",
+        sql: include_str!("0005_chat.sql"),
+    },
 ];
 
 pub struct Migrator;

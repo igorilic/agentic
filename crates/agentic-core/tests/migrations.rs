@@ -117,8 +117,8 @@ fn migrator_is_idempotent_when_run_twice() {
         .query_row("SELECT COUNT(*) FROM _migrations", [], |r| r.get(0))
         .unwrap();
     assert_eq!(
-        count, 4,
-        "_migrations should have exactly 4 rows, not {count}"
+        count, 5,
+        "_migrations should have exactly 5 rows, not {count}"
     );
 }
 
@@ -135,8 +135,8 @@ fn each_applied_migration_has_a_row_in_migrations_table() {
         .unwrap();
     assert_eq!(
         versions,
-        vec![1, 2, 3, 4],
-        "expected exactly versions 1, 2, 3, and 4 applied"
+        vec![1, 2, 3, 4, 5],
+        "expected exactly versions 1, 2, 3, 4, and 5 applied"
     );
     let applied_at: i64 = conn
         .query_row(
@@ -532,26 +532,41 @@ fn deleting_chat_session_cascades_to_chat_messages() {
         "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
          VALUES ('ws1', 'test', '/tmp/test', 'github', 100, 100)",
         [],
-    ).unwrap();
+    )
+    .unwrap();
     conn.execute(
         "INSERT INTO chat_sessions (id, workspace_id, created_at) VALUES ('sess1', 'ws1', 200)",
         [],
-    ).unwrap();
+    )
+    .unwrap();
     conn.execute(
         "INSERT INTO chat_messages (id, session_id, role, content, created_at) \
          VALUES ('m1', 'sess1', 'user', 'hello', 300), \
                 ('m2', 'sess1', 'assistant', 'hi', 301)",
         [],
-    ).unwrap();
+    )
+    .unwrap();
     let pre: i64 = conn
-        .query_row("SELECT COUNT(*) FROM chat_messages WHERE session_id='sess1'", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM chat_messages WHERE session_id='sess1'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(pre, 2);
-    conn.execute("DELETE FROM chat_sessions WHERE id='sess1'", []).unwrap();
-    let post: i64 = conn
-        .query_row("SELECT COUNT(*) FROM chat_messages WHERE session_id='sess1'", [], |r| r.get(0))
+    conn.execute("DELETE FROM chat_sessions WHERE id='sess1'", [])
         .unwrap();
-    assert_eq!(post, 0, "chat_messages should cascade-delete when chat_session is deleted");
+    let post: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM chat_messages WHERE session_id='sess1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        post, 0,
+        "chat_messages should cascade-delete when chat_session is deleted"
+    );
 }
 
 #[test]
