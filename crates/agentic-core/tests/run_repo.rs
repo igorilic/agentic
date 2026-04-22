@@ -1,6 +1,4 @@
-use agentic_core::{
-    CoreError, Db, Paths, Run, RunRepo, RunStatus, Step, StepRepo, StepStatus,
-};
+use agentic_core::{CoreError, Db, Paths, Run, RunRepo, RunStatus, Step, StepRepo, StepStatus};
 
 fn setup() -> (tempfile::TempDir, Db, RunRepo, StepRepo) {
     let tmp = tempfile::tempdir().unwrap();

@@ -2,9 +2,9 @@ use crate::{Paths, Result};
 
 pub mod migrations;
 pub mod runs;
+mod status;
 pub mod steps;
 pub mod workspaces;
-mod status;
 
 #[derive(Clone)]
 pub struct Db {

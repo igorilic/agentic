@@ -1,7 +1,10 @@
 use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::{OptionalExtension, params};
 
+use crate::CoreError;
 use crate::Result;
 use crate::db::Db;
+use crate::db::status::{step_status_from_str, step_status_to_str};
 use crate::events::StepStatus;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,20 +34,98 @@ impl StepRepo {
     }
 
     pub fn insert(&self, step: Step) -> Result<Step> {
-        unimplemented!()
+        let conn = self.pool.get()?;
+        conn.execute(
+            "INSERT INTO run_steps (id, run_id, seq, agent_name, status, started_at, completed_at, \
+             duration_ms, token_usage, cost_usd, summary, retry_count) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                step.id,
+                step.run_id,
+                step.seq,
+                step.agent_name,
+                step_status_to_str(step.status),
+                step.started_at,
+                step.completed_at,
+                step.duration_ms,
+                step.token_usage,
+                step.cost_usd,
+                step.summary,
+                step.retry_count,
+            ],
+        )?;
+        Ok(step)
     }
 
     pub fn get(&self, id: &str) -> Result<Option<Step>> {
-        unimplemented!()
+        let conn = self.pool.get()?;
+        let row = conn
+            .query_row(
+                "SELECT id, run_id, seq, agent_name, status, started_at, completed_at, \
+                 duration_ms, token_usage, cost_usd, summary, retry_count \
+                 FROM run_steps WHERE id = ?1",
+                params![id],
+                row_to_step,
+            )
+            .optional()?;
+        Ok(row)
     }
 
     pub fn list_by_run(&self, run_id: &str) -> Result<Vec<Step>> {
-        unimplemented!()
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, run_id, seq, agent_name, status, started_at, completed_at, \
+             duration_ms, token_usage, cost_usd, summary, retry_count \
+             FROM run_steps WHERE run_id = ?1 ORDER BY seq ASC",
+        )?;
+        let rows = stmt
+            .query_map(params![run_id], row_to_step)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     pub fn transition(&self, id: &str, to: StepStatus) -> Result<()> {
-        unimplemented!()
+        let conn = self.pool.get()?;
+        let current_str: String = conn.query_row(
+            "SELECT status FROM run_steps WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )?;
+        let from = step_status_from_str(&current_str)
+            .ok_or_else(|| CoreError::Db(format!("unknown status: {current_str}")))?;
+        if !is_legal_step_transition(from, to) {
+            return Err(CoreError::InvalidStateTransition {
+                from: step_status_to_str(from).to_string(),
+                to: step_status_to_str(to).to_string(),
+            });
+        }
+        conn.execute(
+            "UPDATE run_steps SET status = ?1 WHERE id = ?2",
+            params![step_status_to_str(to), id],
+        )?;
+        Ok(())
     }
+}
+
+fn row_to_step(r: &rusqlite::Row<'_>) -> rusqlite::Result<Step> {
+    let status_str: String = r.get(4)?;
+    let status = step_status_from_str(&status_str).ok_or_else(|| {
+        rusqlite::Error::InvalidColumnName(format!("unknown status: {status_str}"))
+    })?;
+    Ok(Step {
+        id: r.get(0)?,
+        run_id: r.get(1)?,
+        seq: r.get(2)?,
+        agent_name: r.get(3)?,
+        status,
+        started_at: r.get(5)?,
+        completed_at: r.get(6)?,
+        duration_ms: r.get(7)?,
+        token_usage: r.get(8)?,
+        cost_usd: r.get(9)?,
+        summary: r.get(10)?,
+        retry_count: r.get(11)?,
+    })
 }
 
 fn is_legal_step_transition(from: StepStatus, to: StepStatus) -> bool {
