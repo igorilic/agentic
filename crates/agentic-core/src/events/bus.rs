@@ -1,32 +1,51 @@
+use tokio::sync::broadcast::{self, Receiver, Sender};
+
+use crate::events::EventEnvelope;
+
+/// Default broadcast channel capacity (events buffered per-subscriber).
 pub const DEFAULT_CAPACITY: usize = 1024;
 
+/// In-process event broadcast bus. Clone is cheap (internal Arc via the
+/// `broadcast::Sender` wrapper). Subscribers receive every published event
+/// in order, up to the channel capacity. If a subscriber lags past
+/// capacity, subsequent `recv()` calls yield `RecvError::Lagged(n)` once
+/// before recovering at the newest still-buffered event.
 #[derive(Clone)]
 pub struct EventBus {
-    _sender: tokio::sync::broadcast::Sender<crate::events::EventEnvelope>,
+    sender: Sender<EventEnvelope>,
 }
 
 impl EventBus {
+    /// New bus with [`DEFAULT_CAPACITY`] (1024).
     pub fn new() -> Self {
-        unimplemented!()
+        Self::with_capacity(DEFAULT_CAPACITY)
     }
 
-    pub fn with_capacity(_capacity: usize) -> Self {
-        unimplemented!()
+    /// New bus with an explicit capacity. Must be > 0.
+    pub fn with_capacity(capacity: usize) -> Self {
+        let (sender, _) = broadcast::channel(capacity);
+        Self { sender }
     }
 
-    pub fn subscribe(
-        &self,
-    ) -> tokio::sync::broadcast::Receiver<crate::events::EventEnvelope> {
-        unimplemented!()
+    /// Subscribe to the bus. Returns a `Receiver` that will see every event
+    /// published AFTER this call (plus any still-buffered events within the
+    /// channel capacity at subscribe time).
+    pub fn subscribe(&self) -> Receiver<EventEnvelope> {
+        self.sender.subscribe()
     }
 
-    pub fn publish(&self, _envelope: crate::events::EventEnvelope) -> usize {
-        unimplemented!()
+    /// Publish an envelope. Returns the number of active receivers that the
+    /// value was sent to (0 if no one is subscribed). Never errors: the "no
+    /// receivers" case is normal for an event bus.
+    pub fn publish(&self, envelope: EventEnvelope) -> usize {
+        // broadcast::Sender::send returns Result<usize, SendError<T>>.
+        // Err means no subscribers — return 0 (not an error for a bus).
+        self.sender.send(envelope).unwrap_or(0)
     }
 }
 
 impl Default for EventBus {
     fn default() -> Self {
-        unimplemented!()
+        Self::new()
     }
 }

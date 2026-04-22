@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 mod bus;
-pub use bus::{EventBus, DEFAULT_CAPACITY};
+pub use bus::{DEFAULT_CAPACITY, EventBus};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]

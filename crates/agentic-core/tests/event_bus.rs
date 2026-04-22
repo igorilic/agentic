@@ -25,12 +25,12 @@ async fn two_subscribers_each_receive_every_published_event() {
     for expected in 1..=3u32 {
         let a = rx1.recv().await.expect("rx1 recv");
         let b = rx2.recv().await.expect("rx2 recv");
-        assert_eq!(a.event_id, b.event_id, "both subscribers see the same envelope");
+        assert_eq!(
+            a.event_id, b.event_id,
+            "both subscribers see the same envelope"
+        );
         match (&a.event, &b.event) {
-            (
-                Event::RetryStarted { attempt: x, .. },
-                Event::RetryStarted { attempt: y, .. },
-            ) => {
+            (Event::RetryStarted { attempt: x, .. }, Event::RetryStarted { attempt: y, .. }) => {
                 assert_eq!(*x, expected);
                 assert_eq!(*y, expected);
             }
@@ -60,7 +60,10 @@ async fn slow_subscriber_lagging_past_capacity_yields_lagged_and_fresh_subscribe
     let mut fresh = bus.subscribe();
     bus.publish(sample(100));
 
-    let received = fresh.recv().await.expect("fresh subscriber receives cleanly");
+    let received = fresh
+        .recv()
+        .await
+        .expect("fresh subscriber receives cleanly");
     match received.event {
         Event::RetryStarted { attempt, .. } => assert_eq!(attempt, 100),
         other => panic!("expected RetryStarted, got {other:?}"),
