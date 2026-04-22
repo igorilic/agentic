@@ -35,7 +35,10 @@ fn insert_returns_the_inserted_workspace() {
 fn get_by_unknown_id_returns_none() {
     let (_tmp, repo) = setup();
     let result = repo.get("nonexistent").expect("get");
-    assert!(result.is_none(), "expected None for unknown id, got {result:?}");
+    assert!(
+        result.is_none(),
+        "expected None for unknown id, got {result:?}"
+    );
 }
 
 #[test]
@@ -46,7 +49,10 @@ fn list_recent_ordered_by_last_opened_desc() {
     repo.insert(sample("ws-c", "charlie", 200)).unwrap();
     let recent = repo.list_recent(10).expect("list");
     let ids: Vec<String> = recent.into_iter().map(|w| w.id).collect();
-    assert_eq!(ids, vec!["ws-b".to_string(), "ws-c".to_string(), "ws-a".to_string()]);
+    assert_eq!(
+        ids,
+        vec!["ws-b".to_string(), "ws-c".to_string(), "ws-a".to_string()]
+    );
 }
 
 #[test]
@@ -62,7 +68,8 @@ fn touch_updates_last_opened() {
     assert!(
         after.last_opened > before.last_opened,
         "expected last_opened to increase after touch: {} -> {}",
-        before.last_opened, after.last_opened
+        before.last_opened,
+        after.last_opened
     );
 }
 
