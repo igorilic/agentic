@@ -17,10 +17,10 @@ steps = [
     let agents: Vec<&str> = default.steps.iter().map(|s| s.agent.as_str()).collect();
     assert_eq!(agents, vec!["architect", "tdd-developer", "qa", "reviewer"]);
     assert_eq!(default.steps[0].allowed_questions, Some(5));
-    assert_eq!(default.steps[0].stop_on_failure, true);
+    assert!(default.steps[0].stop_on_failure);
     assert_eq!(default.steps[1].qa_fix_loop_cap, Some(3));
-    assert_eq!(default.steps[2].stop_on_failure, false);
-    assert_eq!(default.steps[3].stop_on_failure, false);
+    assert!(!default.steps[2].stop_on_failure);
+    assert!(!default.steps[3].stop_on_failure);
 }
 
 #[test]
