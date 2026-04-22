@@ -1,7 +1,7 @@
 #![deny(unsafe_code)]
 
 pub mod agents;
-pub use agents::{Agent, PipelineRole, parse_agent};
+pub use agents::{Agent, discover_agent, parse_agent, PipelineRole};
 pub mod events;
 pub use events::{
     ActionRequired, BackendId, CURRENT_SCHEMA_VERSION, DEFAULT_CAPACITY, Event, EventBus,

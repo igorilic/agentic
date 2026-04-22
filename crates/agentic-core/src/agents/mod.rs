@@ -1,3 +1,6 @@
+mod discovery;
+pub use discovery::discover_agent;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{CoreError, Result};

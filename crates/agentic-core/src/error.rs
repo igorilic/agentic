@@ -24,6 +24,13 @@ pub enum CoreError {
     #[error("parse error: {0}")]
     Parse(String),
 
+    #[error("agent '{name}' not found")]
+    AgentNotFound {
+        name: String,
+        /// Paths that were checked, in search order.
+        searched: Vec<std::path::PathBuf>,
+    },
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
