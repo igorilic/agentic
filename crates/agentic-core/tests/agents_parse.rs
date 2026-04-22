@@ -19,7 +19,10 @@ fn valid_frontmatter_parses_all_fields() {
     let agent = parse_agent(&stem, &content).expect("parse");
 
     assert_eq!(agent.name, "architect");
-    assert_eq!(agent.description, "Designs feature spec and produces atomic todo plans");
+    assert_eq!(
+        agent.description,
+        "Designs feature spec and produces atomic todo plans"
+    );
     assert_eq!(agent.model.as_deref(), Some("claude-opus-4-7"));
     assert_eq!(
         agent.tools.as_deref(),
