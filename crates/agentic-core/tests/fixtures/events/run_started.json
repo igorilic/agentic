@@ -1,0 +1,19 @@
+{
+  "event_id": "01J8RZYX1K3PQXGT1WJYR8AZ7Q",
+  "run_id": "01J8RZYX1K3PQXGT1WJYR8AZ7P",
+  "step_id": null,
+  "timestamp_ms": 1713789123456,
+  "event": {
+    "type": "RunStarted",
+    "data": {
+      "ticket": {
+        "kind": "github-issue",
+        "reference": "#42",
+        "title": "Add OAuth flow"
+      },
+      "profile": "github",
+      "backend": "claude-code",
+      "model": "claude-opus-4-7"
+    }
+  }
+}

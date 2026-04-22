@@ -1,5 +1,10 @@
 #![deny(unsafe_code)]
 
+pub mod events;
+pub use events::{
+    ActionRequired, BackendId, Event, EventEnvelope, ModelId, ProfileId, RunStatus, Severity,
+    StepStatus, TicketRef, TokenUsage, ToolStream,
+};
 pub mod error;
 pub use error::{CoreError, Result};
 pub mod logging;
