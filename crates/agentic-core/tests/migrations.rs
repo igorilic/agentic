@@ -63,6 +63,29 @@ fn index_columns(db: &Db, name: &str) -> Vec<String> {
     rows
 }
 
+/// Return the names of columns that participate in a table's primary key,
+/// in PK ordinal order. Uses PRAGMA table_info; column 5 of that pragma is
+/// the PK position (0 = not part of PK; 1,2,... = position within composite).
+fn primary_key_columns(db: &Db, table: &str) -> Vec<String> {
+    let conn = db.conn().unwrap();
+    let sql = format!("PRAGMA table_info('{table}')");
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let mut cols: Vec<(String, i64)> = stmt
+        .query_map([], |row| {
+            let name: String = row.get(1)?;
+            let pk: i64 = row.get(5)?;
+            Ok((name, pk))
+        })
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap()
+        .into_iter()
+        .filter(|(_, pk)| *pk > 0)
+        .collect();
+    cols.sort_by_key(|(_, pk)| *pk);
+    cols.into_iter().map(|(n, _)| n).collect()
+}
+
 /// Return true iff PRAGMA foreign_keys is 1 on a fresh pooled connection.
 /// Verifies Step 1.2's apply_pragmas wired the per-connection hook correctly.
 fn foreign_keys_on(db: &Db) -> bool {
@@ -446,5 +469,58 @@ fn deleting_step_cascades_to_artifact_tables() {
             .unwrap();
         assert_eq!(step1_rows, 0, "{t}: step1 rows should cascade-delete");
         assert_eq!(step2_rows, 1, "{t}: step2 rows should survive");
+    }
+}
+
+#[test]
+fn stream_events_table_exists() {
+    let (_tmp, _paths, db) = setup();
+    assert!(has_table(&db, "stream_events"), "stream_events table missing");
+}
+
+#[test]
+fn stream_events_primary_key_is_composite_run_id_seq() {
+    let (_tmp, _paths, db) = setup();
+    assert_eq!(
+        primary_key_columns(&db, "stream_events"),
+        vec!["run_id".to_string(), "seq".to_string()],
+        "stream_events PK columns or ordering drifted from spec §13.1"
+    );
+}
+
+#[test]
+fn idx_stream_events_step_exists_and_covers_step_id_seq() {
+    let (_tmp, _paths, db) = setup();
+    assert!(has_index(&db, "idx_stream_events_step"), "idx_stream_events_step missing");
+    assert_eq!(
+        index_columns(&db, "idx_stream_events_step"),
+        vec!["step_id".to_string(), "seq".to_string()],
+        "idx_stream_events_step column set drifted from spec"
+    );
+}
+
+#[test]
+fn inserting_duplicate_run_id_seq_in_stream_events_fails() {
+    let (_tmp, _paths, db) = setup();
+    let conn = db.conn().unwrap();
+    conn.execute(
+        "INSERT INTO stream_events (run_id, seq, event_type, payload, timestamp_ms) \
+         VALUES ('run1', 1, 'started', X'00', 100)",
+        [],
+    ).unwrap();
+    let result = conn.execute(
+        "INSERT INTO stream_events (run_id, seq, event_type, payload, timestamp_ms) \
+         VALUES ('run1', 1, 'delta', X'01', 200)",
+        [],
+    );
+    match result {
+        Ok(_) => panic!("expected PK/UNIQUE violation on duplicate (run_id, seq)"),
+        Err(e) => {
+            let msg = e.to_string().to_uppercase();
+            assert!(
+                msg.contains("UNIQUE") || msg.contains("CONSTRAINT") || msg.contains("PRIMARY KEY"),
+                "expected PK/unique constraint error, got: {e}"
+            );
+        }
     }
 }
