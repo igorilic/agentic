@@ -22,6 +22,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "artifacts",
         sql: include_str!("0003_artifacts.sql"),
     },
+    Migration {
+        version: 4,
+        name: "stream_events",
+        sql: include_str!("0004_stream_events.sql"),
+    },
 ];
 
 pub struct Migrator;

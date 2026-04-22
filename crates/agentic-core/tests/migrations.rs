@@ -117,8 +117,8 @@ fn migrator_is_idempotent_when_run_twice() {
         .query_row("SELECT COUNT(*) FROM _migrations", [], |r| r.get(0))
         .unwrap();
     assert_eq!(
-        count, 3,
-        "_migrations should have exactly 3 rows, not {count}"
+        count, 4,
+        "_migrations should have exactly 4 rows, not {count}"
     );
 }
 
@@ -135,8 +135,8 @@ fn each_applied_migration_has_a_row_in_migrations_table() {
         .unwrap();
     assert_eq!(
         versions,
-        vec![1, 2, 3],
-        "expected exactly versions 1, 2, and 3 applied"
+        vec![1, 2, 3, 4],
+        "expected exactly versions 1, 2, 3, and 4 applied"
     );
     let applied_at: i64 = conn
         .query_row(
@@ -475,7 +475,10 @@ fn deleting_step_cascades_to_artifact_tables() {
 #[test]
 fn stream_events_table_exists() {
     let (_tmp, _paths, db) = setup();
-    assert!(has_table(&db, "stream_events"), "stream_events table missing");
+    assert!(
+        has_table(&db, "stream_events"),
+        "stream_events table missing"
+    );
 }
 
 #[test]
@@ -491,7 +494,10 @@ fn stream_events_primary_key_is_composite_run_id_seq() {
 #[test]
 fn idx_stream_events_step_exists_and_covers_step_id_seq() {
     let (_tmp, _paths, db) = setup();
-    assert!(has_index(&db, "idx_stream_events_step"), "idx_stream_events_step missing");
+    assert!(
+        has_index(&db, "idx_stream_events_step"),
+        "idx_stream_events_step missing"
+    );
     assert_eq!(
         index_columns(&db, "idx_stream_events_step"),
         vec!["step_id".to_string(), "seq".to_string()],
@@ -507,7 +513,8 @@ fn inserting_duplicate_run_id_seq_in_stream_events_fails() {
         "INSERT INTO stream_events (run_id, seq, event_type, payload, timestamp_ms) \
          VALUES ('run1', 1, 'started', X'00', 100)",
         [],
-    ).unwrap();
+    )
+    .unwrap();
     let result = conn.execute(
         "INSERT INTO stream_events (run_id, seq, event_type, payload, timestamp_ms) \
          VALUES ('run1', 1, 'delta', X'01', 200)",
