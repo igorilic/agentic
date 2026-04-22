@@ -84,3 +84,32 @@ fn missing_key_without_default_returns_none() {
     let r = Resolver::new(env, None, None, HashMap::new());
     assert!(r.resolve(Key::UiTheme).is_none());
 }
+
+#[test]
+fn every_key_variant_has_expected_env_var_and_toml_path() {
+    // Parametric regression guard: catches copy-paste errors in Key::env_var
+    // and Key::toml_path for any variant. Expand this table when adding new
+    // keys.
+    let table: &[(Key, &str, (&str, &str))] = &[
+        (
+            Key::DefaultsProfile,
+            "AGENTIC_PROFILE",
+            ("defaults", "profile"),
+        ),
+        (
+            Key::DefaultsBackend,
+            "AGENTIC_BACKEND",
+            ("defaults", "backend"),
+        ),
+        (Key::DefaultsModel, "AGENTIC_MODEL", ("defaults", "model")),
+        (Key::UiTheme, "AGENTIC_THEME", ("ui", "theme")),
+    ];
+    for (key, expected_env_var, expected_toml_path) in table {
+        assert_eq!(key.env_var(), *expected_env_var, "{key:?} env_var mismatch");
+        assert_eq!(
+            key.toml_path(),
+            *expected_toml_path,
+            "{key:?} toml_path mismatch"
+        );
+    }
+}
