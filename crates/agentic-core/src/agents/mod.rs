@@ -98,6 +98,9 @@ fn extract_frontmatter(content: &str) -> Result<(&str, &str)> {
     let (yaml_end, close_line) = close;
     let yaml_text = &rest[..yaml_end];
     let body_start = yaml_end + close_line.len();
+    // Greedy trim: drops all leading `\n`/`\r` after the closing fence so the
+    // body starts at its first real character. Intentional blank lines at the
+    // top of an agent's system prompt are not preserved.
     let body = rest[body_start..].trim_start_matches(['\n', '\r']);
     Ok((yaml_text, body))
 }
