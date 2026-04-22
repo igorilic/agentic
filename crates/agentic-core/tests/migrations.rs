@@ -506,6 +506,55 @@ fn idx_stream_events_step_exists_and_covers_step_id_seq() {
 }
 
 #[test]
+fn chat_tables_exist() {
+    let (_tmp, _paths, db) = setup();
+    for t in ["chat_sessions", "chat_messages"] {
+        assert!(has_table(&db, t), "{t} table missing");
+    }
+}
+
+#[test]
+fn idx_chat_messages_session_ts_exists_and_covers_session_id_created_at() {
+    let (_tmp, _paths, db) = setup();
+    assert!(has_index(&db, "idx_chat_messages_session_ts"));
+    assert_eq!(
+        index_columns(&db, "idx_chat_messages_session_ts"),
+        vec!["session_id".to_string(), "created_at".to_string()],
+    );
+}
+
+#[test]
+fn deleting_chat_session_cascades_to_chat_messages() {
+    let (_tmp, _paths, db) = setup();
+    assert!(foreign_keys_on(&db));
+    let conn = db.conn().unwrap();
+    conn.execute(
+        "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
+         VALUES ('ws1', 'test', '/tmp/test', 'github', 100, 100)",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO chat_sessions (id, workspace_id, created_at) VALUES ('sess1', 'ws1', 200)",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO chat_messages (id, session_id, role, content, created_at) \
+         VALUES ('m1', 'sess1', 'user', 'hello', 300), \
+                ('m2', 'sess1', 'assistant', 'hi', 301)",
+        [],
+    ).unwrap();
+    let pre: i64 = conn
+        .query_row("SELECT COUNT(*) FROM chat_messages WHERE session_id='sess1'", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(pre, 2);
+    conn.execute("DELETE FROM chat_sessions WHERE id='sess1'", []).unwrap();
+    let post: i64 = conn
+        .query_row("SELECT COUNT(*) FROM chat_messages WHERE session_id='sess1'", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(post, 0, "chat_messages should cascade-delete when chat_session is deleted");
+}
+
+#[test]
 fn inserting_duplicate_run_id_seq_in_stream_events_fails() {
     let (_tmp, _paths, db) = setup();
     let conn = db.conn().unwrap();
