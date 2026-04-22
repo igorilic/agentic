@@ -117,8 +117,8 @@ fn migrator_is_idempotent_when_run_twice() {
         .query_row("SELECT COUNT(*) FROM _migrations", [], |r| r.get(0))
         .unwrap();
     assert_eq!(
-        count, 5,
-        "_migrations should have exactly 5 rows, not {count}"
+        count, 6,
+        "_migrations should have exactly 6 rows, not {count}"
     );
 }
 
@@ -135,8 +135,8 @@ fn each_applied_migration_has_a_row_in_migrations_table() {
         .unwrap();
     assert_eq!(
         versions,
-        vec![1, 2, 3, 4, 5],
-        "expected exactly versions 1, 2, 3, 4, and 5 applied"
+        vec![1, 2, 3, 4, 5, 6],
+        "expected exactly versions 1, 2, 3, 4, 5, and 6 applied"
     );
     let applied_at: i64 = conn
         .query_row(
@@ -605,7 +605,8 @@ fn settings_scope_check_enforces_allowed_values() {
     conn.execute(
         "INSERT INTO settings (key, value, scope, updated_at) VALUES ('k1', '{}', 'user', 100)",
         [],
-    ).expect("'user' scope must be accepted");
+    )
+    .expect("'user' scope must be accepted");
     // Accepts 'workspace:<anything>'
     conn.execute(
         "INSERT INTO settings (key, value, scope, updated_at) VALUES ('k2', '{}', 'workspace:abc123', 101)",

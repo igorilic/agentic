@@ -32,6 +32,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "chat",
         sql: include_str!("0005_chat.sql"),
     },
+    Migration {
+        version: 6,
+        name: "auth_and_settings",
+        sql: include_str!("0006_auth_and_settings.sql"),
+    },
 ];
 
 pub struct Migrator;
