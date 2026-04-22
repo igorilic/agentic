@@ -33,6 +33,46 @@ fn has_index(db: &Db, name: &str) -> bool {
     count == 1
 }
 
+/// Return the sqlite_master `sql` column for a named index (the CREATE INDEX
+/// statement as stored). Returns None if the index doesn't exist. Useful for
+/// asserting ordering clauses (DESC/ASC) that PRAGMA index_info doesn't surface.
+fn index_sql(db: &Db, name: &str) -> Option<String> {
+    let conn = db.conn().unwrap();
+    conn.query_row(
+        "SELECT sql FROM sqlite_master WHERE type='index' AND name=?1",
+        [name],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
+/// Return the column names covered by a named index, in definition order.
+/// Uses PRAGMA index_info. Panics if the index doesn't exist — call has_index
+/// first if existence is uncertain.
+fn index_columns(db: &Db, name: &str) -> Vec<String> {
+    let conn = db.conn().unwrap();
+    // PRAGMA index_info() doesn't accept bound parameters for its argument;
+    // name is interpolated from static test literals, so no injection risk.
+    let sql = format!("PRAGMA index_info('{name}')");
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let rows: Vec<String> = stmt
+        .query_map([], |row| row.get::<_, String>(2)) // col index 2 = name
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap();
+    rows
+}
+
+/// Return true iff PRAGMA foreign_keys is 1 on a fresh pooled connection.
+/// Verifies Step 1.2's apply_pragmas wired the per-connection hook correctly.
+fn foreign_keys_on(db: &Db) -> bool {
+    let conn = db.conn().unwrap();
+    let fk: i64 = conn
+        .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+        .unwrap();
+    fk == 1
+}
+
 #[test]
 fn migrator_creates_migrations_and_workspaces_tables() {
     let (_tmp, _paths, db) = setup();
@@ -127,6 +167,10 @@ fn workspaces_schema_matches_spec() {
 #[test]
 fn inserting_run_with_missing_workspace_id_fails_fk() {
     let (_tmp, _paths, db) = setup();
+    assert!(
+        foreign_keys_on(&db),
+        "PRAGMA foreign_keys must be ON for FK enforcement (check apply_pragmas)"
+    );
     let conn = db.conn().unwrap();
     let result = conn.execute(
         "INSERT INTO runs \
@@ -196,6 +240,7 @@ fn deleting_run_cascades_to_run_steps() {
 #[test]
 fn runs_indexes_exist() {
     let (_tmp, _paths, db) = setup();
+    // Existence
     assert!(
         has_index(&db, "idx_runs_workspace_status"),
         "idx_runs_workspace_status missing"
@@ -203,6 +248,23 @@ fn runs_indexes_exist() {
     assert!(
         has_index(&db, "idx_runs_started_at"),
         "idx_runs_started_at missing"
+    );
+    // Composite column set (Finding 3)
+    assert_eq!(
+        index_columns(&db, "idx_runs_workspace_status"),
+        vec!["workspace_id".to_string(), "status".to_string()],
+        "idx_runs_workspace_status column set drifted from spec"
+    );
+    assert_eq!(
+        index_columns(&db, "idx_runs_started_at"),
+        vec!["started_at".to_string()],
+        "idx_runs_started_at column set drifted from spec"
+    );
+    // DESC ordering on started_at (Finding 1)
+    let sql = index_sql(&db, "idx_runs_started_at").expect("idx_runs_started_at sql");
+    assert!(
+        sql.to_uppercase().contains("DESC"),
+        "idx_runs_started_at should be DESC-ordered per spec §13.1; got: {sql}"
     );
 }
 
@@ -212,5 +274,10 @@ fn run_steps_index_exists() {
     assert!(
         has_index(&db, "idx_run_steps_run_seq"),
         "idx_run_steps_run_seq missing"
+    );
+    assert_eq!(
+        index_columns(&db, "idx_run_steps_run_seq"),
+        vec!["run_id".to_string(), "seq".to_string()],
+        "idx_run_steps_run_seq column set drifted from spec"
     );
 }
