@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 mod bus;
 pub use bus::{DEFAULT_CAPACITY, EventBus};
+mod persist;
+pub use persist::EventPersister;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]

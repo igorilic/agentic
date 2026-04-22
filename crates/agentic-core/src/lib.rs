@@ -2,8 +2,9 @@
 
 pub mod events;
 pub use events::{
-    ActionRequired, BackendId, DEFAULT_CAPACITY, Event, EventBus, EventEnvelope, ModelId,
-    ProfileId, RunStatus, Severity, StepStatus, TicketKind, TicketRef, TokenUsage, ToolStream,
+    ActionRequired, BackendId, DEFAULT_CAPACITY, Event, EventBus, EventEnvelope, EventPersister,
+    ModelId, ProfileId, RunStatus, Severity, StepStatus, TicketKind, TicketRef, TokenUsage,
+    ToolStream,
 };
 pub mod error;
 pub use error::{CoreError, Result};

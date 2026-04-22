@@ -26,3 +26,4 @@ r2d2_sqlite = "0.33"
 blake3 = "1"
 toml = "0.9"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+rmp-serde = "1"
