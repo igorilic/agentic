@@ -1,13 +1,13 @@
 use agentic_core::{
     ActionRequired, BackendId, Event, EventEnvelope, ModelId, ProfileId, RunStatus, Severity,
-    StepStatus, TicketRef, TokenUsage, ToolStream,
+    StepStatus, TicketKind, TicketRef, TokenUsage, ToolStream,
 };
 
 fn sample_events() -> Vec<Event> {
     vec![
         Event::RunStarted {
             ticket: TicketRef {
-                kind: "github-issue".to_string(),
+                kind: TicketKind::GithubIssue,
                 reference: "#42".to_string(),
                 title: Some("Add OAuth flow".to_string()),
             },
@@ -117,7 +117,7 @@ fn run_started_deserializes_from_fixture() {
             backend,
             model,
         } => {
-            assert_eq!(ticket.kind, "github-issue");
+            assert_eq!(ticket.kind, TicketKind::GithubIssue);
             assert_eq!(ticket.reference, "#42");
             assert_eq!(profile.0, "github");
             assert_eq!(backend.0, "claude-code");
@@ -162,5 +162,28 @@ fn timestamp_ms_is_monotonic_across_consecutive_now_calls() {
         "expected b.timestamp_ms ({}) > a.timestamp_ms ({})",
         b.timestamp_ms,
         a.timestamp_ms
+    );
+}
+
+#[test]
+fn retry_started_envelope_serializes_to_exact_wire_format() {
+    // Regression guard: pins the JSON shape produced by serde's
+    // (tag = "type", content = "data", rename_all = "PascalCase").
+    // Any change to serde attributes on Event or EventEnvelope that
+    // alters the wire format will fail this test.
+    let envelope = EventEnvelope {
+        event_id: "01J8RZYX1K3PQXGT1WJYR8AZ7Q".to_string(),
+        run_id: "run1".to_string(),
+        step_id: None,
+        timestamp_ms: 1234567890,
+        event: Event::RetryStarted {
+            attempt: 2,
+            reason: "rate limited".to_string(),
+        },
+    };
+    let json = serde_json::to_string(&envelope).expect("serialize");
+    assert_eq!(
+        json,
+        r#"{"event_id":"01J8RZYX1K3PQXGT1WJYR8AZ7Q","run_id":"run1","step_id":null,"timestamp_ms":1234567890,"event":{"type":"RetryStarted","data":{"attempt":2,"reason":"rate limited"}}}"#
     );
 }

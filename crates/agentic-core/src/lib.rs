@@ -3,7 +3,7 @@
 pub mod events;
 pub use events::{
     ActionRequired, BackendId, Event, EventEnvelope, ModelId, ProfileId, RunStatus, Severity,
-    StepStatus, TicketRef, TokenUsage, ToolStream,
+    StepStatus, TicketKind, TicketRef, TokenUsage, ToolStream,
 };
 pub mod error;
 pub use error::{CoreError, Result};

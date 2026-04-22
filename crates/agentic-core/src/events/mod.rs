@@ -13,9 +13,18 @@ pub struct BackendId(pub String);
 #[serde(transparent)]
 pub struct ModelId(pub String);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TicketKind {
+    GithubIssue,
+    GitlabIssue,
+    Jira,
+    FreeText,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TicketRef {
-    pub kind: String,
+    pub kind: TicketKind,
     pub reference: String,
     pub title: Option<String>,
 }
