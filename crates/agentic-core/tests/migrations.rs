@@ -48,14 +48,14 @@ fn migrator_is_idempotent_when_run_twice() {
     let (_tmp, _paths, db) = setup();
     Migrator::run(&db).expect("first run");
     Migrator::run(&db).expect("second run should be a no-op");
-    // Count _migrations rows — must be 1 (only version 1 applied, not duplicated)
+    // Count _migrations rows — must be 2 (versions 1 and 2 applied, not duplicated)
     let conn = db.conn().unwrap();
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM _migrations", [], |r| r.get(0))
         .unwrap();
     assert_eq!(
-        count, 1,
-        "_migrations should have exactly 1 row, not {count}"
+        count, 2,
+        "_migrations should have exactly 2 rows, not {count}"
     );
 }
 
@@ -70,7 +70,11 @@ fn each_applied_migration_has_a_row_in_migrations_table() {
         .unwrap()
         .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
-    assert_eq!(versions, vec![1], "expected exactly version 1 applied");
+    assert_eq!(
+        versions,
+        vec![1, 2],
+        "expected exactly versions 1 and 2 applied"
+    );
     let applied_at: i64 = conn
         .query_row(
             "SELECT applied_at FROM _migrations WHERE version = 1",
@@ -151,38 +155,62 @@ fn deleting_run_cascades_to_run_steps() {
         "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
          VALUES ('ws1', 'test', '/tmp/test', 'github', 100, 100)",
         [],
-    ).unwrap();
+    )
+    .unwrap();
     conn.execute(
         "INSERT INTO runs \
          (id, workspace_id, pipeline_name, status, backend, model, started_at) \
          VALUES ('run1', 'ws1', 'default', 'pending', 'claude-code', 'claude-opus-4-7', 200)",
         [],
-    ).unwrap();
+    )
+    .unwrap();
     conn.execute(
         "INSERT INTO run_steps (id, run_id, seq, agent_name, status) \
          VALUES ('step1', 'run1', 1, 'architect', 'pending')",
         [],
-    ).unwrap();
+    )
+    .unwrap();
     let pre: i64 = conn
-        .query_row("SELECT COUNT(*) FROM run_steps WHERE run_id='run1'", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM run_steps WHERE run_id='run1'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(pre, 1);
-    conn.execute("DELETE FROM runs WHERE id='run1'", []).unwrap();
-    let post: i64 = conn
-        .query_row("SELECT COUNT(*) FROM run_steps WHERE run_id='run1'", [], |r| r.get(0))
+    conn.execute("DELETE FROM runs WHERE id='run1'", [])
         .unwrap();
-    assert_eq!(post, 0, "run_steps should cascade-delete when run is deleted");
+    let post: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM run_steps WHERE run_id='run1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        post, 0,
+        "run_steps should cascade-delete when run is deleted"
+    );
 }
 
 #[test]
 fn runs_indexes_exist() {
     let (_tmp, _paths, db) = setup();
-    assert!(has_index(&db, "idx_runs_workspace_status"), "idx_runs_workspace_status missing");
-    assert!(has_index(&db, "idx_runs_started_at"), "idx_runs_started_at missing");
+    assert!(
+        has_index(&db, "idx_runs_workspace_status"),
+        "idx_runs_workspace_status missing"
+    );
+    assert!(
+        has_index(&db, "idx_runs_started_at"),
+        "idx_runs_started_at missing"
+    );
 }
 
 #[test]
 fn run_steps_index_exists() {
     let (_tmp, _paths, db) = setup();
-    assert!(has_index(&db, "idx_run_steps_run_seq"), "idx_run_steps_run_seq missing");
+    assert!(
+        has_index(&db, "idx_run_steps_run_seq"),
+        "idx_run_steps_run_seq missing"
+    );
 }

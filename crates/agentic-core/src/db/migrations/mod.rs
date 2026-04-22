@@ -6,11 +6,18 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "workspaces",
-    sql: include_str!("0001_workspaces.sql"),
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "workspaces",
+        sql: include_str!("0001_workspaces.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "runs_and_steps",
+        sql: include_str!("0002_runs_and_steps.sql"),
+    },
+];
 
 pub struct Migrator;
 
