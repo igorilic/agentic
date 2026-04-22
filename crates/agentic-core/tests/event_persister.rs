@@ -65,12 +65,15 @@ async fn seq_counters_are_independent_per_run_id() {
     let subscriber = bus.subscribe();
     let handle = EventPersister::spawn(subscriber, db.clone());
 
-    // Interleave 10 events for run-A and 5 for run-B
-    for i in 0..10u32 {
-        bus.publish(make_event("run-A", i));
-    }
+    // Interleave publishes so a shared global counter impl would fail.
+    // 5 paired rounds of (run-A, run-B), then 5 more run-A publishes.
+    // Expected final seqs: run-A = 0..=9, run-B = 0..=4.
     for i in 0..5u32 {
+        bus.publish(make_event("run-A", i));
         bus.publish(make_event("run-B", i));
+    }
+    for i in 5..10u32 {
+        bus.publish(make_event("run-A", i));
     }
 
     drop(bus);

@@ -59,6 +59,11 @@ impl EventPersister {
 }
 
 fn persist_envelope(db: &Db, envelope: &EventEnvelope) -> crate::Result<()> {
+    // Use to_vec_named (map format) rather than to_vec (array format):
+    // Event's #[serde(tag = "type", content = "data")] strategy needs field
+    // names to round-trip. Array format drops them, so `from_slice` can't
+    // identify the variant. Cost: ~30% larger BLOBs than array MessagePack,
+    // within spec §13.1's trade-off tolerance.
     let payload = rmp_serde::to_vec_named(&envelope.event)
         .map_err(|e| crate::CoreError::Db(format!("rmp-serde encode: {e}")))?;
     let event_type = event_type_tag(&envelope.event);
