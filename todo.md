@@ -273,7 +273,7 @@ Legend:
 
 ---
 
-### Step 1.5: Migration 0003 — findings, clarifying_questions, file_changes
+### [x] Step 1.5: Migration 0003 — findings, clarifying_questions, file_changes
 
 **Goal**: Add artifact tables per spec §13.1.
 
@@ -292,7 +292,7 @@ Legend:
 
 ---
 
-### Step 1.6: Migration 0004 — stream_events (BLOB payload)
+### [x] Step 1.6: Migration 0004 — stream_events (BLOB payload)
 
 **Goal**: Event log table with (run_id, seq) primary key.
 
@@ -311,7 +311,7 @@ Legend:
 
 ---
 
-### Step 1.7: Migration 0005 — chat_sessions, chat_messages
+### [x] Step 1.7: Migration 0005 — chat_sessions, chat_messages
 
 **Goal**: Chat persistence tables.
 
@@ -329,7 +329,7 @@ Legend:
 
 ---
 
-### Step 1.8: Migration 0006 — auth_accounts, settings
+### [x] Step 1.8: Migration 0006 — auth_accounts, settings
 
 **Goal**: Auth metadata (no secrets) + key/value settings table.
 

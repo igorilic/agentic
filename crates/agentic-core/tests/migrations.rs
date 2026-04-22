@@ -657,3 +657,53 @@ fn inserting_duplicate_run_id_seq_in_stream_events_fails() {
         }
     }
 }
+
+#[test]
+fn stream_events_orphan_when_run_deleted() {
+    // Spec §12.2: event log persists beyond run lifecycle for replay fidelity.
+    // stream_events.run_id has NO foreign key, so deleting a run must NOT
+    // cascade-delete its events. A future dev adding a FK here would silently
+    // break replay; this test pins the intent in executable form.
+    let (_tmp, _paths, db) = setup();
+    let conn = db.conn().unwrap();
+    conn.execute(
+        "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
+         VALUES ('ws1', 'test', '/tmp/test', 'github', 100, 100)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO runs \
+         (id, workspace_id, pipeline_name, status, backend, model, started_at) \
+         VALUES ('run1', 'ws1', 'default', 'pending', 'claude-code', 'claude-opus-4-7', 200)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO stream_events (run_id, seq, event_type, payload, timestamp_ms) \
+         VALUES ('run1', 1, 'started', X'00', 300)",
+        [],
+    )
+    .unwrap();
+    let pre: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM stream_events WHERE run_id='run1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(pre, 1);
+    conn.execute("DELETE FROM runs WHERE id='run1'", [])
+        .unwrap();
+    let post: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM stream_events WHERE run_id='run1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        post, 1,
+        "stream_events must persist after run deletion per spec §12.2 (no FK cascade)"
+    );
+}
