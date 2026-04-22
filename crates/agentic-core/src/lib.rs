@@ -14,6 +14,8 @@ pub mod logging;
 pub use logging::{init, init_test_subscriber};
 pub mod paths;
 pub use paths::Paths;
+pub mod pipeline;
+pub use pipeline::{Pipeline, PipelineConfig, PipelineStep};
 pub mod db;
 pub use db::Db;
 pub use db::runs::{Run, RunRepo};
