@@ -13,6 +13,7 @@ directories = { workspace = true }
 rusqlite = { workspace = true }
 r2d2 = { workspace = true }
 r2d2_sqlite = { workspace = true }
+blake3 = { workspace = true }
 
 [dev-dependencies]
 tracing-test = "0.2"

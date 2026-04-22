@@ -1,6 +1,7 @@
 use crate::{Paths, Result};
 
 pub mod migrations;
+pub mod workspaces;
 
 #[derive(Clone)]
 pub struct Db {
