@@ -35,8 +35,12 @@ fn sample_events() -> Vec<Event> {
             },
             cost_usd: Some(0.012),
         },
-        Event::TextDelta { content: "hello".to_string() },
-        Event::ThinkingDelta { content: "pondering".to_string() },
+        Event::TextDelta {
+            content: "hello".to_string(),
+        },
+        Event::ThinkingDelta {
+            content: "pondering".to_string(),
+        },
         Event::ToolUseStart {
             tool_call_id: "tc1".to_string(),
             tool_name: "Bash".to_string(),
@@ -70,7 +74,10 @@ fn sample_events() -> Vec<Event> {
             question: "why?".to_string(),
             suggested_answers: vec!["because".to_string()],
         },
-        Event::RetryStarted { attempt: 2, reason: "rate limited".to_string() },
+        Event::RetryStarted {
+            attempt: 2,
+            reason: "rate limited".to_string(),
+        },
         Event::Error {
             code: "rate_limited".to_string(),
             message: "429".to_string(),
@@ -88,8 +95,11 @@ fn sample_events() -> Vec<Event> {
 #[test]
 fn every_event_variant_roundtrips_through_json() {
     for original in sample_events() {
-        let envelope =
-            EventEnvelope::now("run1".to_string(), Some("step1".to_string()), original.clone());
+        let envelope = EventEnvelope::now(
+            "run1".to_string(),
+            Some("step1".to_string()),
+            original.clone(),
+        );
         let json = serde_json::to_string(&envelope).expect("serialize");
         let back: EventEnvelope = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back, envelope, "roundtrip mismatch for {original:?}");
@@ -101,7 +111,12 @@ fn run_started_deserializes_from_fixture() {
     let fixture = include_str!("fixtures/events/run_started.json");
     let envelope: EventEnvelope = serde_json::from_str(fixture).expect("fixture deserializes");
     match &envelope.event {
-        Event::RunStarted { ticket, profile, backend, model } => {
+        Event::RunStarted {
+            ticket,
+            profile,
+            backend,
+            model,
+        } => {
             assert_eq!(ticket.kind, "github-issue");
             assert_eq!(ticket.reference, "#42");
             assert_eq!(profile.0, "github");
@@ -117,19 +132,31 @@ fn event_id_is_a_valid_ulid() {
     let envelope = EventEnvelope::now(
         "run1".to_string(),
         None,
-        Event::TextDelta { content: "x".to_string() },
+        Event::TextDelta {
+            content: "x".to_string(),
+        },
     );
     ulid::Ulid::from_string(&envelope.event_id).expect("event_id parses as ULID");
 }
 
 #[test]
 fn timestamp_ms_is_monotonic_across_consecutive_now_calls() {
-    let a =
-        EventEnvelope::now("run1".to_string(), None, Event::TextDelta { content: "a".to_string() });
+    let a = EventEnvelope::now(
+        "run1".to_string(),
+        None,
+        Event::TextDelta {
+            content: "a".to_string(),
+        },
+    );
     // 2ms sleep guarantees distinct millis on fast machines.
     std::thread::sleep(std::time::Duration::from_millis(2));
-    let b =
-        EventEnvelope::now("run1".to_string(), None, Event::TextDelta { content: "b".to_string() });
+    let b = EventEnvelope::now(
+        "run1".to_string(),
+        None,
+        Event::TextDelta {
+            content: "b".to_string(),
+        },
+    );
     assert!(
         b.timestamp_ms > a.timestamp_ms,
         "expected b.timestamp_ms ({}) > a.timestamp_ms ({})",

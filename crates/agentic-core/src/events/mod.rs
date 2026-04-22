@@ -1,23 +1,27 @@
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-// Sub-type newtypes (no serde derives yet — RED phase)
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ProfileId(pub String);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct BackendId(pub String);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ModelId(pub String);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TicketRef {
     pub kind: String,
     pub reference: String,
     pub title: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RunStatus {
     Pending,
     Running,
@@ -28,7 +32,8 @@ pub enum RunStatus {
     Crashed,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum StepStatus {
     Pending,
     Running,
@@ -38,20 +43,22 @@ pub enum StepStatus {
     Skipped,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     Error,
     Warning,
     Info,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ToolStream {
     Stdout,
     Stderr,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenUsage {
     pub input_tokens: u64,
     pub output_tokens: u64,
@@ -59,14 +66,16 @@ pub struct TokenUsage {
     pub cache_creation_input_tokens: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum ActionRequired {
     AnswerClarifyingQuestions { question_ids: Vec<String> },
     TriageFindings { finding_ids: Vec<String> },
     QaRetryDecision,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data", rename_all = "PascalCase")]
 pub enum Event {
     RunStarted {
         ticket: TicketRef,
@@ -89,8 +98,12 @@ pub enum Event {
         token_usage: TokenUsage,
         cost_usd: Option<f64>,
     },
-    TextDelta { content: String },
-    ThinkingDelta { content: String },
+    TextDelta {
+        content: String,
+    },
+    ThinkingDelta {
+        content: String,
+    },
     ToolUseStart {
         tool_call_id: String,
         tool_name: String,
@@ -124,17 +137,22 @@ pub enum Event {
         question: String,
         suggested_answers: Vec<String>,
     },
-    RetryStarted { attempt: u32, reason: String },
+    RetryStarted {
+        attempt: u32,
+        reason: String,
+    },
     Error {
         code: String,
         message: String,
         recoverable: bool,
         retry_after_ms: Option<u64>,
     },
-    UserActionNeeded { action: ActionRequired },
+    UserActionNeeded {
+        action: ActionRequired,
+    },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EventEnvelope {
     pub event_id: String,
     pub run_id: String,
@@ -144,6 +162,8 @@ pub struct EventEnvelope {
 }
 
 impl EventEnvelope {
+    /// Create a new envelope with a fresh ULID `event_id` and `timestamp_ms`
+    /// set to `crate::time::now_ms()`.
     pub fn now(run_id: String, step_id: Option<String>, event: Event) -> Self {
         Self {
             event_id: ulid::Ulid::new().to_string(),
