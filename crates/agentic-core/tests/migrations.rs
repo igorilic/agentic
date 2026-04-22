@@ -570,6 +570,67 @@ fn deleting_chat_session_cascades_to_chat_messages() {
 }
 
 #[test]
+fn auth_accounts_and_settings_tables_exist() {
+    let (_tmp, _paths, db) = setup();
+    for t in ["auth_accounts", "settings"] {
+        assert!(has_table(&db, t), "{t} table missing");
+    }
+}
+
+#[test]
+fn auth_accounts_primary_key_is_id() {
+    let (_tmp, _paths, db) = setup();
+    assert_eq!(
+        primary_key_columns(&db, "auth_accounts"),
+        vec!["id".to_string()],
+        "auth_accounts PK drifted"
+    );
+}
+
+#[test]
+fn settings_primary_key_is_key() {
+    let (_tmp, _paths, db) = setup();
+    assert_eq!(
+        primary_key_columns(&db, "settings"),
+        vec!["key".to_string()],
+        "settings PK drifted"
+    );
+}
+
+#[test]
+fn settings_scope_check_enforces_allowed_values() {
+    let (_tmp, _paths, db) = setup();
+    let conn = db.conn().unwrap();
+    // Accepts 'user'
+    conn.execute(
+        "INSERT INTO settings (key, value, scope, updated_at) VALUES ('k1', '{}', 'user', 100)",
+        [],
+    ).expect("'user' scope must be accepted");
+    // Accepts 'workspace:<anything>'
+    conn.execute(
+        "INSERT INTO settings (key, value, scope, updated_at) VALUES ('k2', '{}', 'workspace:abc123', 101)",
+        [],
+    ).expect("'workspace:abc123' scope must be accepted");
+    // Rejects arbitrary strings
+    for bad in ["invalid", "", "workspace", "workspace:"] {
+        let result = conn.execute(
+            &format!("INSERT INTO settings (key, value, scope, updated_at) VALUES ('k-{bad}', '{{}}', '{bad}', 200)"),
+            [],
+        );
+        match result {
+            Ok(_) => panic!("scope '{bad}' should have been rejected by CHECK constraint"),
+            Err(e) => {
+                let msg = e.to_string().to_uppercase();
+                assert!(
+                    msg.contains("CHECK") || msg.contains("CONSTRAINT"),
+                    "expected CHECK violation for scope '{bad}', got: {e}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn inserting_duplicate_run_id_seq_in_stream_events_fails() {
     let (_tmp, _paths, db) = setup();
     let conn = db.conn().unwrap();
