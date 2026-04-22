@@ -347,24 +347,24 @@ Search order (first match wins for each agent name):
 
 ### 10.3 Agent Frontmatter Schema
 
-```yaml
----
-name: architect                           # required, must match filename stem
-description: Designs feature spec…        # required, one-line
-model: claude-opus-4-7                    # optional; default = profile's default model
-tools: [Read, Write, Edit, Bash, Glob,    # optional; default = all
-        Grep, WebSearch, WebFetch]
-allowed_questions: 5                      # optional; architect-only semantic
-pipeline_role: step                       # one of: step | mention | both
+```toml
++++
+name = "architect"                        # required, must match filename stem
+description = "Designs feature spec…"     # required, one-line
+model = "claude-opus-4-7"                 # optional; default = profile's default model
+tools = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"]
+                                          # optional; default = all
+allowed_questions = 5                     # optional; architect-only semantic
+pipeline_role = "step"                    # one of: step | mention | both
                                           # step = participates in default pipeline
                                           # mention = @-only; not in default pipeline
                                           # both = step + @-mentionable outside pipeline
-timeout_seconds: 1800                     # optional; overrides per-step timeout
----
+timeout_seconds = 1800                    # optional; overrides per-step timeout
++++
 <markdown body = system prompt>
 ```
 
-Schema is parsed with `serde_yaml`; unknown fields are preserved but ignored (forward-compat).
+Schema is parsed with the `toml` crate; unknown fields are preserved but ignored (forward-compat). Frontmatter uses `+++` fences (TOML convention) rather than the YAML `---`. Rationale: the Rust YAML crates flagged at Dependabot audit time (`serde_yaml`, `serde_yml`) are unmaintained; TOML is already a core dependency of the pipeline config parser and avoids that maintenance risk.
 
 ### 10.4 Pipeline TOML Schema
 

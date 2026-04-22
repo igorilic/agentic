@@ -8,7 +8,8 @@ use agentic_core::{CoreError, discover_agent};
 fn write_agent(repo_root: &Path, subdir: &str, filename: &str, name: &str, marker: &str) {
     let dir = repo_root.join(subdir);
     std::fs::create_dir_all(&dir).expect("create_dir_all");
-    let content = format!("---\nname: {name}\ndescription: test agent ({marker})\n---\n{marker}\n");
+    let content =
+        format!("+++\nname = \"{name}\"\ndescription = \"test agent ({marker})\"\n+++\n{marker}\n");
     std::fs::write(dir.join(filename), content).expect("write agent file");
 }
 
