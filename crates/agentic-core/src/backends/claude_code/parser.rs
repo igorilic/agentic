@@ -82,7 +82,7 @@ pub async fn parse_stream<R: AsyncBufRead + Unpin>(
                     event: Event::Error {
                         code: "protocol_error".to_string(),
                         message: err.to_string(),
-                        recoverable: false,
+                        recoverable: true,
                         retry_after_ms: None,
                     },
                 };
@@ -176,6 +176,7 @@ impl ParserState {
             "content_block_stop" => self.handle_content_block_stop(),
             "message_delta" => self.handle_message_delta(json),
             "message_stop" | "ping" => vec![],
+            "error" => Self::handle_upstream_error(json),
             _ => vec![],
         }
     }
@@ -258,6 +259,41 @@ impl ParserState {
             self.token_acc.absorb(usage);
         }
         vec![]
+    }
+
+    /// Handle an Anthropic-level `{"type":"error","error":{...}}` payload.
+    ///
+    /// These are well-formed JSON objects but represent upstream API errors
+    /// (overload, rate-limit, auth failure, etc.).  Parsing continues after
+    /// emitting the error event.
+    fn handle_upstream_error(json: &Value) -> Vec<Event> {
+        let error_obj = match json.get("error") {
+            Some(obj) => obj,
+            None => {
+                return vec![Event::Error {
+                    code: "upstream_error".to_string(),
+                    message: "error event missing body".to_string(),
+                    recoverable: false,
+                    retry_after_ms: None,
+                }];
+            }
+        };
+
+        let code = error_obj["type"]
+            .as_str()
+            .unwrap_or("upstream_error")
+            .to_string();
+        let message = error_obj["message"].as_str().unwrap_or("").to_string();
+        let retry_after_ms = error_obj["retry_after"].as_u64().map(|secs| secs * 1000);
+
+        let recoverable = matches!(code.as_str(), "overloaded_error" | "rate_limit_error");
+
+        vec![Event::Error {
+            code,
+            message,
+            recoverable,
+            retry_after_ms,
+        }]
     }
 }
 
