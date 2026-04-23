@@ -1,0 +1,6 @@
+{"type":"message_start","message":{"id":"msg_02abc","type":"message","role":"assistant","content":[],"model":"claude-opus-4-5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":50,"output_tokens":1}}}
+{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"Read","input":{}}}
+{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"file_path\":"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"\"/etc/hosts\"}"}}
+{"type":"content_block_stop","index":0}
+{"type":"message_stop"}

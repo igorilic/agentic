@@ -1,0 +1,3 @@
+{"type":"message_start","message":{"id":"msg_04bad","type":"message","role":"assistant","content":[],"model":"claude-opus-4-5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":0}}}
+this is not valid json at all {{{
+{"type":"message_stop"}
