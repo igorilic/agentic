@@ -1,6 +1,6 @@
 use agentic_core::{
-    BackendId, Event, ModelId, PipelineConfig, PipelineSm, ProfileId,
-    RunStatus, SmInput, StepStatus, TicketKind, TicketRef,
+    BackendId, Event, ModelId, PipelineConfig, PipelineSm, ProfileId, RunStatus, SmInput,
+    StepStatus, TicketKind, TicketRef,
 };
 use proptest::prelude::*;
 
@@ -36,13 +36,19 @@ fn happy_path_pending_to_completed() {
     assert_eq!(sm.state(), RunStatus::Running);
     // Expect RunStarted + StepStarted(architect)
     assert!(events.iter().any(|e| matches!(e, Event::RunStarted { .. })));
-    assert!(events.iter().any(|e| matches!(e, Event::StepStarted { agent, .. } if agent == "architect")));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, Event::StepStarted { agent, .. } if agent == "architect"))
+    );
 
     // Advance through: architect → tdd-developer → qa → reviewer
     for expected_next_agent in &["tdd-developer", "qa", "reviewer"] {
         let events = sm.handle(SmInput::StepPassed).expect("pass");
         assert!(
-            events.iter().any(|e| matches!(e, Event::StepStarted { agent, .. } if agent == expected_next_agent)),
+            events.iter().any(
+                |e| matches!(e, Event::StepStarted { agent, .. } if agent == expected_next_agent)
+            ),
             "expected StepStarted for {expected_next_agent}"
         );
     }
@@ -50,9 +56,13 @@ fn happy_path_pending_to_completed() {
     // Reviewer passes — run completes
     let events = sm.handle(SmInput::StepPassed).expect("pass reviewer");
     assert_eq!(sm.state(), RunStatus::Completed);
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, Event::RunComplete { status: RunStatus::Completed, .. })));
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Event::RunComplete {
+            status: RunStatus::Completed,
+            ..
+        }
+    )));
 }
 
 #[test]
@@ -60,19 +70,21 @@ fn qa_fails_three_times_then_tech_debt_and_reviewer_completes_with_tech_debt() {
     let mut sm = default_sm();
     sm.handle(start_input()).expect("start");
     sm.handle(SmInput::StepPassed).expect("architect passed"); // → tdd-developer
-    sm.handle(SmInput::StepPassed).expect("tdd-developer passed 1st time"); // → qa
+    sm.handle(SmInput::StepPassed)
+        .expect("tdd-developer passed 1st time"); // → qa
 
     // QA fails 3 times, bouncing back to tdd-developer each time.
     for retry in 1..=3 {
         let events = sm.handle(SmInput::StepFailed).expect("qa failed");
         assert!(
-            events
-                .iter()
-                .any(|e| matches!(e, Event::RetryStarted { attempt, .. } if *attempt == retry as u32)),
+            events.iter().any(
+                |e| matches!(e, Event::RetryStarted { attempt, .. } if *attempt == retry as u32)
+            ),
             "expected RetryStarted(attempt={retry})"
         );
         // Now current step is tdd-developer again
-        sm.handle(SmInput::StepPassed).expect("tdd-developer retry passed"); // → qa
+        sm.handle(SmInput::StepPassed)
+            .expect("tdd-developer retry passed"); // → qa
     }
 
     // 4th qa failure: moves to tech-debt, advances to reviewer
@@ -81,9 +93,13 @@ fn qa_fails_three_times_then_tech_debt_and_reviewer_completes_with_tech_debt() {
     // Reviewer passes → CompletedWithTechDebt
     let events = sm.handle(SmInput::StepPassed).expect("reviewer passed");
     assert_eq!(sm.state(), RunStatus::CompletedWithTechDebt);
-    assert!(events.iter().any(
-        |e| matches!(e, Event::RunComplete { status: RunStatus::CompletedWithTechDebt, .. })
-    ));
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Event::RunComplete {
+            status: RunStatus::CompletedWithTechDebt,
+            ..
+        }
+    )));
 }
 
 #[test]
@@ -92,13 +108,17 @@ fn cancel_during_any_running_step_yields_cancelled() {
     sm.handle(start_input()).expect("start");
     let events = sm.handle(SmInput::Cancel).expect("cancel");
     assert_eq!(sm.state(), RunStatus::Cancelled);
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, Event::RunComplete { status: RunStatus::Cancelled, .. })));
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Event::RunComplete {
+            status: RunStatus::Cancelled,
+            ..
+        }
+    )));
 
     // Subsequent inputs must error
     let result = sm.handle(SmInput::StepPassed);
-    assert!(matches!(result, Err(_)), "terminal state must reject further input");
+    assert!(result.is_err(), "terminal state must reject further input");
 }
 
 proptest! {
