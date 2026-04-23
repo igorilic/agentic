@@ -14,8 +14,17 @@ impl StubProbe {
 }
 
 impl WhichProbe for StubProbe {
-    fn find(&self, bin: &str) -> Option<PathBuf> {
-        self.results.get(bin).and_then(|v| v.clone())
+    fn find(&self, bin: &str) -> Result<Option<PathBuf>, which::Error> {
+        Ok(self.results.get(bin).and_then(|v| v.clone()))
+    }
+}
+
+/// A probe that returns `Err` for every binary it is asked about.
+struct ErrProbe;
+
+impl WhichProbe for ErrProbe {
+    fn find(&self, _bin: &str) -> Result<Option<PathBuf>, which::Error> {
+        Err(which::Error::CannotFindBinaryPath)
     }
 }
 
@@ -85,4 +94,64 @@ fn output_contains_all_four_bins() {
             "expected output to contain '{bin}'; got:\n{text}"
         );
     }
+}
+
+#[test]
+fn mixed_found_and_not_found_lines_render_distinctly() {
+    // claude + gh found at distinct paths, copilot + glab not found (absent from map → None)
+    let probe = StubProbe::new(HashMap::from([
+        ("claude", Some(PathBuf::from("/usr/local/bin/claude"))),
+        ("gh", Some(PathBuf::from("/opt/homebrew/bin/gh"))),
+    ]));
+    let mut out = Vec::new();
+    run_doctor(&probe, &mut out).unwrap();
+    let s = String::from_utf8(out).unwrap();
+
+    // claude: found with correct path
+    let claude_line = s.lines().find(|l| l.contains("claude")).unwrap();
+    assert!(
+        claude_line.to_lowercase().contains("found"),
+        "claude should be found, got: {claude_line}"
+    );
+    assert!(
+        claude_line.contains("/usr/local/bin/claude"),
+        "claude line should contain path, got: {claude_line}"
+    );
+
+    // gh: found with correct path
+    let gh_line = s.lines().find(|l| l.contains("gh")).unwrap();
+    assert!(
+        gh_line.contains("/opt/homebrew/bin/gh"),
+        "gh line should contain path, got: {gh_line}"
+    );
+
+    // copilot: not found
+    let copilot_line = s.lines().find(|l| l.contains("copilot")).unwrap();
+    assert!(
+        copilot_line.contains("not found"),
+        "copilot should be not found, got: {copilot_line}"
+    );
+
+    // glab: not found
+    let glab_line = s.lines().find(|l| l.contains("glab")).unwrap();
+    assert!(
+        glab_line.contains("not found"),
+        "glab should be not found, got: {glab_line}"
+    );
+}
+
+#[test]
+fn probe_error_renders_error_line() {
+    let probe = ErrProbe;
+    let mut out = Vec::new();
+    run_doctor(&probe, &mut out).expect("run_doctor should succeed even when probe errors");
+    let text = String::from_utf8(out).unwrap();
+    let claude_line = text
+        .lines()
+        .find(|l| l.contains("claude"))
+        .expect("output should contain a line mentioning 'claude'");
+    assert!(
+        claude_line.contains("error"),
+        "expected 'error' in line when probe fails: {claude_line}"
+    );
 }

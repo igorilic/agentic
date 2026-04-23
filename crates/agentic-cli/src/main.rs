@@ -69,7 +69,7 @@ async fn run_command(cli: Cli) -> Result<()> {
 
     match cli.command {
         Command::Run { scripted } => cmd_run(&paths, &scripted).await,
-        Command::Doctor => cmd_doctor().await,
+        Command::Doctor => cmd_doctor(),
         Command::Migrate => cmd_migrate(&paths).await,
     }
 }
@@ -165,7 +165,7 @@ async fn cmd_run(paths: &Paths, script_path: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
-async fn cmd_doctor() -> Result<()> {
+fn cmd_doctor() -> Result<()> {
     run_doctor(&SystemWhichProbe, &mut std::io::stdout().lock()).context("doctor probe failed")?;
     Ok(())
 }
