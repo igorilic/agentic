@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use agentic_cli::doctor::{run_doctor, WhichProbe};
+use agentic_cli::doctor::{WhichProbe, run_doctor};
 
 struct StubProbe {
     results: HashMap<&'static str, Option<PathBuf>>,

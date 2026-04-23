@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 
+use agentic_cli::doctor::{SystemWhichProbe, run_doctor};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -165,8 +166,7 @@ async fn cmd_run(paths: &Paths, script_path: &std::path::Path) -> Result<()> {
 }
 
 async fn cmd_doctor() -> Result<()> {
-    // Stub — Step 5.2 fills in environment probes.
-    println!("doctor: Step 5.2 will implement environment probes");
+    run_doctor(&SystemWhichProbe, &mut std::io::stdout().lock()).context("doctor probe failed")?;
     Ok(())
 }
 
