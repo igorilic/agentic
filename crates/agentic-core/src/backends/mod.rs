@@ -1,3 +1,8 @@
+#[cfg(any(test, feature = "testing"))]
+pub mod scripted;
+#[cfg(any(test, feature = "testing"))]
+pub use scripted::ScriptedBackend;
+
 use std::path::PathBuf;
 use std::time::Duration;
 
