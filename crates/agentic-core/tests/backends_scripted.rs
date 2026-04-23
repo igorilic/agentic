@@ -1,4 +1,4 @@
-#![cfg(feature = "testing")]
+#![cfg(any(test, feature = "testing"))]
 
 use std::path::PathBuf;
 

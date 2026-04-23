@@ -86,7 +86,7 @@ impl Backend for ScriptedBackend {
 
         Ok(ExecuteOutcome {
             status,
-            summary: String::new(),
+            summary: "scripted".to_string(),
             token_usage: TokenUsage::default(),
             cost_usd: None,
         })
