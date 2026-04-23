@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c034a2f06d1059a2a1141e51a170b45f894bd34630434fdef6209c345f40b4c2 # shrinks to inputs = [Start { ticket: TicketRef { kind: GithubIssue, reference: "#42", title: Some("test") }, profile: ProfileId("github"), backend: BackendId("claude-code"), model: ModelId("claude-opus-4-7") }]
