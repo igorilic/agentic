@@ -9,6 +9,7 @@ dependencies = [
  "agentic-core",
  "anyhow",
  "clap",
+ "rusqlite",
  "serde_json",
  "tempfile",
  "tokio",

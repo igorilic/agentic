@@ -61,7 +61,10 @@ fn run_scripted_exits_0_and_emits_json_per_line() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Each line should parse as JSON.
     let lines: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
-    assert!(!lines.is_empty(), "expected at least one JSON line on stdout");
+    assert!(
+        !lines.is_empty(),
+        "expected at least one JSON line on stdout"
+    );
     for line in &lines {
         let parsed: serde_json::Value = serde_json::from_str(line)
             .unwrap_or_else(|_| panic!("line was not valid JSON: {line}"));
