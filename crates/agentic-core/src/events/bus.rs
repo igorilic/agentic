@@ -34,6 +34,14 @@ impl EventBus {
         self.sender.subscribe()
     }
 
+    /// Clone the underlying broadcast Sender. Callers that need to publish
+    /// via `EventSink` (e.g., `Backend::execute(req, event_sink)`) can obtain
+    /// a sink this way rather than routing through `publish` — semantics are
+    /// identical (both land in the same broadcast channel).
+    pub fn sender(&self) -> crate::backends::EventSink {
+        self.sender.clone()
+    }
+
     /// Publish an envelope. Returns the number of active receivers that the
     /// value was sent to (0 if no one is subscribed).
     ///
