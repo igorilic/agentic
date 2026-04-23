@@ -131,7 +131,17 @@ proptest! {
 
         for input in inputs {
             let prior_state = sm.state();
+            let prior_sm = sm.clone();
             let result = sm.handle(input);
+
+            if result.is_err() {
+                // F5a: Err must not mutate state.
+                prop_assert_eq!(
+                    sm.clone(),
+                    prior_sm,
+                    "handle() returned Err but SM state changed"
+                );
+            }
 
             // Invariant 1: once terminal, all subsequent handle() calls error.
             if terminal_reached {

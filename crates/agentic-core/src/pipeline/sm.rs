@@ -30,7 +30,7 @@ pub enum SmInput {
 
 /// Pure state machine. No IO, no backends — produces `Event`s that the
 /// orchestrator (Step 3.5) will wrap in envelopes and publish.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PipelineSm {
     /// Stored for use by the orchestrator (Step 3.5); unused in the SM itself.
     #[allow(dead_code)]
@@ -189,7 +189,11 @@ impl PipelineSm {
 
         if agent == "qa" {
             if self.qa_retries < self.qa_fix_loop_cap {
-                // Retry: bounce back to the tdd-developer step (index - 1 before qa)
+                // Retry: bounce back to the tdd-developer step (index - 1 before qa).
+                // Reset QA to Pending — it's not definitively failed, it's waiting for
+                // tdd-developer to re-run. The event stream already records the Failed
+                // attempt via StepComplete{Failed} above (audit trail preserved).
+                self.step_statuses[idx] = StepStatus::Pending;
                 self.qa_retries += 1;
                 let tdd_idx = self.find_tdd_developer_before_qa(idx);
                 self.step_index = tdd_idx;
