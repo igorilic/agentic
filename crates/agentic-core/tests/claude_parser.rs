@@ -162,7 +162,7 @@ async fn bad_json_line_emits_protocol_error_and_continues() {
         "expected exactly 1 Error event from bad json, got: {events:?}"
     );
     assert_eq!(errors[0].0, "protocol_error");
-    assert!(!errors[0].1, "error should be non-recoverable");
+    assert!(errors[0].1, "protocol_error should be recoverable (parse hiccup, stream continues)");
 }
 
 // ---------------------------------------------------------------------------
@@ -177,4 +177,108 @@ async fn bad_json_parser_continues_after_error() {
     parse_stream(reader, sink, "run-x".to_string(), None)
         .await
         .expect("parse_stream should return Ok even when a line is bad JSON");
+}
+
+// ---------------------------------------------------------------------------
+// upstream_error — overloaded_error → recoverable=true, parsing continues
+// ---------------------------------------------------------------------------
+#[tokio::test]
+async fn upstream_error_event_emits_recoverable_error() {
+    let bytes = fixture("upstream_error.jsonl");
+    let (events, _outcome) = run_parser(bytes).await;
+
+    let errors: Vec<_> = events
+        .iter()
+        .filter_map(|e| {
+            if let Event::Error {
+                code,
+                message,
+                recoverable,
+                retry_after_ms,
+            } = e
+            {
+                Some((code.clone(), message.clone(), *recoverable, *retry_after_ms))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(
+        errors.len(),
+        1,
+        "expected exactly 1 Error event, got: {events:?}"
+    );
+    let (code, message, recoverable, retry_after_ms) = &errors[0];
+    assert_eq!(code, "overloaded_error");
+    assert_eq!(message, "servers are busy");
+    assert!(recoverable, "overloaded_error should be recoverable");
+    assert_eq!(*retry_after_ms, None);
+}
+
+// ---------------------------------------------------------------------------
+// upstream_error — authentication_error → recoverable=false
+// ---------------------------------------------------------------------------
+#[tokio::test]
+async fn upstream_error_auth_failure_emits_nonrecoverable() {
+    let bytes = fixture("authentication_error.jsonl");
+    let (events, _outcome) = run_parser(bytes).await;
+
+    let errors: Vec<_> = events
+        .iter()
+        .filter_map(|e| {
+            if let Event::Error {
+                code, recoverable, ..
+            } = e
+            {
+                Some((code.clone(), *recoverable))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(
+        errors.len(),
+        1,
+        "expected exactly 1 Error event, got: {events:?}"
+    );
+    assert_eq!(errors[0].0, "authentication_error");
+    assert!(!errors[0].1, "authentication_error should be non-recoverable");
+}
+
+// ---------------------------------------------------------------------------
+// upstream_error — rate_limit_error → recoverable=true, retry_after_ms set
+// ---------------------------------------------------------------------------
+#[tokio::test]
+async fn upstream_error_rate_limit_emits_retry_after() {
+    let bytes = fixture("rate_limit_error.jsonl");
+    let (events, _outcome) = run_parser(bytes).await;
+
+    let errors: Vec<_> = events
+        .iter()
+        .filter_map(|e| {
+            if let Event::Error {
+                code,
+                recoverable,
+                retry_after_ms,
+                ..
+            } = e
+            {
+                Some((code.clone(), *recoverable, *retry_after_ms))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(
+        errors.len(),
+        1,
+        "expected exactly 1 Error event, got: {events:?}"
+    );
+    let (code, recoverable, retry_after_ms) = &errors[0];
+    assert_eq!(code, "rate_limit_error");
+    assert!(recoverable, "rate_limit_error should be recoverable");
+    assert_eq!(*retry_after_ms, Some(30_000));
 }
