@@ -1,7 +1,6 @@
 use agentic_core::{
     CURRENT_SCHEMA_VERSION, Db, Event, EventBus, EventEnvelope, ModelId, Paths,
-    PipelineOrchestrator, Run, RunRepo, RunStatus, Step, StepRepo, StepStatus,
-    TokenUsage,
+    PipelineOrchestrator, Run, RunRepo, RunStatus, Step, StepRepo, StepStatus, TokenUsage,
 };
 use rusqlite::params;
 
@@ -70,7 +69,9 @@ fn seed_step(id: &str, run_id: &str, seq: i64, status: StepStatus) -> Step {
 async fn step_started_event_transitions_step_row_to_running() {
     let (_tmp, _db, runs, steps, bus) = setup();
     runs.insert(seed_run_running("run1", 100)).unwrap();
-    steps.insert(seed_step("step1", "run1", 0, StepStatus::Pending)).unwrap();
+    steps
+        .insert(seed_step("step1", "run1", 0, StepStatus::Pending))
+        .unwrap();
 
     let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
 
@@ -155,5 +156,11 @@ async fn run_complete_transitions_run_row_and_delivers_to_subscribers() {
     assert_eq!(run.duration_ms, Some(800));
 
     let received = ui_rx.recv().await.expect("ui subscriber receives");
-    assert!(matches!(received.event, Event::RunComplete { status: RunStatus::Completed, .. }));
+    assert!(matches!(
+        received.event,
+        Event::RunComplete {
+            status: RunStatus::Completed,
+            ..
+        }
+    ));
 }

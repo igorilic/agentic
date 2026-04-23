@@ -86,12 +86,32 @@ impl StepRepo {
 
     pub fn mark_complete(
         &self,
-        _id: &str,
-        _to: StepStatus,
-        _completed_at: i64,
-        _duration_ms: i64,
+        id: &str,
+        to: StepStatus,
+        completed_at: i64,
+        duration_ms: i64,
     ) -> Result<()> {
-        unimplemented!("mark_complete not yet implemented")
+        let mut conn = self.pool.get()?;
+        let tx = conn.transaction()?;
+        let current_str: String = tx.query_row(
+            "SELECT status FROM run_steps WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )?;
+        let from = step_status_from_str(&current_str)
+            .ok_or_else(|| CoreError::Db(format!("unknown step status: {current_str}")))?;
+        if !is_legal_step_transition(from, to) {
+            return Err(CoreError::InvalidStateTransition {
+                from: step_status_to_str(from).to_string(),
+                to: step_status_to_str(to).to_string(),
+            });
+        }
+        tx.execute(
+            "UPDATE run_steps SET status = ?1, completed_at = ?2, duration_ms = ?3 WHERE id = ?4",
+            params![step_status_to_str(to), completed_at, duration_ms, id],
+        )?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn transition(&self, id: &str, to: StepStatus) -> Result<()> {
