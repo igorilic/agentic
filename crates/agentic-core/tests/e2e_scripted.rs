@@ -1,4 +1,4 @@
-#![cfg(any(test, feature = "testing"))]
+#![cfg(feature = "testing")]
 
 use std::collections::HashMap;
 use std::path::PathBuf;
