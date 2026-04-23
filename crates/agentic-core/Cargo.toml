@@ -25,3 +25,4 @@ rmp-serde = { workspace = true }
 tracing-test = "0.2"
 serial_test = "3"
 tempfile = "3"
+proptest = { workspace = true }
