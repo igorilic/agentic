@@ -35,9 +35,15 @@ fn sample_script_5_events() -> Vec<Event> {
             agent: "test".to_string(),
             model: ModelId("fake".to_string()),
         },
-        Event::TextDelta { content: "hello".to_string() },
-        Event::TextDelta { content: "world".to_string() },
-        Event::TextDelta { content: "!".to_string() },
+        Event::TextDelta {
+            content: "hello".to_string(),
+        },
+        Event::TextDelta {
+            content: "world".to_string(),
+        },
+        Event::TextDelta {
+            content: "!".to_string(),
+        },
         Event::StepComplete {
             status: StepStatus::Passed,
             summary: "done".to_string(),
@@ -61,7 +67,12 @@ async fn sink_receives_all_5_events_in_order() {
     while let Ok(env) = rx.try_recv() {
         received.push(env);
     }
-    assert_eq!(received.len(), 5, "expected 5 envelopes, got {}", received.len());
+    assert_eq!(
+        received.len(),
+        5,
+        "expected 5 envelopes, got {}",
+        received.len()
+    );
 
     // Spot-check order via variant matching.
     assert!(matches!(received[0].event, Event::StepStarted { .. }));

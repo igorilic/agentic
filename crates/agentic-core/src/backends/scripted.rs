@@ -1,11 +1,14 @@
 #[cfg(any(test, feature = "testing"))]
-use async_trait::async_trait;
-#[cfg(any(test, feature = "testing"))]
-use super::{Backend, BackendId, EventSink, ExecuteOutcome, ExecuteRequest, HealthStatus, ModelId};
-#[cfg(any(test, feature = "testing"))]
-use crate::events::Event;
+use super::{
+    Backend, BackendId, EventSink, ExecuteOutcome, ExecuteRequest, HealthStatus, ModelId,
+    TokenUsage,
+};
 #[cfg(any(test, feature = "testing"))]
 use crate::Result;
+#[cfg(any(test, feature = "testing"))]
+use crate::events::{Event, EventEnvelope, StepStatus};
+#[cfg(any(test, feature = "testing"))]
+use async_trait::async_trait;
 
 /// Test-only backend that replays a canned sequence of events.
 ///
@@ -29,26 +32,63 @@ impl ScriptedBackend {
 #[async_trait]
 impl Backend for ScriptedBackend {
     fn id(&self) -> BackendId {
-        unimplemented!()
+        BackendId("scripted".to_string())
     }
 
     fn display_name(&self) -> &str {
-        unimplemented!()
+        "Scripted"
     }
 
     fn supported_models(&self) -> Vec<ModelId> {
-        unimplemented!()
+        Vec::new()
     }
 
     async fn health_check(&self) -> Result<HealthStatus> {
-        unimplemented!()
+        Ok(HealthStatus::Healthy)
     }
 
-    async fn execute(
-        &self,
-        _req: ExecuteRequest,
-        _event_sink: EventSink,
-    ) -> Result<ExecuteOutcome> {
-        unimplemented!()
+    async fn execute(&self, req: ExecuteRequest, event_sink: EventSink) -> Result<ExecuteOutcome> {
+        let mut saw_unrecoverable_error = false;
+
+        for event in &self.script {
+            // Honor cancellation before each event emission.
+            if req.cancel.is_cancelled() {
+                return Ok(ExecuteOutcome {
+                    status: StepStatus::Failed,
+                    summary: "cancelled".to_string(),
+                    token_usage: TokenUsage::default(),
+                    cost_usd: None,
+                });
+            }
+
+            if let Event::Error {
+                recoverable: false, ..
+            } = event
+            {
+                saw_unrecoverable_error = true;
+            }
+
+            let envelope = EventEnvelope::now(
+                req.run_id.0.clone(),
+                Some(req.step_id.0.clone()),
+                event.clone(),
+            );
+            // Silently ignore send error — no subscribers just means the
+            // broadcast is empty; real tests seed receivers before execute.
+            let _ = event_sink.send(envelope);
+        }
+
+        let status = if saw_unrecoverable_error {
+            StepStatus::Failed
+        } else {
+            StepStatus::Passed
+        };
+
+        Ok(ExecuteOutcome {
+            status,
+            summary: String::new(),
+            token_usage: TokenUsage::default(),
+            cost_usd: None,
+        })
     }
 }

@@ -4,12 +4,12 @@ pub mod agents;
 pub use agents::{Agent, PipelineRole, discover_agent, parse_agent};
 pub mod backends;
 pub mod events;
+#[cfg(any(test, feature = "testing"))]
+pub use backends::ScriptedBackend;
 pub use backends::{
     Backend, BackendId, EventSink, ExecuteOutcome, ExecuteRequest, HealthStatus, ModelId, RunId,
     StepId, TokenUsage, ToolName, WorkspaceRef,
 };
-#[cfg(any(test, feature = "testing"))]
-pub use backends::ScriptedBackend;
 pub use events::{
     ActionRequired, CURRENT_SCHEMA_VERSION, DEFAULT_CAPACITY, Event, EventBus, EventEnvelope,
     EventPersister, ProfileId, RunStatus, Severity, StepStatus, TicketKind, TicketRef, ToolStream,
