@@ -17,9 +17,14 @@ fn fixture(name: &str) -> Vec<u8> {
 async fn run_parser(bytes: Vec<u8>) -> (Vec<Event>, ParseOutcome) {
     let (sink, mut rx) = tokio::sync::broadcast::channel(64);
     let reader = BufReader::new(Cursor::new(bytes));
-    let outcome = parse_stream(reader, sink, "run-1".to_string(), Some("step-1".to_string()))
-        .await
-        .expect("parse_stream must not return Err");
+    let outcome = parse_stream(
+        reader,
+        sink,
+        "run-1".to_string(),
+        Some("step-1".to_string()),
+    )
+    .await
+    .expect("parse_stream must not return Err");
 
     let mut events = Vec::new();
     while let Ok(env) = rx.try_recv() {
@@ -141,9 +146,7 @@ async fn bad_json_line_emits_protocol_error_and_continues() {
         .iter()
         .filter_map(|e| {
             if let Event::Error {
-                code,
-                recoverable,
-                ..
+                code, recoverable, ..
             } = e
             {
                 Some((code.clone(), recoverable))

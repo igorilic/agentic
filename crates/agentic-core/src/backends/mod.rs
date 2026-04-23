@@ -3,6 +3,8 @@ pub mod scripted;
 #[cfg(any(test, feature = "testing"))]
 pub use scripted::ScriptedBackend;
 
+pub mod claude_code;
+
 use std::path::PathBuf;
 use std::time::Duration;
 
