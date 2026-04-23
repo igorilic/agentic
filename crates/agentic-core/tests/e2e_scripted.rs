@@ -44,11 +44,7 @@ fn seed_run_pending(id: &str) -> Run {
     }
 }
 
-fn seed_steps(
-    steps: &StepRepo,
-    run_id: &str,
-    pipeline: &Pipeline,
-) -> HashMap<String, String> {
+fn seed_steps(steps: &StepRepo, run_id: &str, pipeline: &Pipeline) -> HashMap<String, String> {
     let mut map = HashMap::new();
     for (seq, ps) in pipeline.steps.iter().enumerate() {
         let step_id = format!("{run_id}-step-{seq}-{}", ps.agent);
@@ -117,8 +113,7 @@ async fn four_scripted_backends_complete_full_pipeline_and_persist_all_events() 
     runs.transition("run1", RunStatus::Running).unwrap();
 
     // --- Spawn orchestrator + persister ---
-    let orch_handle =
-        PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone());
+    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone());
     let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
     // --- Publish RunStarted ---
