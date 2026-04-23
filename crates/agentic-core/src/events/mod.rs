@@ -122,6 +122,7 @@ pub enum Event {
         summary: String,
         token_usage: TokenUsage,
         cost_usd: Option<f64>,
+        duration_ms: u64,
     },
     TextDelta {
         content: String,

@@ -34,6 +34,7 @@ fn sample_events() -> Vec<Event> {
                 cache_creation_input_tokens: 5,
             },
             cost_usd: Some(0.012),
+            duration_ms: 400,
         },
         Event::TextDelta {
             content: "hello".to_string(),
@@ -207,12 +208,13 @@ fn step_complete_envelope_serializes_to_exact_wire_format() {
                 cache_creation_input_tokens: 5,
             },
             cost_usd: Some(0.012),
+            duration_ms: 400,
         },
     };
     let json = serde_json::to_string(&envelope).expect("serialize");
     assert_eq!(
         json,
-        r#"{"schema_version":1,"event_id":"01J8RZYX1K3PQXGT1WJYR8AZ7Q","run_id":"run1","step_id":"step1","timestamp_ms":1234567890,"event":{"type":"StepComplete","data":{"status":"passed","summary":"ok","token_usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":10,"cache_creation_input_tokens":5},"cost_usd":0.012}}}"#
+        r#"{"schema_version":1,"event_id":"01J8RZYX1K3PQXGT1WJYR8AZ7Q","run_id":"run1","step_id":"step1","timestamp_ms":1234567890,"event":{"type":"StepComplete","data":{"status":"passed","summary":"ok","token_usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":10,"cache_creation_input_tokens":5},"cost_usd":0.012,"duration_ms":400}}}"#
     );
 }
 

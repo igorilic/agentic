@@ -161,6 +161,7 @@ impl PipelineSm {
             summary: String::new(),
             token_usage: TokenUsage::default(),
             cost_usd: None,
+            duration_ms: 0,
         }];
 
         events.extend(self.advance_or_complete());
@@ -182,6 +183,7 @@ impl PipelineSm {
             summary: String::new(),
             token_usage: TokenUsage::default(),
             cost_usd: None,
+            duration_ms: 0,
         }];
 
         let agent = self.pipeline.steps[idx].agent.clone();
@@ -259,6 +261,7 @@ impl PipelineSm {
             summary: String::new(),
             token_usage: TokenUsage::default(),
             cost_usd: None,
+            duration_ms: 0,
         }];
 
         events.extend(self.advance_or_complete());
@@ -280,6 +283,7 @@ impl PipelineSm {
             summary: String::new(),
             token_usage: TokenUsage::default(),
             cost_usd: None,
+            duration_ms: 0,
         }];
 
         events.extend(self.advance_or_complete());

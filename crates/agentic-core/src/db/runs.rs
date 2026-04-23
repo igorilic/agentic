@@ -97,6 +97,16 @@ impl RunRepo {
         Ok(rows)
     }
 
+    pub fn mark_complete(
+        &self,
+        _id: &str,
+        _to: RunStatus,
+        _completed_at: i64,
+        _duration_ms: i64,
+    ) -> Result<()> {
+        unimplemented!("mark_complete not yet implemented")
+    }
+
     pub fn transition(&self, id: &str, to: RunStatus) -> Result<()> {
         let mut conn = self.pool.get()?;
         // Default DEFERRED transaction. Under WAL + "serial concurrency" contract
