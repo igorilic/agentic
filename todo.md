@@ -659,7 +659,7 @@ Legend:
 
 ## Phase 4 — Core: Backend trait + mock backend
 
-### Step 4.1: `Backend` trait + `ExecuteRequest`/`ExecuteOutcome` types
+### [x] Step 4.1: `Backend` trait + `ExecuteRequest`/`ExecuteOutcome` types
 
 **Goal**: The trait from spec §11.1, implementable by mocks before real adapters exist.
 
@@ -764,7 +764,7 @@ Legend:
 
 ---
 
-### Step 5.2: `doctor` subcommand — environment probe
+### [x] Step 5.2: `doctor` subcommand — environment probe
 
 **Goal**: `agentic-cli doctor` checks `claude`, `copilot`, `gh`, `glab` on PATH and prints a table.
 
