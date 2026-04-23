@@ -2,12 +2,13 @@
 
 pub mod agents;
 pub use agents::{Agent, PipelineRole, discover_agent, parse_agent};
+pub mod backends;
 pub mod events;
 pub use events::{
-    ActionRequired, BackendId, CURRENT_SCHEMA_VERSION, DEFAULT_CAPACITY, Event, EventBus,
-    EventEnvelope, EventPersister, ModelId, ProfileId, RunStatus, Severity, StepStatus, TicketKind,
-    TicketRef, TokenUsage, ToolStream,
+    ActionRequired, CURRENT_SCHEMA_VERSION, DEFAULT_CAPACITY, Event, EventBus, EventEnvelope,
+    EventPersister, ProfileId, RunStatus, Severity, StepStatus, TicketKind, TicketRef, ToolStream,
 };
+pub use backends::{BackendId, ModelId, TokenUsage};
 pub mod error;
 pub use error::{CoreError, Result};
 pub mod logging;

@@ -20,6 +20,8 @@ blake3 = { workspace = true }
 toml = { workspace = true }
 tokio = { workspace = true }
 rmp-serde = { workspace = true }
+async-trait = { workspace = true }
+tokio-util = { workspace = true }
 
 [dev-dependencies]
 tracing-test = "0.2"

@@ -6,6 +6,9 @@ pub use bus::{DEFAULT_CAPACITY, EventBus};
 mod persist;
 pub use persist::EventPersister;
 
+// Re-export types that moved to `backends` — keeps `events::BackendId` etc. working.
+pub use crate::backends::{BackendId, ModelId, TokenUsage};
+
 /// Current wire-format schema version for `EventEnvelope`. Bump when the
 /// envelope or any Event variant shape changes in a way that's not
 /// backward-compatible (renamed fields, changed types, removed variants).
@@ -20,14 +23,6 @@ fn default_schema_version() -> u32 {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ProfileId(pub String);
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct BackendId(pub String);
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ModelId(pub String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -81,14 +76,6 @@ pub enum Severity {
 pub enum ToolStream {
     Stdout,
     Stderr,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TokenUsage {
-    pub input_tokens: u64,
-    pub output_tokens: u64,
-    pub cache_read_input_tokens: u64,
-    pub cache_creation_input_tokens: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
