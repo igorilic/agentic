@@ -93,7 +93,7 @@ pub async fn parse_stream<R: AsyncBufRead + Unpin>(
     }
 
     Ok(ParseOutcome {
-        token_usage: state.token_usage,
+        token_usage: state.token_acc.finalize(),
     })
 }
 
@@ -109,11 +109,45 @@ struct ToolUseBlock {
     input_json_buf: String,
 }
 
+/// Accumulates token usage fields across `message_start` and `message_delta`
+/// lines and produces a final `TokenUsage` on completion.
+#[derive(Debug, Default)]
+struct TokenAccumulator {
+    inner: TokenUsage,
+}
+
+impl TokenAccumulator {
+    /// Merge a `usage` JSON object into the running totals.
+    /// Present fields overwrite; absent fields are left unchanged.
+    fn absorb(&mut self, usage: &serde_json::Map<String, Value>) {
+        if let Some(n) = usage.get("input_tokens").and_then(Value::as_u64) {
+            self.inner.input_tokens = n;
+        }
+        if let Some(n) = usage.get("output_tokens").and_then(Value::as_u64) {
+            self.inner.output_tokens = n;
+        }
+        if let Some(n) = usage.get("cache_read_input_tokens").and_then(Value::as_u64) {
+            self.inner.cache_read_input_tokens = n;
+        }
+        if let Some(n) = usage
+            .get("cache_creation_input_tokens")
+            .and_then(Value::as_u64)
+        {
+            self.inner.cache_creation_input_tokens = n;
+        }
+    }
+
+    /// Consume the accumulator and return the final `TokenUsage`.
+    fn finalize(self) -> TokenUsage {
+        self.inner
+    }
+}
+
 /// Mutable parser state threaded through all line-dispatch calls.
 struct ParserState {
     run_id: String,
     step_id: Option<String>,
-    token_usage: TokenUsage,
+    token_acc: TokenAccumulator,
     /// Present when we are inside a `tool_use` content block.
     current_tool: Option<ToolUseBlock>,
 }
@@ -123,7 +157,7 @@ impl ParserState {
         Self {
             run_id,
             step_id,
-            token_usage: TokenUsage::default(),
+            token_acc: TokenAccumulator::default(),
             current_tool: None,
         }
     }
@@ -153,7 +187,7 @@ impl ParserState {
     fn handle_message_start(&mut self, json: &Value) -> Vec<Event> {
         // Absorb the initial usage hint from message_start.
         if let Some(usage) = json["message"]["usage"].as_object() {
-            absorb_usage(&mut self.token_usage, usage);
+            self.token_acc.absorb(usage);
         }
         // No core event emitted for message_start.
         vec![]
@@ -221,7 +255,7 @@ impl ParserState {
         // message_delta carries output token counts in the top-level `usage`
         // field (NOT nested under `delta`).
         if let Some(usage) = json["usage"].as_object() {
-            absorb_usage(&mut self.token_usage, usage);
+            self.token_acc.absorb(usage);
         }
         vec![]
     }
@@ -230,28 +264,6 @@ impl ParserState {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// Merge a `usage` JSON object into a `TokenUsage` accumulator.
-/// Only non-zero fields overwrite existing values so that:
-/// - `message_start` sets `input_tokens`.
-/// - `message_delta` adds `output_tokens`, `cache_*`.
-fn absorb_usage(acc: &mut TokenUsage, usage: &serde_json::Map<String, Value>) {
-    if let Some(n) = usage.get("input_tokens").and_then(Value::as_u64) {
-        acc.input_tokens = n;
-    }
-    if let Some(n) = usage.get("output_tokens").and_then(Value::as_u64) {
-        acc.output_tokens = n;
-    }
-    if let Some(n) = usage.get("cache_read_input_tokens").and_then(Value::as_u64) {
-        acc.cache_read_input_tokens = n;
-    }
-    if let Some(n) = usage
-        .get("cache_creation_input_tokens")
-        .and_then(Value::as_u64)
-    {
-        acc.cache_creation_input_tokens = n;
-    }
-}
 
 /// Extract a string field from a JSON object, defaulting to empty string.
 fn string_field(obj: &Value, key: &str) -> String {
