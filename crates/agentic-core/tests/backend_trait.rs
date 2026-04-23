@@ -48,6 +48,13 @@ fn null_backend_is_dyn_compatible() {
 }
 
 #[tokio::test]
+async fn null_backend_health_check_through_dyn_returns_healthy() {
+    let backend: Box<dyn Backend> = Box::new(NullBackend);
+    let status = backend.health_check().await.expect("health_check");
+    assert_eq!(status, HealthStatus::Healthy);
+}
+
+#[tokio::test]
 async fn null_backend_executes_and_returns_outcome() {
     let (sink, _rx) = tokio::sync::broadcast::channel(16);
     let backend = NullBackend;

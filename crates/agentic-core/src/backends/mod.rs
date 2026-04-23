@@ -31,14 +31,32 @@ pub struct TokenUsage {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RunId(pub String);
 
+impl std::fmt::Display for RunId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Opaque ULID wrapper identifying a pipeline step.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StepId(pub String);
+
+impl std::fmt::Display for StepId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 /// A tool name (e.g., "Read", "Write", "Bash"). Backend adapters use these
 /// as allow-list entries when invoking sub-processes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ToolName(pub String);
+
+impl std::fmt::Display for ToolName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 /// Health-check result for a backend — used by the UI to show a status
 /// indicator.
@@ -56,11 +74,21 @@ pub struct WorkspaceRef {
     pub root_path: PathBuf,
 }
 
+impl From<&crate::db::workspaces::Workspace> for WorkspaceRef {
+    fn from(ws: &crate::db::workspaces::Workspace) -> Self {
+        Self {
+            id: ws.id.clone(),
+            root_path: std::path::PathBuf::from(&ws.root_path),
+        }
+    }
+}
+
 /// Channel sink for streaming events back to the orchestrator during
 /// `Backend::execute`.
 pub type EventSink = tokio::sync::broadcast::Sender<EventEnvelope>;
 
 /// Request passed to `Backend::execute` for one agent invocation.
+#[derive(Debug)]
 pub struct ExecuteRequest {
     pub workspace: WorkspaceRef,
     pub run_id: RunId,
@@ -76,6 +104,7 @@ pub struct ExecuteRequest {
 }
 
 /// Final outcome of a `Backend::execute` call.
+#[derive(Debug, Clone)]
 pub struct ExecuteOutcome {
     pub status: StepStatus,
     pub summary: String,
