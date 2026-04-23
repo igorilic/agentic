@@ -26,11 +26,7 @@ impl Backend for NullBackend {
         Ok(HealthStatus::Healthy)
     }
 
-    async fn execute(
-        &self,
-        _req: ExecuteRequest,
-        _sink: EventSink,
-    ) -> Result<ExecuteOutcome> {
+    async fn execute(&self, _req: ExecuteRequest, _sink: EventSink) -> Result<ExecuteOutcome> {
         Ok(ExecuteOutcome {
             status: StepStatus::Passed,
             summary: "null executed".to_string(),
