@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/agentic-meta-tests",
     "crates/agentic-core",
+    "crates/agentic-cli",
 ]
 
 [workspace.package]
@@ -30,3 +31,5 @@ rmp-serde = "1"
 proptest = "1"
 async-trait = "0.1"
 tokio-util = "0.7"
+clap = { version = "4", features = ["derive"] }
+tempfile = "3"

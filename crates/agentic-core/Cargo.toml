@@ -30,5 +30,5 @@ tokio-util = { workspace = true }
 [dev-dependencies]
 tracing-test = "0.2"
 serial_test = "3"
-tempfile = "3"
+tempfile = { workspace = true }
 proptest = { workspace = true }
