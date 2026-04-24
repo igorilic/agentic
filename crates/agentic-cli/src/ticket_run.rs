@@ -45,6 +45,19 @@ pub fn stable_workspace_id(ws_root: &Path) -> String {
     format!("ws-{}", &hex.as_str()[..16])
 }
 
+/// Context for executing a single pipeline step, derived from [`PipelineRunContext`].
+struct SingleStepCtx<'a> {
+    bus: &'a EventBus,
+    run_id: &'a str,
+    ws_id: &'a str,
+    ws_root: &'a Path,
+    ticket_text: &'a str,
+    model_override: Option<ModelId>,
+    paths: &'a Paths,
+    steps: &'a StepRepo,
+    run_start: &'a Instant,
+}
+
 /// Execute all steps in `pipeline` against `ctx.ticket_text`.
 ///
 /// For each step:
@@ -74,138 +87,18 @@ pub async fn execute_pipeline<'a>(
     let run_start = Instant::now();
 
     for (i, pipeline_step) in pipeline.steps.iter().enumerate() {
-        let step_id = ulid::Ulid::new().to_string();
-
-        // Insert step row as Pending.
-        steps.insert(Step {
-            id: step_id.clone(),
-            run_id: run_id.to_string(),
-            seq: i as i64,
-            agent_name: pipeline_step.agent.clone(),
-            status: StepStatus::Pending,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            token_usage: None,
-            cost_usd: None,
-            summary: None,
-            retry_count: 0,
-        })?;
-
-        // Ensure step directory exists and compute diff path.
-        let step_dir = paths
-            .ensure_step_dir(run_id, i, &pipeline_step.agent)
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "failed to create step dir for '{}': {}",
-                    pipeline_step.agent,
-                    e
-                )
-            })?;
-        let diff_path = step_dir.join("file_changes.diff");
-
-        // Spawn the tool-use observer BEFORE calling the backend.
-        let observer_stop = CancellationToken::new();
-        let observer = ToolUseObserver::spawn(
+        let step_ctx = SingleStepCtx {
             bus,
-            run_id.to_string(),
-            step_id.clone(),
-            ws_root.to_path_buf(),
-            observer_stop.clone(),
-        );
-
-        // Discover agent file.
-        let agent = match discover_agent(ws_root, &pipeline_step.agent) {
-            Ok(a) => a,
-            Err(e) => {
-                // Cancel observer on early exit.
-                observer_stop.cancel();
-                let _ignored = observer
-                    .finalize_into(&diff_path, &bus.sender(), run_id, &step_id)
-                    .await;
-                return Err(anyhow::anyhow!(
-                    "agent '{}' not found in workspace '{}': {}",
-                    pipeline_step.agent,
-                    ws_root.display(),
-                    e
-                ));
-            }
+            run_id,
+            ws_id,
+            ws_root,
+            ticket_text,
+            model_override: model_override.clone(),
+            paths,
+            steps: &steps,
+            run_start: &run_start,
         };
-
-        // Build effective model: CLI override wins, then agent's own default.
-        let model = model_override
-            .clone()
-            .or_else(|| agent.model.as_deref().map(|m| ModelId(m.to_string())));
-
-        // Build the execute request.
-        let req = ExecuteRequest {
-            workspace: WorkspaceRef {
-                id: ws_id.to_string(),
-                root_path: ws_root.to_path_buf(),
-            },
-            run_id: RunId(run_id.to_string()),
-            step_id: StepId(step_id.clone()),
-            agent_name: pipeline_step.agent.clone(),
-            agent_prompt: agent.system_prompt.clone(),
-            user_context: ticket_text.to_string(),
-            model,
-            tools: agent
-                .tools
-                .unwrap_or_default()
-                .into_iter()
-                .map(agentic_core::ToolName)
-                .collect(),
-            cwd: ws_root.to_path_buf(),
-            timeout: agent.timeout_seconds.map(std::time::Duration::from_secs),
-            cancel: CancellationToken::new(),
-        };
-
-        let backend = backend_factory(pipeline_step);
-        let execute_result = backend.execute(req, bus.sender()).await;
-
-        // Stop the observer and finalize in all paths.
-        observer_stop.cancel();
-        let _report = observer
-            .finalize_into(&diff_path, &bus.sender(), run_id, &step_id)
-            .await
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "file snapshot finalize failed for agent '{}': {}",
-                    pipeline_step.agent,
-                    e
-                )
-            })?;
-        tracing::debug!(
-            run_id = run_id,
-            step_id = %step_id,
-            "file snapshot finalized"
-        );
-
-        let outcome = execute_result.map_err(|e| {
-            anyhow::anyhow!("backend error for agent '{}': {}", pipeline_step.agent, e)
-        })?;
-
-        if outcome.status == StepStatus::Failed && pipeline_step.stop_on_failure {
-            // Publish RunComplete(Failed) then return error.
-            let elapsed_ms = run_start.elapsed().as_millis() as u64;
-            bus.publish(EventEnvelope::now(
-                run_id.to_string(),
-                None,
-                Event::RunComplete {
-                    status: RunStatus::Failed,
-                    duration_ms: elapsed_ms,
-                    summary: format!(
-                        "step '{}' failed and stop_on_failure is set",
-                        pipeline_step.agent
-                    ),
-                },
-            ));
-            return Err(anyhow::anyhow!(
-                "step '{}' failed: {}",
-                pipeline_step.agent,
-                outcome.summary
-            ));
-        }
+        execute_single_step(step_ctx, pipeline_step, i, &backend_factory).await?;
     }
 
     // All steps completed; publish final RunComplete.
@@ -223,6 +116,152 @@ pub async fn execute_pipeline<'a>(
     // Give the orchestrator time to process the RunComplete event.
     // We do NOT await drain here — caller is responsible for shutting down infra.
     let _ = runs;
+    Ok(())
+}
+
+/// Execute a single pipeline step: insert DB row, spawn observer, call backend,
+/// finalize observer, handle stop_on_failure.
+async fn execute_single_step<'a>(
+    ctx: SingleStepCtx<'a>,
+    pipeline_step: &PipelineStep,
+    seq: usize,
+    backend_factory: &BackendFactory<'_>,
+) -> Result<()> {
+    let SingleStepCtx {
+        bus,
+        run_id,
+        ws_id,
+        ws_root,
+        ticket_text,
+        model_override,
+        paths,
+        steps,
+        run_start,
+    } = ctx;
+
+    let step_id = ulid::Ulid::new().to_string();
+
+    // Insert step row as Pending.
+    steps.insert(Step {
+        id: step_id.clone(),
+        run_id: run_id.to_string(),
+        seq: seq as i64,
+        agent_name: pipeline_step.agent.clone(),
+        status: StepStatus::Pending,
+        started_at: None,
+        completed_at: None,
+        duration_ms: None,
+        token_usage: None,
+        cost_usd: None,
+        summary: None,
+        retry_count: 0,
+    })?;
+
+    // Ensure step directory exists and compute diff path.
+    let step_dir = paths
+        .ensure_step_dir(run_id, seq, &pipeline_step.agent)
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "failed to create step dir for '{}': {}",
+                pipeline_step.agent,
+                e
+            )
+        })?;
+    let diff_path = step_dir.join("file_changes.diff");
+
+    // Spawn the tool-use observer BEFORE calling the backend.
+    let observer_stop = CancellationToken::new();
+    let observer = ToolUseObserver::spawn(
+        bus,
+        run_id.to_string(),
+        step_id.clone(),
+        ws_root.to_path_buf(),
+        observer_stop.clone(),
+    );
+
+    // Discover agent file.
+    let agent = match discover_agent(ws_root, &pipeline_step.agent) {
+        Ok(a) => a,
+        Err(e) => {
+            observer_stop.cancel();
+            let _ignored = observer
+                .finalize_into(&diff_path, &bus.sender(), run_id, &step_id)
+                .await;
+            return Err(anyhow::anyhow!(
+                "agent '{}' not found in workspace '{}': {}",
+                pipeline_step.agent,
+                ws_root.display(),
+                e
+            ));
+        }
+    };
+
+    // Build effective model: CLI override wins, then agent's own default.
+    let model = model_override.or_else(|| agent.model.as_deref().map(|m| ModelId(m.to_string())));
+
+    let req = ExecuteRequest {
+        workspace: WorkspaceRef {
+            id: ws_id.to_string(),
+            root_path: ws_root.to_path_buf(),
+        },
+        run_id: RunId(run_id.to_string()),
+        step_id: StepId(step_id.clone()),
+        agent_name: pipeline_step.agent.clone(),
+        agent_prompt: agent.system_prompt.clone(),
+        user_context: ticket_text.to_string(),
+        model,
+        tools: agent
+            .tools
+            .unwrap_or_default()
+            .into_iter()
+            .map(agentic_core::ToolName)
+            .collect(),
+        cwd: ws_root.to_path_buf(),
+        timeout: agent.timeout_seconds.map(std::time::Duration::from_secs),
+        cancel: CancellationToken::new(),
+    };
+
+    let backend = backend_factory(pipeline_step);
+    let execute_result = backend.execute(req, bus.sender()).await;
+
+    // Stop observer and finalize in all paths.
+    observer_stop.cancel();
+    let _report = observer
+        .finalize_into(&diff_path, &bus.sender(), run_id, &step_id)
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "file snapshot finalize failed for agent '{}': {}",
+                pipeline_step.agent,
+                e
+            )
+        })?;
+    tracing::debug!(run_id = run_id, step_id = %step_id, "file snapshot finalized");
+
+    let outcome = execute_result
+        .map_err(|e| anyhow::anyhow!("backend error for agent '{}': {}", pipeline_step.agent, e))?;
+
+    if outcome.status == StepStatus::Failed && pipeline_step.stop_on_failure {
+        let elapsed_ms = run_start.elapsed().as_millis() as u64;
+        bus.publish(EventEnvelope::now(
+            run_id.to_string(),
+            None,
+            Event::RunComplete {
+                status: RunStatus::Failed,
+                duration_ms: elapsed_ms,
+                summary: format!(
+                    "step '{}' failed and stop_on_failure is set",
+                    pipeline_step.agent
+                ),
+            },
+        ));
+        return Err(anyhow::anyhow!(
+            "step '{}' failed: {}",
+            pipeline_step.agent,
+            outcome.summary
+        ));
+    }
+
     Ok(())
 }
 
