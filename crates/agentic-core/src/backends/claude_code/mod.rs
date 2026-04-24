@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 use crate::backends::{
     Backend, BackendId, EventSink, ExecuteOutcome, ExecuteRequest, HealthStatus, ModelId,
 };
-use crate::error::{CoreError, Result};
+use crate::error::Result;
 use crate::events::StepStatus;
 
 use self::parser::parse_stream;
@@ -28,9 +28,29 @@ use self::runner::ClaudeRunner;
 /// Build argv for `claude` subprocess invocation.
 /// Does NOT include the binary itself (the runner prepends that).
 pub(crate) fn build_claude_argv(req: &ExecuteRequest) -> Vec<String> {
-    // Placeholder — implemented in GREEN phase.
-    let _ = req;
-    vec![]
+    let mut args: Vec<String> = vec![
+        "-p".to_string(),
+        "--output-format".to_string(),
+        "stream-json".to_string(),
+        "--verbose".to_string(), // REQUIRED when combining -p + stream-json
+    ];
+    if let Some(ref model) = req.model {
+        args.push("--model".to_string());
+        args.push(model.0.clone());
+    }
+    if !req.tools.is_empty() {
+        let joined = req
+            .tools
+            .iter()
+            .map(|t| t.0.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        args.push("--allowed-tools".to_string());
+        args.push(joined);
+    }
+    args.push("--append-system-prompt".to_string());
+    args.push(req.agent_prompt.clone());
+    args
 }
 
 /// Backend adapter that drives the `claude` CLI.
@@ -107,38 +127,8 @@ impl Backend for ClaudeCodeBackend {
     }
 
     async fn execute(&self, req: ExecuteRequest, event_sink: EventSink) -> Result<ExecuteOutcome> {
-        // Write the system prompt to a temp file so we can pass its path
-        // as --append-system-prompt. Keep the handle alive until after run().
-        let mut system_prompt_file = tempfile::NamedTempFile::new()
-            .map_err(|e| CoreError::Backend(format!("failed to create temp file: {e}")))?;
-        use std::io::Write as _;
-        system_prompt_file
-            .write_all(req.agent_prompt.as_bytes())
-            .map_err(|e| CoreError::Backend(format!("failed to write system prompt: {e}")))?;
-        let system_prompt_path = system_prompt_file.path().to_owned();
-
-        // Build argv.
-        let mut args: Vec<String> = vec![
-            "-p".to_string(),
-            "--output-format".to_string(),
-            "stream-json".to_string(),
-        ];
-        if let Some(ref model) = req.model {
-            args.push("--model".to_string());
-            args.push(model.0.clone());
-        }
-        if !req.tools.is_empty() {
-            let joined = req
-                .tools
-                .iter()
-                .map(|t| t.0.as_str())
-                .collect::<Vec<_>>()
-                .join(",");
-            args.push("--allowed-tools".to_string());
-            args.push(joined);
-        }
-        args.push("--append-system-prompt".to_string());
-        args.push(system_prompt_path.to_string_lossy().into_owned());
+        // Build argv — passes system prompt inline (not via a temp file).
+        let args = build_claude_argv(&req);
 
         // Stdin: user_context as bytes.
         let stdin_bytes = req.user_context.into_bytes();
@@ -160,9 +150,6 @@ impl Backend for ClaudeCodeBackend {
             .runner
             .run(args, HashMap::new(), req.cwd, stdin_bytes, req.cancel)
             .await?;
-
-        // The temp file can be dropped now (subprocess has already read it).
-        drop(system_prompt_file);
 
         // Feed collected stdout lines through the parser.
         let stdout = run_outcome.stdout_lines.join("\n");
@@ -258,8 +245,7 @@ mod tests {
             .expect("--append-system-prompt not in argv");
         let prompt_val = &argv[prompt_idx + 1];
         assert_eq!(
-            prompt_val,
-            "You are a test assistant.\nFollow instructions.",
+            prompt_val, "You are a test assistant.\nFollow instructions.",
             "expected inline prompt, got: {prompt_val}"
         );
         assert!(
