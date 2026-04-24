@@ -1,5 +1,4 @@
 use std::fs;
-use std::io::Write as _;
 use std::path::Path;
 
 use agentic_core::backends::file_snapshots::{FileSnapshotter, SkipReason};
@@ -73,7 +72,7 @@ fn file_modified_emits_file_change_with_different_hashes() {
         "changed_paths should include the modified file"
     );
 
-    // diff file should exist and contain a unified-diff section
+    // diff file should exist and contain a unified-diff section with --- and +++ headers
     let diff_content = fs::read_to_string(&diff_path).unwrap();
     assert!(
         diff_content.contains("---") && diff_content.contains("+++"),
@@ -121,6 +120,21 @@ fn file_created_emits_file_change_with_absent_before_hash() {
     assert_eq!(after_hash.len(), 64, "after_hash should be a blake3 hex");
 
     assert!(report.changed_paths.contains(&file_path));
+
+    // F4: assert the diff file content contains expected markers for a create
+    let diff_content = fs::read_to_string(&diff_path).expect("diff file should exist");
+    assert!(
+        diff_content.contains("---"),
+        "create diff should have --- header: {diff_content}"
+    );
+    assert!(
+        diff_content.contains("+++"),
+        "create diff should have +++ header: {diff_content}"
+    );
+    assert!(
+        diff_content.contains('+'),
+        "create diff should contain added lines: {diff_content}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +173,21 @@ fn file_deleted_emits_file_change_with_absent_after_hash() {
     );
 
     assert!(report.changed_paths.contains(&file_path));
+
+    // F4: assert the diff file content contains expected markers for a delete
+    let diff_content = fs::read_to_string(&diff_path).expect("diff file should exist");
+    assert!(
+        diff_content.contains("---"),
+        "delete diff should have --- header: {diff_content}"
+    );
+    assert!(
+        diff_content.contains("+++"),
+        "delete diff should have +++ header: {diff_content}"
+    );
+    assert!(
+        diff_content.contains('-'),
+        "delete diff should contain removed lines: {diff_content}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +220,11 @@ fn binary_file_over_1mb_skipped_from_diff_but_hashed() {
 
     // FileChange event MUST be emitted (with hashes)
     let events = collect_file_change_events(&mut rx);
-    assert_eq!(events.len(), 1, "expected one FileChange event for binary file");
+    assert_eq!(
+        events.len(),
+        1,
+        "expected one FileChange event for binary file"
+    );
 
     let (_path, before_hash, after_hash) = &events[0];
     assert_eq!(before_hash.len(), 64, "before_hash should be a blake3 hex");
@@ -268,5 +301,127 @@ fn unchanged_file_does_not_emit_file_change() {
     assert!(
         report.unchanged_paths.contains(&file_path),
         "unchanged_paths should include the file"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: multi-file diff output is deterministic (F2)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn multi_file_diff_output_is_deterministic() {
+    let dir = TempDir::new().unwrap();
+
+    // Create three files in non-alphabetical order
+    let zebra = dir.path().join("zebra.txt");
+    let alpha = dir.path().join("alpha.txt");
+    let middle = dir.path().join("middle.txt");
+
+    fs::write(&zebra, b"zebra original\n").unwrap();
+    fs::write(&alpha, b"alpha original\n").unwrap();
+    fs::write(&middle, b"middle original\n").unwrap();
+
+    // First run: capture, mutate, finalize
+    let mut snap1 = FileSnapshotter::new(dir.path().to_path_buf());
+    snap1.capture(&zebra).unwrap();
+    snap1.capture(&alpha).unwrap();
+    snap1.capture(&middle).unwrap();
+
+    fs::write(&zebra, b"zebra modified\n").unwrap();
+    fs::write(&alpha, b"alpha modified\n").unwrap();
+    fs::write(&middle, b"middle modified\n").unwrap();
+
+    let diff_path1 = dir.path().join("changes1.diff");
+    let (sink1, _rx1) = broadcast::channel(64);
+    snap1
+        .finalize(&diff_path1, &sink1, "run-det-1", Some("step-1"))
+        .unwrap();
+
+    // Reset files for second run
+    fs::write(&zebra, b"zebra original\n").unwrap();
+    fs::write(&alpha, b"alpha original\n").unwrap();
+    fs::write(&middle, b"middle original\n").unwrap();
+
+    // Second run (captures in different order to stress HashMap non-determinism)
+    let mut snap2 = FileSnapshotter::new(dir.path().to_path_buf());
+    snap2.capture(&middle).unwrap();
+    snap2.capture(&zebra).unwrap();
+    snap2.capture(&alpha).unwrap();
+
+    fs::write(&zebra, b"zebra modified\n").unwrap();
+    fs::write(&alpha, b"alpha modified\n").unwrap();
+    fs::write(&middle, b"middle modified\n").unwrap();
+
+    let diff_path2 = dir.path().join("changes2.diff");
+    let (sink2, _rx2) = broadcast::channel(64);
+    snap2
+        .finalize(&diff_path2, &sink2, "run-det-2", Some("step-2"))
+        .unwrap();
+
+    let content1 = fs::read_to_string(&diff_path1).unwrap();
+    let content2 = fs::read_to_string(&diff_path2).unwrap();
+
+    assert_eq!(
+        content1, content2,
+        "diff output must be byte-identical regardless of capture order"
+    );
+
+    // Verify sections appear in sorted order: alpha < middle < zebra
+    let pos_alpha = content1
+        .find("alpha")
+        .expect("alpha section should be present");
+    let pos_middle = content1
+        .find("middle")
+        .expect("middle section should be present");
+    let pos_zebra = content1
+        .find("zebra")
+        .expect("zebra section should be present");
+
+    assert!(
+        pos_alpha < pos_middle,
+        "alpha should appear before middle in sorted diff"
+    );
+    assert!(
+        pos_middle < pos_zebra,
+        "middle should appear before zebra in sorted diff"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 7: modify diff contains valid unified-diff markers (patch-applicability)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn modify_diff_contains_unified_diff_markers() {
+    let dir = TempDir::new().unwrap();
+    let file_path = dir.path().join("patch_test.txt");
+
+    fs::write(&file_path, b"line one\nline two\nline three\n").unwrap();
+
+    let mut snapshotter = FileSnapshotter::new(dir.path().to_path_buf());
+    snapshotter.capture(&file_path).unwrap();
+
+    fs::write(&file_path, b"line one\nline two modified\nline three\n").unwrap();
+
+    let diff_path = dir.path().join("file_changes.diff");
+    let (sink, _rx) = broadcast::channel(64);
+
+    snapshotter
+        .finalize(&diff_path, &sink, "run-patch", Some("step-patch"))
+        .unwrap();
+
+    let diff_content = fs::read_to_string(&diff_path).expect("diff file should exist");
+
+    assert!(
+        diff_content.contains("---"),
+        "diff must contain --- header: {diff_content}"
+    );
+    assert!(
+        diff_content.contains("+++"),
+        "diff must contain +++ header: {diff_content}"
+    );
+    assert!(
+        diff_content.contains("@@"),
+        "diff must contain @@ hunk header: {diff_content}"
     );
 }

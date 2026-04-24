@@ -31,7 +31,7 @@ use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use similar::{ChangeTag, TextDiff};
+use similar::TextDiff;
 
 use crate::backends::EventSink;
 use crate::events::{Event, EventEnvelope};
@@ -112,7 +112,11 @@ impl FileSnapshotter {
         let mut report = FinalizeReport::default();
         let mut diff_sections: Vec<String> = Vec::new();
 
-        for (path, before_state) in self.before {
+        let mut paths: Vec<PathBuf> = self.before.keys().cloned().collect();
+        paths.sort();
+        let mut before_map = self.before;
+        for path in paths {
+            let before_state = before_map.remove(&path).expect("path was in keys");
             let after_state = read_file_state(&path)?;
 
             let before_hash = state_hash(&before_state);
@@ -239,34 +243,10 @@ fn skip_reason_for(before: &FileState, after: &FileState) -> Option<SkipReason> 
 
 fn build_unified_diff(path: &str, before: &str, after: &str) -> String {
     let diff = TextDiff::from_lines(before, after);
-    let mut output = String::new();
-
-    // Write unified diff headers
-    output.push_str(&format!("--- {path}\n"));
-    output.push_str(&format!("+++ {path}\n"));
-
-    for group in diff.grouped_ops(3) {
-        // Write hunk header
-        let first = group.first().unwrap();
-        let old_start = first.old_range().start + 1;
-        let old_len: usize = group.iter().map(|op| op.old_range().len()).sum();
-        let new_start = first.new_range().start + 1;
-        let new_len: usize = group.iter().map(|op| op.new_range().len()).sum();
-        output.push_str(&format!(
-            "@@ -{old_start},{old_len} +{new_start},{new_len} @@\n"
-        ));
-
-        for op in &group {
-            for change in diff.iter_changes(op) {
-                let prefix = match change.tag() {
-                    ChangeTag::Equal => " ",
-                    ChangeTag::Insert => "+",
-                    ChangeTag::Delete => "-",
-                };
-                output.push_str(&format!("{prefix}{}", change.value()));
-            }
-        }
-    }
-
-    output
+    let before_label = format!("a/{path}");
+    let after_label = format!("b/{path}");
+    diff.unified_diff()
+        .context_radius(3)
+        .header(&before_label, &after_label)
+        .to_string()
 }
