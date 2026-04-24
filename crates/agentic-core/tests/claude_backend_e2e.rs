@@ -190,6 +190,45 @@ mod unix_tests {
     }
 
     // -----------------------------------------------------------------------
+    // Gap 6.7: execute() must emit synthetic StepStarted before spawn and
+    // StepComplete after parse + outcome computation.
+    // -----------------------------------------------------------------------
+
+    /// ClaudeCodeBackend::execute must emit StepStarted as the FIRST event in
+    /// the sink and StepComplete as the LAST event, wrapping any parser events.
+    #[tokio::test]
+    async fn execute_emits_step_started_before_parse_and_step_complete_after() {
+        let cancel = CancellationToken::new();
+        let (backend, req) = make_request(fixture_bin("fake-claude-pass.sh"), cancel);
+
+        let (sink, mut rx) = broadcast::channel(256);
+
+        let outcome = backend
+            .execute(req, sink)
+            .await
+            .expect("execute must not error on happy path");
+
+        let mut kinds: Vec<&str> = Vec::new();
+        while let Ok(env) = rx.try_recv() {
+            match env.event {
+                Event::StepStarted { .. } => kinds.push("StepStarted"),
+                Event::StepComplete { .. } => kinds.push("StepComplete"),
+                _ => {}
+            }
+        }
+
+        assert!(
+            kinds.first() == Some(&"StepStarted"),
+            "first event kind should be StepStarted, got: {kinds:?}"
+        );
+        assert!(
+            kinds.last() == Some(&"StepComplete"),
+            "last event kind should be StepComplete, got: {kinds:?}"
+        );
+        assert_eq!(outcome.status, StepStatus::Passed);
+    }
+
+    // -----------------------------------------------------------------------
     // Timeout: req.timeout fires cancel token → Failed with "timeout" summary
     // -----------------------------------------------------------------------
 

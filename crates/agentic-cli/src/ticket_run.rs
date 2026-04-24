@@ -634,6 +634,320 @@ mod tests {
         );
     }
 
+    // -----------------------------------------------------------------------
+    // Gap 6.9: agent.model propagates into ExecuteRequest.model
+    // -----------------------------------------------------------------------
+
+    /// Build a workspace where the first pipeline step (architect) has
+    /// `model = <model_str>` in its TOML frontmatter. Returns the TempDir so
+    /// the caller keeps it alive.
+    fn setup_workspace_with_agent_model(model_str: &str) -> (TempDir, Paths, Db, EventBus, String) {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path();
+
+        let paths = Paths::for_tests(base);
+        paths.ensure_dirs().unwrap();
+        let db = Db::open(&paths).unwrap();
+
+        let agents_dir = base.join(".agentic").join("agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+
+        // architect gets a model field; remaining steps do not.
+        let with_model = format!(
+            "+++\nname = \"architect\"\ndescription = \"test agent\"\nmodel = \"{model_str}\"\n+++\nYou are architect.\n"
+        );
+        std::fs::write(agents_dir.join("architect.md"), with_model).unwrap();
+
+        for name in ["tdd-developer", "qa", "reviewer"] {
+            let content = format!(
+                "+++\nname = \"{name}\"\ndescription = \"test agent\"\n+++\nYou are {name}.\n"
+            );
+            std::fs::write(agents_dir.join(format!("{name}.md")), content).unwrap();
+        }
+
+        let ws_id = "test-ws-model-01".to_string();
+        {
+            let conn = db.conn().unwrap();
+            conn.execute(
+                "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
+                 VALUES (?1, 'test', ?2, 'custom', 0, 0)",
+                params![ws_id, base.to_string_lossy().to_string()],
+            )
+            .unwrap();
+        }
+
+        let bus = EventBus::new();
+        (tmp, paths, db, bus, ws_id)
+    }
+
+    #[tokio::test]
+    async fn agent_model_propagates_to_execute_request_when_no_cli_override() {
+        let (tmp, paths, db, bus, ws_id) =
+            setup_workspace_with_agent_model("claude-sonnet-4-6");
+        let ws_root = tmp.path().to_path_buf();
+
+        let run_id = "model-prop-run-01";
+        seed_run(&db, run_id, &ws_id);
+
+        let orch_handle = agentic_core::PipelineOrchestrator::spawn(
+            bus.clone(),
+            RunRepo::new(&db),
+            StepRepo::new(&db),
+        );
+        let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
+
+        // Factory that captures the first step's ExecuteRequest model.
+        let captured_model: Arc<std::sync::Mutex<Option<Option<ModelId>>>> =
+            Arc::new(std::sync::Mutex::new(None));
+        let _captured_clone = captured_model.clone();
+
+        let factory: BackendFactory<'_> =
+            Box::new(move |_step: &PipelineStep| -> Box<dyn Backend> {
+                // Only capture once (architect = first step).
+                // Use a ScriptedBackend that passes; model capture happens via
+                // a wrapper trick — but since factory can't easily inspect the
+                // req here, we use a custom ScriptedBackend for now.
+                // Instead, we use a closure that records via Arc then returns
+                // a passing scripted backend.
+                Box::new(ScriptedBackend::new(vec![
+                    Event::StepStarted {
+                        agent: "test".to_string(),
+                        model: ModelId("fake".to_string()),
+                    },
+                    Event::StepComplete {
+                        status: StepStatus::Passed,
+                        summary: "ok".to_string(),
+                        token_usage: TokenUsage::default(),
+                        cost_usd: None,
+                        duration_ms: 10,
+                    },
+                ]))
+            });
+
+        // We need to capture the model, so use a capturing factory instead.
+        drop(factory); // discard above placeholder
+
+        let captured_clone2 = captured_model.clone();
+        struct CapturingBackend {
+            captured: Arc<std::sync::Mutex<Option<Option<ModelId>>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl Backend for CapturingBackend {
+            fn id(&self) -> agentic_core::BackendId {
+                agentic_core::BackendId("capturing".to_string())
+            }
+            fn display_name(&self) -> &str {
+                "Capturing"
+            }
+            fn supported_models(&self) -> Vec<ModelId> {
+                vec![]
+            }
+            async fn health_check(&self) -> agentic_core::error::Result<agentic_core::HealthStatus> {
+                Ok(agentic_core::HealthStatus::Healthy)
+            }
+            async fn execute(
+                &self,
+                req: ExecuteRequest,
+                sink: agentic_core::backends::EventSink,
+            ) -> agentic_core::error::Result<agentic_core::backends::ExecuteOutcome> {
+                // Capture model on first call.
+                {
+                    let mut guard = self.captured.lock().unwrap();
+                    if guard.is_none() {
+                        *guard = Some(req.model.clone());
+                    }
+                }
+                // Emit events so orchestrator can update DB.
+                let _ = sink.send(agentic_core::EventEnvelope::now(
+                    req.run_id.0.clone(),
+                    Some(req.step_id.0.clone()),
+                    Event::StepStarted {
+                        agent: req.agent_name.clone(),
+                        model: req.model.clone().unwrap_or(ModelId("default".to_string())),
+                    },
+                ));
+                let _ = sink.send(agentic_core::EventEnvelope::now(
+                    req.run_id.0.clone(),
+                    Some(req.step_id.0.clone()),
+                    Event::StepComplete {
+                        status: StepStatus::Passed,
+                        summary: "ok".to_string(),
+                        token_usage: TokenUsage::default(),
+                        cost_usd: None,
+                        duration_ms: 10,
+                    },
+                ));
+                Ok(agentic_core::backends::ExecuteOutcome {
+                    status: StepStatus::Passed,
+                    summary: "ok".to_string(),
+                    token_usage: TokenUsage::default(),
+                    cost_usd: None,
+                })
+            }
+        }
+
+        let pipeline = PipelineConfig::builtin_default();
+        // Only run the first step to keep the test fast — truncate to 1 step.
+        let full = pipeline.default_pipeline();
+        let single_step_pipeline = agentic_core::Pipeline {
+            steps: full.steps[..1].to_vec(),
+        };
+
+        let result = execute_pipeline(
+            PipelineRunContext {
+                db: &db,
+                bus: &bus,
+                run_id,
+                ws_id: &ws_id,
+                ws_root: &ws_root,
+                ticket_text: "implement feature X",
+                model_override: None,
+                paths: &paths,
+            },
+            &single_step_pipeline,
+            Box::new(move |_step: &PipelineStep| -> Box<dyn Backend> {
+                Box::new(CapturingBackend {
+                    captured: captured_clone2.clone(),
+                })
+            }),
+        )
+        .await;
+
+        drop(bus);
+        orch_handle.await.unwrap();
+        pers_handle.await.unwrap();
+
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+
+        let guard = captured_model.lock().unwrap();
+        let model = guard.as_ref().expect("model was never captured");
+        assert_eq!(
+            *model,
+            Some(ModelId("claude-sonnet-4-6".to_string())),
+            "agent.model should propagate when no CLI override; got: {model:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn cli_model_override_wins_over_agent_model() {
+        let (tmp, paths, db, bus, ws_id) =
+            setup_workspace_with_agent_model("claude-sonnet-4-6");
+        let ws_root = tmp.path().to_path_buf();
+
+        let run_id = "model-override-run-01";
+        seed_run(&db, run_id, &ws_id);
+
+        let orch_handle = agentic_core::PipelineOrchestrator::spawn(
+            bus.clone(),
+            RunRepo::new(&db),
+            StepRepo::new(&db),
+        );
+        let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
+
+        let captured_model: Arc<std::sync::Mutex<Option<Option<ModelId>>>> =
+            Arc::new(std::sync::Mutex::new(None));
+        let captured_clone = captured_model.clone();
+
+        struct CapturingBackend2 {
+            captured: Arc<std::sync::Mutex<Option<Option<ModelId>>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl Backend for CapturingBackend2 {
+            fn id(&self) -> agentic_core::BackendId {
+                agentic_core::BackendId("capturing2".to_string())
+            }
+            fn display_name(&self) -> &str {
+                "Capturing2"
+            }
+            fn supported_models(&self) -> Vec<ModelId> {
+                vec![]
+            }
+            async fn health_check(&self) -> agentic_core::error::Result<agentic_core::HealthStatus> {
+                Ok(agentic_core::HealthStatus::Healthy)
+            }
+            async fn execute(
+                &self,
+                req: ExecuteRequest,
+                sink: agentic_core::backends::EventSink,
+            ) -> agentic_core::error::Result<agentic_core::backends::ExecuteOutcome> {
+                {
+                    let mut guard = self.captured.lock().unwrap();
+                    if guard.is_none() {
+                        *guard = Some(req.model.clone());
+                    }
+                }
+                let _ = sink.send(agentic_core::EventEnvelope::now(
+                    req.run_id.0.clone(),
+                    Some(req.step_id.0.clone()),
+                    Event::StepStarted {
+                        agent: req.agent_name.clone(),
+                        model: req.model.clone().unwrap_or(ModelId("default".to_string())),
+                    },
+                ));
+                let _ = sink.send(agentic_core::EventEnvelope::now(
+                    req.run_id.0.clone(),
+                    Some(req.step_id.0.clone()),
+                    Event::StepComplete {
+                        status: StepStatus::Passed,
+                        summary: "ok".to_string(),
+                        token_usage: TokenUsage::default(),
+                        cost_usd: None,
+                        duration_ms: 10,
+                    },
+                ));
+                Ok(agentic_core::backends::ExecuteOutcome {
+                    status: StepStatus::Passed,
+                    summary: "ok".to_string(),
+                    token_usage: TokenUsage::default(),
+                    cost_usd: None,
+                })
+            }
+        }
+
+        let pipeline = PipelineConfig::builtin_default();
+        let full = pipeline.default_pipeline();
+        let single_step_pipeline = agentic_core::Pipeline {
+            steps: full.steps[..1].to_vec(),
+        };
+
+        let result = execute_pipeline(
+            PipelineRunContext {
+                db: &db,
+                bus: &bus,
+                run_id,
+                ws_id: &ws_id,
+                ws_root: &ws_root,
+                ticket_text: "implement feature X",
+                // CLI override: opus wins over agent's sonnet
+                model_override: Some(ModelId("claude-opus-4-7".to_string())),
+                paths: &paths,
+            },
+            &single_step_pipeline,
+            Box::new(move |_step: &PipelineStep| -> Box<dyn Backend> {
+                Box::new(CapturingBackend2 {
+                    captured: captured_clone.clone(),
+                })
+            }),
+        )
+        .await;
+
+        drop(bus);
+        orch_handle.await.unwrap();
+        pers_handle.await.unwrap();
+
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+
+        let guard = captured_model.lock().unwrap();
+        let model = guard.as_ref().expect("model was never captured");
+        assert_eq!(
+            *model,
+            Some(ModelId("claude-opus-4-7".to_string())),
+            "CLI --model override should win over agent.model; got: {model:?}"
+        );
+    }
+
     #[test]
     fn stable_workspace_id_is_deterministic_for_same_path() {
         let id1 = stable_workspace_id(Path::new("/tmp/foo"));
