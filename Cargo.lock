@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "agentic-core",
  "anyhow",
+ "blake3",
  "clap",
  "rusqlite",
  "serde_json",

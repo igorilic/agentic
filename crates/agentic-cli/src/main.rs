@@ -1,7 +1,9 @@
 #![deny(unsafe_code)]
 
 use agentic_cli::doctor::{SystemWhichProbe, run_doctor};
-use agentic_cli::ticket_run::{BackendFactory, execute_pipeline};
+use agentic_cli::ticket_run::{
+    BackendFactory, PipelineRunContext, execute_pipeline, stable_workspace_id,
+};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -228,7 +230,9 @@ async fn cmd_run_ticket(
     // discovery can find `.agentic/agents/` relative to where the user
     // invoked the CLI.
     let ws_root = std::env::current_dir().context("determine working directory")?;
-    let ws_id = format!("ticket-ws-{}", ulid::Ulid::new().to_string().to_lowercase());
+    // Derive a stable id from the canonical path so re-runs hit the same
+    // workspace row via INSERT OR IGNORE instead of leaking orphan rows.
+    let ws_id = stable_workspace_id(&ws_root);
     let run_id = ulid::Ulid::new().to_string().to_lowercase();
 
     // Seed workspace row.
@@ -281,14 +285,16 @@ async fn cmd_run_ticket(
     });
 
     let result = execute_pipeline(
-        &db,
-        &bus,
-        &run_id,
-        &ws_id,
-        &ws_root,
+        PipelineRunContext {
+            db: &db,
+            bus: &bus,
+            run_id: &run_id,
+            ws_id: &ws_id,
+            ws_root: &ws_root,
+            ticket_text: &ticket_text,
+            model_override: model_id,
+        },
         &pipeline,
-        &ticket_text,
-        model_id,
         factory,
     )
     .await;

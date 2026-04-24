@@ -14,27 +14,58 @@ use agentic_core::{
 /// Injectable factory: given a `PipelineStep`, produce a backend for that step.
 pub type BackendFactory<'a> = Box<dyn Fn(&PipelineStep) -> Box<dyn Backend> + Send + Sync + 'a>;
 
-/// Execute all steps in `pipeline` against `ticket_text`.
+/// All context needed to execute a pipeline run.
+///
+/// Grouping these into a struct keeps `execute_pipeline` extensible: adding
+/// fields like `profile` or `token_budget` in the future is non-breaking.
+pub struct PipelineRunContext<'a> {
+    pub db: &'a Db,
+    pub bus: &'a EventBus,
+    pub run_id: &'a str,
+    pub ws_id: &'a str,
+    pub ws_root: &'a Path,
+    pub ticket_text: &'a str,
+    pub model_override: Option<ModelId>,
+}
+
+/// Derive a stable workspace id from the canonical absolute path.
+///
+/// Uses the first 16 hex chars of a blake3 hash of the canonicalized path,
+/// prefixed with `ws-`.  If `canonicalize` fails (e.g. the directory does not
+/// exist yet), the raw path bytes are hashed instead — this is a safe fallback
+/// for relative or not-yet-created paths.
+pub fn stable_workspace_id(ws_root: &Path) -> String {
+    let canonical = ws_root
+        .canonicalize()
+        .unwrap_or_else(|_| ws_root.to_path_buf());
+    let hash = blake3::hash(canonical.to_string_lossy().as_bytes());
+    let hex = hash.to_hex();
+    format!("ws-{}", &hex.as_str()[..16])
+}
+
+/// Execute all steps in `pipeline` against `ctx.ticket_text`.
 ///
 /// For each step:
 /// 1. Inserts a `Step` row with `status = Pending`.
-/// 2. Discovers the agent file under `ws_root`.
+/// 2. Discovers the agent file under `ctx.ws_root`.
 /// 3. Builds an `ExecuteRequest` and calls `backend_factory(step).execute(req, sink)`.
 /// 4. If a step fails and `stop_on_failure` is set, returns `Err` immediately.
 ///
 /// After the loop, publishes `RunComplete { status: Completed }`.
-#[allow(clippy::too_many_arguments)]
-pub async fn execute_pipeline(
-    db: &Db,
-    bus: &EventBus,
-    run_id: &str,
-    ws_id: &str,
-    ws_root: &Path,
+pub async fn execute_pipeline<'a>(
+    ctx: PipelineRunContext<'a>,
     pipeline: &Pipeline,
-    ticket_text: &str,
-    model_override: Option<ModelId>,
     backend_factory: BackendFactory<'_>,
 ) -> Result<()> {
+    let PipelineRunContext {
+        db,
+        bus,
+        run_id,
+        ws_id,
+        ws_root,
+        ticket_text,
+        model_override,
+    } = ctx;
     let runs = RunRepo::new(db);
     let steps = StepRepo::new(db);
     let run_start = Instant::now();
@@ -262,14 +293,16 @@ mod tests {
         let pipeline = pipeline.default_pipeline();
 
         let result = execute_pipeline(
-            &db,
-            &bus,
-            run_id,
-            &ws_id,
-            &ws_root,
+            PipelineRunContext {
+                db: &db,
+                bus: &bus,
+                run_id,
+                ws_id: &ws_id,
+                ws_root: &ws_root,
+                ticket_text: "implement feature X",
+                model_override: None,
+            },
             pipeline,
-            "implement feature X",
-            None,
             passing_factory(),
         )
         .await;
@@ -373,14 +406,16 @@ mod tests {
         let pipeline = pipeline.default_pipeline();
 
         let result = execute_pipeline(
-            &db,
-            &bus,
-            run_id,
-            &ws_id,
-            &ws_root,
+            PipelineRunContext {
+                db: &db,
+                bus: &bus,
+                run_id,
+                ws_id: &ws_id,
+                ws_root: &ws_root,
+                ticket_text: "implement feature X",
+                model_override: None,
+            },
             pipeline,
-            "implement feature X",
-            None,
             factory,
         )
         .await;
@@ -446,14 +481,16 @@ mod tests {
         let pipeline = pipeline.default_pipeline();
 
         let result = execute_pipeline(
-            &db,
-            &bus,
-            run_id,
-            &ws_id,
-            &ws_root,
+            PipelineRunContext {
+                db: &db,
+                bus: &bus,
+                run_id,
+                ws_id: &ws_id,
+                ws_root: &ws_root,
+                ticket_text: "implement feature X",
+                model_override: None,
+            },
             pipeline,
-            "implement feature X",
-            None,
             factory,
         )
         .await;
@@ -467,6 +504,23 @@ mod tests {
         assert!(
             err_str.to_lowercase().contains("qa"),
             "error should mention 'qa', got: {err_str}"
+        );
+    }
+
+    #[test]
+    fn stable_workspace_id_is_deterministic_for_same_path() {
+        let id1 = stable_workspace_id(Path::new("/tmp/foo"));
+        let id2 = stable_workspace_id(Path::new("/tmp/foo"));
+        assert_eq!(id1, id2, "same path should produce same workspace id");
+    }
+
+    #[test]
+    fn stable_workspace_id_differs_for_different_paths() {
+        let id1 = stable_workspace_id(Path::new("/tmp/foo"));
+        let id2 = stable_workspace_id(Path::new("/tmp/bar"));
+        assert_ne!(
+            id1, id2,
+            "different paths should produce different workspace ids"
         );
     }
 }
