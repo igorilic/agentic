@@ -6,6 +6,7 @@ pub use scripted::ScriptedBackend;
 pub mod claude_code;
 pub mod copilot_cli;
 pub mod file_snapshots;
+pub(crate) mod subprocess;
 
 use std::path::PathBuf;
 use std::time::Duration;
