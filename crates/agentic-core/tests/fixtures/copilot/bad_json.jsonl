@@ -1,0 +1,3 @@
+{"type":"assistant.turn_start","data":{"turnId":"0","interactionId":"x"},"id":"a","timestamp":"2026-04-24T00:00:00Z","parentId":"p"}
+this is not { valid json at all
+{"type":"result","timestamp":"2026-04-24T00:00:01Z","sessionId":"s","exitCode":0,"usage":{"premiumRequests":0,"totalApiDurationMs":0,"sessionDurationMs":0,"codeChanges":{"linesAdded":0,"linesRemoved":0,"filesModified":[]}}}
