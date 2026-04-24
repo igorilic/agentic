@@ -682,8 +682,7 @@ mod tests {
 
     #[tokio::test]
     async fn agent_model_propagates_to_execute_request_when_no_cli_override() {
-        let (tmp, paths, db, bus, ws_id) =
-            setup_workspace_with_agent_model("claude-sonnet-4-6");
+        let (tmp, paths, db, bus, ws_id) = setup_workspace_with_agent_model("claude-sonnet-4-6");
         let ws_root = tmp.path().to_path_buf();
 
         let run_id = "model-prop-run-01";
@@ -743,7 +742,9 @@ mod tests {
             fn supported_models(&self) -> Vec<ModelId> {
                 vec![]
             }
-            async fn health_check(&self) -> agentic_core::error::Result<agentic_core::HealthStatus> {
+            async fn health_check(
+                &self,
+            ) -> agentic_core::error::Result<agentic_core::HealthStatus> {
                 Ok(agentic_core::HealthStatus::Healthy)
             }
             async fn execute(
@@ -831,8 +832,7 @@ mod tests {
 
     #[tokio::test]
     async fn cli_model_override_wins_over_agent_model() {
-        let (tmp, paths, db, bus, ws_id) =
-            setup_workspace_with_agent_model("claude-sonnet-4-6");
+        let (tmp, paths, db, bus, ws_id) = setup_workspace_with_agent_model("claude-sonnet-4-6");
         let ws_root = tmp.path().to_path_buf();
 
         let run_id = "model-override-run-01";
@@ -864,7 +864,9 @@ mod tests {
             fn supported_models(&self) -> Vec<ModelId> {
                 vec![]
             }
-            async fn health_check(&self) -> agentic_core::error::Result<agentic_core::HealthStatus> {
+            async fn health_check(
+                &self,
+            ) -> agentic_core::error::Result<agentic_core::HealthStatus> {
                 Ok(agentic_core::HealthStatus::Healthy)
             }
             async fn execute(

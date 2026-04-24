@@ -19,7 +19,7 @@ use crate::backends::{
     Backend, BackendId, EventSink, ExecuteOutcome, ExecuteRequest, HealthStatus, ModelId,
 };
 use crate::error::Result;
-use crate::events::StepStatus;
+use crate::events::{Event, EventEnvelope, StepStatus};
 
 use self::parser::parse_stream;
 use self::pricing::pricing_for;
@@ -133,6 +133,21 @@ impl Backend for ClaudeCodeBackend {
         // Stdin: user_context as bytes.
         let stdin_bytes = req.user_context.into_bytes();
 
+        // Emit synthetic StepStarted before spawning the subprocess so that
+        // the orchestrator can transition the step row to Running.
+        let started = EventEnvelope::now(
+            req.run_id.0.clone(),
+            Some(req.step_id.0.clone()),
+            Event::StepStarted {
+                agent: req.agent_name.clone(),
+                model: req
+                    .model
+                    .clone()
+                    .unwrap_or_else(|| ModelId("unknown".to_string())),
+            },
+        );
+        let _ = event_sink.send(started);
+
         // Honour the optional deadline: spawn a task that fires the cancel token
         // after the timeout duration. If the run finishes first the token is
         // already cancelled — a second cancel() on a CancellationToken is a no-op.
@@ -151,7 +166,14 @@ impl Backend for ClaudeCodeBackend {
             .run(args, HashMap::new(), req.cwd, stdin_bytes, req.cancel)
             .await?;
 
+        // Capture run_id and step_id as strings before parse_stream takes ownership.
+        let run_id_str = req.run_id.0.clone();
+        let step_id_str = req.step_id.0.clone();
+
         // Feed collected stdout lines through the parser.
+        // parse_stream takes ownership of event_sink; clone the sender first so
+        // we can emit StepComplete after parsing.
+        let sink_for_complete = event_sink.clone();
         let stdout = run_outcome.stdout_lines.join("\n");
         let reader = BufReader::new(Cursor::new(stdout.into_bytes()));
         let parse_outcome =
@@ -186,6 +208,20 @@ impl Backend for ClaudeCodeBackend {
             .as_ref()
             .and_then(pricing_for)
             .map(|p| p.compute_cost(&parse_outcome.token_usage));
+
+        // Emit synthetic StepComplete so the orchestrator updates the step row.
+        let completed = EventEnvelope::now(
+            run_id_str,
+            Some(step_id_str),
+            Event::StepComplete {
+                status,
+                summary: summary.clone(),
+                token_usage: parse_outcome.token_usage.clone(),
+                cost_usd,
+                duration_ms: start.elapsed().as_millis() as u64,
+            },
+        );
+        let _ = sink_for_complete.send(completed);
 
         Ok(ExecuteOutcome {
             status,
