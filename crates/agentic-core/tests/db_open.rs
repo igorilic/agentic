@@ -56,6 +56,20 @@ fn two_opens_on_same_path_succeed() {
 }
 
 #[test]
+fn busy_timeout_pragma_is_set_on_pooled_connections() {
+    let (_tmp, paths) = setup_paths();
+    let db = Db::open(&paths).expect("open");
+    let conn = db.conn().expect("conn");
+    let timeout: i64 = conn
+        .pragma_query_value(None, "busy_timeout", |row| row.get(0))
+        .expect("query busy_timeout");
+    assert!(
+        timeout >= 1000,
+        "busy_timeout should be at least 1s to absorb contention, got {timeout}ms"
+    );
+}
+
+#[test]
 fn open_fails_when_parent_dir_missing() {
     // Exercises the From<r2d2::Error> impl in error.rs.
     // Db::open's contract is "caller ensures dirs"; this test documents the

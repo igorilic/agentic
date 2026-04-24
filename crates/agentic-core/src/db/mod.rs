@@ -65,5 +65,6 @@ impl Db {
 fn apply_pragmas(conn: &mut rusqlite::Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "journal_mode", "wal")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.pragma_update(None, "busy_timeout", 5000)?;
     Ok(())
 }
