@@ -102,6 +102,38 @@ async fn run_command(cli: Cli) -> Result<()> {
     }
 }
 
+/// Spawns the three background tasks common to all run modes:
+/// orchestrator (state machine), persister (event log), and stdout printer.
+///
+/// Returns `(orch_handle, pers_handle, printer_handle)`. Caller must:
+///   1. Drop `bus` to signal shutdown.
+///   2. `.await` orch and pers handles for graceful drain.
+///   3. `.abort()` the printer handle (it loops until the channel closes).
+fn spawn_infra(
+    bus: &EventBus,
+    db: &Db,
+    runs_repo: &RunRepo,
+    steps_repo: &StepRepo,
+) -> (
+    tokio::task::JoinHandle<()>,
+    tokio::task::JoinHandle<()>,
+    tokio::task::JoinHandle<()>,
+) {
+    let orch_handle =
+        PipelineOrchestrator::spawn(bus.clone(), runs_repo.clone(), steps_repo.clone());
+    let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
+    let mut printer_rx = bus.subscribe();
+    let printer_handle = tokio::spawn(async move {
+        while let Ok(envelope) = printer_rx.recv().await {
+            match serde_json::to_string(&envelope) {
+                Ok(line) => println!("{line}"),
+                Err(e) => eprintln!("printer: serialize failed: {e}"),
+            }
+        }
+    });
+    (orch_handle, pers_handle, printer_handle)
+}
+
 async fn cmd_run(paths: &Paths, script_path: &std::path::Path) -> Result<()> {
     // Load the script from JSON file.
     let content = std::fs::read_to_string(script_path)
@@ -119,21 +151,8 @@ async fn cmd_run(paths: &Paths, script_path: &std::path::Path) -> Result<()> {
     // rows to mutate. Hardcoded IDs are fine for smoke.
     seed_minimal_run(&db, &runs_repo, &steps_repo)?;
 
-    // Spawn orchestrator + persister.
-    let orch_handle =
-        PipelineOrchestrator::spawn(bus.clone(), runs_repo.clone(), steps_repo.clone());
-    let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
-
-    // JSON-stdout printer: subscribe + print each envelope as a single line.
-    let mut printer_rx = bus.subscribe();
-    let printer_handle = tokio::spawn(async move {
-        while let Ok(envelope) = printer_rx.recv().await {
-            match serde_json::to_string(&envelope) {
-                Ok(line) => println!("{line}"),
-                Err(e) => eprintln!("printer: serialize failed: {e}"),
-            }
-        }
-    });
+    let (orch_handle, pers_handle, printer_handle) =
+        spawn_infra(&bus, &db, &runs_repo, &steps_repo);
 
     // Publish RunStarted so the event log starts cleanly.
     bus.publish(EventEnvelope::now(
@@ -247,21 +266,8 @@ async fn cmd_run_ticket(
         subprocess_pid: None,
     })?;
 
-    // Spawn orchestrator + persister.
-    let orch_handle =
-        PipelineOrchestrator::spawn(bus.clone(), runs_repo.clone(), steps_repo.clone());
-    let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
-
-    // JSON-stdout printer.
-    let mut printer_rx = bus.subscribe();
-    let printer_handle = tokio::spawn(async move {
-        while let Ok(envelope) = printer_rx.recv().await {
-            match serde_json::to_string(&envelope) {
-                Ok(line) => println!("{line}"),
-                Err(e) => eprintln!("printer: serialize failed: {e}"),
-            }
-        }
-    });
+    let (orch_handle, pers_handle, printer_handle) =
+        spawn_infra(&bus, &db, &runs_repo, &steps_repo);
 
     // Load default pipeline config (from .agentic/pipeline.toml or built-in).
     let pipeline_config = PipelineConfig::load(&ws_root).context("load pipeline config")?;
