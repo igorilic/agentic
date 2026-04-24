@@ -293,8 +293,7 @@ async fn persister_and_orchestrator_survive_interleaved_writes() {
         .unwrap();
     let expected = (STEPS * (EVENTS_PER_STEP + 2) + 1) as i64; // +2 for StepStarted/Complete, +1 RunComplete
     assert_eq!(
-        total,
-        expected,
+        total, expected,
         "persister dropped events: got {total}, expected {expected}"
     );
 

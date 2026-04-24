@@ -69,7 +69,9 @@ fn persist_envelope(db: &Db, envelope: &EventEnvelope) -> crate::Result<()> {
     let event_type = event_type_tag(&envelope.event);
 
     let mut conn = db.conn()?;
-    let tx = conn.transaction()?;
+    // IMMEDIATE: SELECT MAX(seq) then INSERT — same SQLITE_BUSY_SNAPSHOT risk.
+    // See steps.rs::mark_complete for the full rationale.
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let seq = next_seq(&tx, &envelope.run_id)?;
     tx.execute(
         "INSERT INTO stream_events (run_id, step_id, seq, event_type, payload, timestamp_ms) \

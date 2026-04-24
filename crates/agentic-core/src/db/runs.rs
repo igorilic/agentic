@@ -105,7 +105,9 @@ impl RunRepo {
         duration_ms: i64,
     ) -> Result<()> {
         let mut conn = self.pool.get()?;
-        let tx = conn.transaction()?;
+        // IMMEDIATE (not default DEFERRED): this transaction does SELECT-then-UPDATE.
+        // See steps.rs::mark_complete for the full SQLITE_BUSY_SNAPSHOT rationale.
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let current_str: String =
             tx.query_row("SELECT status FROM runs WHERE id = ?1", params![id], |r| {
                 r.get(0)
@@ -128,10 +130,8 @@ impl RunRepo {
 
     pub fn transition(&self, id: &str, to: RunStatus) -> Result<()> {
         let mut conn = self.pool.get()?;
-        // Default DEFERRED transaction. Under WAL + "serial concurrency" contract
-        // (spec §9.2: one active run per workspace) DEFERRED is sufficient; the
-        // read + validate + write sequence is atomic within the transaction.
-        let tx = conn.transaction()?;
+        // IMMEDIATE: same SELECT-then-UPDATE pattern; see mark_complete above.
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let current_str: String =
             tx.query_row("SELECT status FROM runs WHERE id = ?1", params![id], |r| {
                 r.get(0)

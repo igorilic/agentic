@@ -92,7 +92,14 @@ impl StepRepo {
         duration_ms: i64,
     ) -> Result<()> {
         let mut conn = self.pool.get()?;
-        let tx = conn.transaction()?;
+        // IMMEDIATE (not default DEFERRED): this transaction does SELECT-then-UPDATE.
+        // Under WAL with concurrent writers, a DEFERRED read→write upgrade can fail
+        // with SQLITE_BUSY_SNAPSHOT, which busy_timeout does NOT retry — the
+        // transaction must be aborted and retried manually. IMMEDIATE acquires the
+        // write lock up front, eliminating the snapshot-mismatch window. This is
+        // what CP-5 surfaced: concurrent orch + persister writers dropped events
+        // silently before this fix.
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let current_str: String = tx.query_row(
             "SELECT status FROM run_steps WHERE id = ?1",
             params![id],
@@ -116,10 +123,8 @@ impl StepRepo {
 
     pub fn transition(&self, id: &str, to: StepStatus) -> Result<()> {
         let mut conn = self.pool.get()?;
-        // Default DEFERRED transaction. Under WAL + "serial concurrency" contract
-        // (spec §9.2: one active run per workspace) DEFERRED is sufficient; the
-        // read + validate + write sequence is atomic within the transaction.
-        let tx = conn.transaction()?;
+        // IMMEDIATE: same SELECT-then-UPDATE pattern; see mark_complete above.
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let current_str: String = tx.query_row(
             "SELECT status FROM run_steps WHERE id = ?1",
             params![id],
