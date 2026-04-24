@@ -26,9 +26,14 @@ async fn run_parser(fixture_name: &str) -> (Vec<EventEnvelope>, ParseOutcome) {
     let reader = BufReader::new(Cursor::new(bytes));
     let (tx, mut rx) = broadcast::channel::<EventEnvelope>(256);
 
-    let outcome = parse_stream(reader, tx, "run-test".to_string(), Some("step-test".to_string()))
-        .await
-        .expect("parse_stream returned Err");
+    let outcome = parse_stream(
+        reader,
+        tx,
+        "run-test".to_string(),
+        Some("step-test".to_string()),
+    )
+    .await
+    .expect("parse_stream returned Err");
 
     let mut events = Vec::new();
     while let Ok(env) = rx.try_recv() {
@@ -208,9 +213,7 @@ async fn session_and_lifecycle_events_are_ignored() {
     for env in &events {
         match &env.event {
             Event::TextDelta { .. } => {} // expected
-            other => panic!(
-                "unexpected event type in hello_simple fixture: {other:?}"
-            ),
+            other => panic!("unexpected event type in hello_simple fixture: {other:?}"),
         }
     }
 
