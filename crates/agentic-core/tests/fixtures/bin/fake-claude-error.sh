@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Fake claude binary that emits an upstream error event (non-recoverable).
+# Fake claude binary that emits a rate_limit_event followed by an error result.
 # Used for claude_backend_e2e error-path test.
+# Emits the real Claude CLI envelope format.
 
 set -euo pipefail
 
 # Consume stdin
 _stdin=$(cat)
 
-# Emit a message_start then an authentication error
-printf '{"type":"message_start","message":{"id":"msg_02","type":"message","role":"assistant","content":[],"model":"claude-sonnet-4-6","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":5,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}\n'
-printf '{"type":"error","error":{"type":"authentication_error","message":"invalid api key"}}\n'
+# Emit a session init then a rate_limit_event (non-recoverable via process exit 1)
+printf '{"type":"system","subtype":"init","session_id":"sess_test","model":"claude-sonnet-4-6","cwd":"/tmp","tools":[],"uuid":"init-001"}\n'
+printf '{"type":"rate_limit_event","message":"invalid api key","retry_after":0}\n'
 
 exit 1

@@ -138,19 +138,13 @@ mod unix_tests {
             events.push(env.event);
         }
 
-        // Must have forwarded an Error event that is non-recoverable
-        let error_event = events.iter().find(|e| {
-            matches!(
-                e,
-                Event::Error {
-                    recoverable: false,
-                    ..
-                }
-            )
-        });
+        // Must have forwarded at least one Error event (recoverable or not).
+        // The new Claude CLI signals errors via rate_limit_event (recoverable=true)
+        // combined with a non-zero process exit code, so we only require an Error.
+        let error_event = events.iter().find(|e| matches!(e, Event::Error { .. }));
         assert!(
             error_event.is_some(),
-            "expected a non-recoverable Error event in the sink; got: {events:?}"
+            "expected an Error event in the sink; got: {events:?}"
         );
     }
 

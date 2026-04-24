@@ -1,23 +1,20 @@
-//! Parser for the Claude Agent SDK line-delimited JSON event stream.
+//! Parser for the Claude CLI line-delimited JSON event stream.
 //!
-//! The Claude SDK uses the same streaming protocol as the Anthropic Messages
-//! API: each line is a JSON object with a `type` field that identifies the
-//! event kind.  This module consumes that stream and translates it into the
-//! core `Event` variants.
+//! The Claude CLI (`claude -p --output-format stream-json`) emits a stream of
+//! newline-delimited JSON objects. Each object has an outer `type` field that
+//! identifies the envelope kind:
 //!
-//! ## Design choices
-//!
-//! - Tool-use input is accumulated across `input_json_delta` lines and only
-//!   parsed as JSON once `content_block_stop` is received. `ToolUseStart` is
-//!   emitted at block_stop so the full `input` value is available.
-//! - `message_start` initialises the input-token counter from the usage hint
-//!   embedded in the message object but emits NO core `Event`.
-//! - `message_delta` merges output/cache token counts into the accumulator.
-//! - Malformed JSON lines produce one `Event::Error { code: "protocol_error" }`
-//!   and parsing continues on the next line.
+//! - `system` — session lifecycle and hook events; mostly ignored.
+//! - `assistant` — the key event; `message.content[]` holds text/thinking/tool_use blocks.
+//! - `user` — tool results returned by the host; `message.content[]` holds `tool_result` blocks.
+//! - `result` — final outcome; ignored (backend synthesises `ExecuteOutcome`).
+//! - `rate_limit_event` — emitted when the CLI is rate-limited; translated to a recoverable Error.
+//! - Unknown types — logged at debug level, silently ignored.
+//! - Malformed JSON — one `Event::Error { code: "protocol_error" }` emitted, then parsing continues.
 
+use serde::Deserialize;
 use serde_json::Value;
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, Lines};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt};
 
 use crate::TokenUsage;
 use crate::backends::EventSink;
@@ -40,7 +37,7 @@ pub struct ParseOutcome {
     pub error_message: Option<String>,
 }
 
-/// Parse a line-delimited Claude SDK event stream.
+/// Parse a line-delimited Claude CLI event stream.
 ///
 /// Reads lines from `reader`, translates each JSON object into zero or more
 /// core [`Event`]s that are sent via `sink`, and returns a [`ParseOutcome`]
@@ -51,272 +48,240 @@ pub async fn parse_stream<R: AsyncBufRead + Unpin>(
     run_id: String,
     step_id: Option<String>,
 ) -> Result<ParseOutcome> {
-    let mut state = ParserState::new(run_id, step_id);
-    let mut lines: Lines<R> = reader.lines();
+    let mut token_usage = TokenUsage::default();
+    let mut saw_unrecoverable_error = false;
+    let mut error_message: Option<String> = None;
+    let mut lines = reader.lines();
 
     while let Some(line) = lines.next_line().await? {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
+        if line.trim().is_empty() {
             continue;
         }
 
-        match serde_json::from_str::<Value>(trimmed) {
+        let outer: std::result::Result<Value, _> = serde_json::from_str(line.trim());
+        match outer {
             Ok(json) => {
-                let events = state.process_line(&json);
+                let events = dispatch_envelope(&json, &mut token_usage);
                 for event in events {
-                    // Track non-recoverable errors before forwarding.
                     if let Event::Error {
                         recoverable: false,
                         ref message,
                         ..
                     } = event
-                        && !state.saw_unrecoverable_error
+                        && !saw_unrecoverable_error
                     {
-                        state.saw_unrecoverable_error = true;
-                        state.error_message = Some(message.clone());
+                        saw_unrecoverable_error = true;
+                        error_message = Some(message.clone());
                     }
-                    let envelope = EventEnvelope {
-                        schema_version: CURRENT_SCHEMA_VERSION,
-                        event_id: ulid::Ulid::new().to_string(),
-                        run_id: state.run_id.clone(),
-                        step_id: state.step_id.clone(),
-                        timestamp_ms: now_ms(),
-                        event,
-                    };
-                    // Best-effort send; ignore errors (no receivers).
-                    let _ = sink.send(envelope);
+                    send_event(&sink, &run_id, &step_id, event);
                 }
             }
-            Err(err) => {
-                let envelope = EventEnvelope {
-                    schema_version: CURRENT_SCHEMA_VERSION,
-                    event_id: ulid::Ulid::new().to_string(),
-                    run_id: state.run_id.clone(),
-                    step_id: state.step_id.clone(),
-                    timestamp_ms: now_ms(),
-                    event: Event::Error {
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    line_preview = %line.chars().take(200).collect::<String>(),
+                    "claude parser: malformed line"
+                );
+                send_event(
+                    &sink,
+                    &run_id,
+                    &step_id,
+                    Event::Error {
                         code: "protocol_error".to_string(),
-                        message: err.to_string(),
+                        message: format!("parse: {e}"),
                         recoverable: true,
                         retry_after_ms: None,
                     },
-                };
-                let _ = sink.send(envelope);
-                // Continue parsing the next line.
+                );
             }
         }
     }
 
     Ok(ParseOutcome {
-        token_usage: state.token_acc.finalize(),
-        saw_unrecoverable_error: state.saw_unrecoverable_error,
-        error_message: state.error_message,
+        token_usage,
+        saw_unrecoverable_error,
+        error_message,
     })
 }
 
 // ---------------------------------------------------------------------------
-// Internal state
+// Wire types — used for sub-object deserialization after outer dispatch
 // ---------------------------------------------------------------------------
 
-/// Per-block state for an in-progress `tool_use` content block.
-struct ToolUseBlock {
-    id: String,
-    name: String,
-    /// Accumulates partial `input_json_delta` strings.
-    input_json_buf: String,
+#[derive(Deserialize)]
+struct AssistantMessage {
+    content: Vec<AssistantContentBlock>,
+    #[serde(default)]
+    usage: Option<ClaudeUsage>,
 }
 
-/// Accumulates token usage fields across `message_start` and `message_delta`
-/// lines and produces a final `TokenUsage` on completion.
-#[derive(Debug, Default)]
-struct TokenAccumulator {
-    inner: TokenUsage,
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum AssistantContentBlock {
+    Text {
+        text: String,
+    },
+    Thinking {
+        thinking: String,
+    },
+    ToolUse {
+        id: String,
+        name: String,
+        input: Value,
+    },
 }
 
-impl TokenAccumulator {
-    /// Merge a `usage` JSON object into the running totals.
-    /// Present fields overwrite; absent fields are left unchanged.
-    fn absorb(&mut self, usage: &serde_json::Map<String, Value>) {
-        if let Some(n) = usage.get("input_tokens").and_then(Value::as_u64) {
-            self.inner.input_tokens = n;
-        }
-        if let Some(n) = usage.get("output_tokens").and_then(Value::as_u64) {
-            self.inner.output_tokens = n;
-        }
-        if let Some(n) = usage.get("cache_read_input_tokens").and_then(Value::as_u64) {
-            self.inner.cache_read_input_tokens = n;
-        }
-        if let Some(n) = usage
-            .get("cache_creation_input_tokens")
-            .and_then(Value::as_u64)
-        {
-            self.inner.cache_creation_input_tokens = n;
-        }
-    }
-
-    /// Consume the accumulator and return the final `TokenUsage`.
-    fn finalize(self) -> TokenUsage {
-        self.inner
-    }
+#[derive(Deserialize)]
+struct UserMessage {
+    content: Vec<UserContentBlock>,
 }
 
-/// Mutable parser state threaded through all line-dispatch calls.
-struct ParserState {
-    run_id: String,
-    step_id: Option<String>,
-    token_acc: TokenAccumulator,
-    /// Present when we are inside a `tool_use` content block.
-    current_tool: Option<ToolUseBlock>,
-    /// Set to `true` on the first non-recoverable `Error` event.
-    saw_unrecoverable_error: bool,
-    /// Error message from the first non-recoverable error, if any.
-    error_message: Option<String>,
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum UserContentBlock {
+    ToolResult {
+        tool_use_id: String,
+        #[serde(default)]
+        is_error: bool,
+    },
 }
 
-impl ParserState {
-    fn new(run_id: String, step_id: Option<String>) -> Self {
-        Self {
-            run_id,
-            step_id,
-            token_acc: TokenAccumulator::default(),
-            current_tool: None,
-            saw_unrecoverable_error: false,
-            error_message: None,
+#[derive(Deserialize, Default)]
+struct ClaudeUsage {
+    #[serde(default)]
+    input_tokens: u64,
+    #[serde(default)]
+    output_tokens: u64,
+    #[serde(default)]
+    cache_creation_input_tokens: u64,
+    #[serde(default)]
+    cache_read_input_tokens: u64,
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch — two-pass: outer type from Value, inner typed deserialization
+// ---------------------------------------------------------------------------
+
+/// Dispatch a parsed JSON object to the appropriate handler.
+///
+/// We first extract the outer `type` string from the `Value`, then
+/// deserialise the relevant sub-objects with full type safety. This avoids
+/// fighting serde's internally-tagged enum limitations when unknown fields
+/// are present.
+fn dispatch_envelope(json: &Value, token_usage: &mut TokenUsage) -> Vec<Event> {
+    let outer_type = match json["type"].as_str() {
+        Some(t) => t,
+        None => {
+            tracing::debug!("claude parser: envelope missing 'type' field");
+            return vec![];
         }
-    }
+    };
 
-    /// Dispatch one parsed JSON object and return the resulting events (0-N).
-    fn process_line(&mut self, json: &Value) -> Vec<Event> {
-        let event_type = match json["type"].as_str() {
-            Some(t) => t,
-            None => return vec![],
-        };
-
-        match event_type {
-            "message_start" => self.handle_message_start(json),
-            "content_block_start" => self.handle_content_block_start(json),
-            "content_block_delta" => self.handle_content_block_delta(json),
-            "content_block_stop" => self.handle_content_block_stop(),
-            "message_delta" => self.handle_message_delta(json),
-            "message_stop" | "ping" => vec![],
-            "error" => Self::handle_upstream_error(json),
-            _ => vec![],
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // Handlers
-    // -----------------------------------------------------------------------
-
-    fn handle_message_start(&mut self, json: &Value) -> Vec<Event> {
-        // Absorb the initial usage hint from message_start.
-        if let Some(usage) = json["message"]["usage"].as_object() {
-            self.token_acc.absorb(usage);
-        }
-        // No core event emitted for message_start.
-        vec![]
-    }
-
-    fn handle_content_block_start(&mut self, json: &Value) -> Vec<Event> {
-        let block = &json["content_block"];
-        match block["type"].as_str() {
-            Some("tool_use") => {
-                let id = string_field(block, "id");
-                let name = string_field(block, "name");
-                self.current_tool = Some(ToolUseBlock {
-                    id,
-                    name,
-                    input_json_buf: String::new(),
-                });
-                vec![]
-            }
-            _ => {
-                // text or thinking block — nothing to track specially
-                vec![]
-            }
-        }
-    }
-
-    fn handle_content_block_delta(&mut self, json: &Value) -> Vec<Event> {
-        let delta = &json["delta"];
-        match delta["type"].as_str() {
-            Some("text_delta") => {
-                let text = string_field(delta, "text");
-                vec![Event::TextDelta { content: text }]
-            }
-            Some("thinking_delta") => {
-                let text = string_field(delta, "thinking");
-                vec![Event::ThinkingDelta { content: text }]
-            }
-            Some("input_json_delta") => {
-                if let (Some(tool), Some(partial)) =
-                    (&mut self.current_tool, delta["partial_json"].as_str())
-                {
-                    tool.input_json_buf.push_str(partial);
+    match outer_type {
+        "system" => {
+            let subtype = json["subtype"].as_str().unwrap_or("");
+            match subtype {
+                "init" => {
+                    tracing::debug!(subtype = "init", "claude parser: session init");
                 }
-                vec![]
+                "hook_started" | "hook_response" => {
+                    // Silently ignore hook lifecycle events.
+                }
+                other => {
+                    tracing::debug!(subtype = other, "claude parser: unknown system subtype");
+                }
             }
-            _ => vec![],
+            vec![]
         }
-    }
 
-    fn handle_content_block_stop(&mut self) -> Vec<Event> {
-        // If we were accumulating a tool_use block, emit ToolUseStart now
-        // that the full input JSON is known.
-        if let Some(tool) = self.current_tool.take() {
-            let input: Value = serde_json::from_str(&tool.input_json_buf)
-                .unwrap_or(Value::Object(serde_json::Map::new()));
-            return vec![Event::ToolUseStart {
-                tool_call_id: tool.id,
-                tool_name: tool.name,
-                input,
-            }];
-        }
-        vec![]
-    }
+        "assistant" => {
+            let msg: AssistantMessage = match serde_json::from_value(json["message"].clone()) {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::warn!(error = %e, "claude parser: failed to parse assistant message");
+                    return vec![];
+                }
+            };
 
-    fn handle_message_delta(&mut self, json: &Value) -> Vec<Event> {
-        // message_delta carries output token counts in the top-level `usage`
-        // field (NOT nested under `delta`).
-        if let Some(usage) = json["usage"].as_object() {
-            self.token_acc.absorb(usage);
-        }
-        vec![]
-    }
+            let mut events = Vec::new();
 
-    /// Handle an Anthropic-level `{"type":"error","error":{...}}` payload.
-    ///
-    /// These are well-formed JSON objects but represent upstream API errors
-    /// (overload, rate-limit, auth failure, etc.).  Parsing continues after
-    /// emitting the error event.
-    fn handle_upstream_error(json: &Value) -> Vec<Event> {
-        let error_obj = match json.get("error") {
-            Some(obj) => obj,
-            None => {
-                return vec![Event::Error {
-                    code: "upstream_error".to_string(),
-                    message: "error event missing body".to_string(),
-                    recoverable: false,
-                    retry_after_ms: None,
-                }];
+            if let Some(usage) = msg.usage {
+                token_usage.input_tokens += usage.input_tokens;
+                token_usage.output_tokens += usage.output_tokens;
+                token_usage.cache_creation_input_tokens += usage.cache_creation_input_tokens;
+                token_usage.cache_read_input_tokens += usage.cache_read_input_tokens;
             }
-        };
 
-        let code = error_obj["type"]
-            .as_str()
-            .unwrap_or("upstream_error")
-            .to_string();
-        let message = error_obj["message"].as_str().unwrap_or("").to_string();
-        let retry_after_ms = error_obj["retry_after"].as_u64().map(|secs| secs * 1000);
+            for block in msg.content {
+                match block {
+                    AssistantContentBlock::Text { text } => {
+                        events.push(Event::TextDelta { content: text });
+                    }
+                    AssistantContentBlock::Thinking { thinking } => {
+                        events.push(Event::ThinkingDelta { content: thinking });
+                    }
+                    AssistantContentBlock::ToolUse { id, name, input } => {
+                        events.push(Event::ToolUseStart {
+                            tool_call_id: id,
+                            tool_name: name,
+                            input,
+                        });
+                    }
+                }
+            }
 
-        let recoverable = matches!(code.as_str(), "overloaded_error" | "rate_limit_error");
+            events
+        }
 
-        vec![Event::Error {
-            code,
-            message,
-            recoverable,
-            retry_after_ms,
-        }]
+        "user" => {
+            let msg: UserMessage = match serde_json::from_value(json["message"].clone()) {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::warn!(error = %e, "claude parser: failed to parse user message");
+                    return vec![];
+                }
+            };
+
+            msg.content
+                .into_iter()
+                .map(|block| match block {
+                    UserContentBlock::ToolResult {
+                        tool_use_id,
+                        is_error,
+                    } => Event::ToolUseEnd {
+                        tool_call_id: tool_use_id,
+                        exit_code: Some(if is_error { 1 } else { 0 }),
+                        duration_ms: 0,
+                    },
+                })
+                .collect()
+        }
+
+        "result" => {
+            tracing::debug!("claude parser: result envelope, ignoring");
+            vec![]
+        }
+
+        "rate_limit_event" => {
+            let message = json["message"]
+                .as_str()
+                .unwrap_or("rate limit exceeded")
+                .to_string();
+            vec![Event::Error {
+                code: "rate_limit_event".to_string(),
+                message,
+                recoverable: true,
+                retry_after_ms: None,
+            }]
+        }
+
+        other => {
+            tracing::debug!(
+                type_ = other,
+                "claude parser: unknown envelope type, skipping"
+            );
+            vec![]
+        }
     }
 }
 
@@ -324,7 +289,15 @@ impl ParserState {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Extract a string field from a JSON object, defaulting to empty string.
-fn string_field(obj: &Value, key: &str) -> String {
-    obj[key].as_str().unwrap_or("").to_string()
+fn send_event(sink: &EventSink, run_id: &str, step_id: &Option<String>, event: Event) {
+    let envelope = EventEnvelope {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        event_id: ulid::Ulid::new().to_string(),
+        run_id: run_id.to_string(),
+        step_id: step_id.clone(),
+        timestamp_ms: now_ms(),
+        event,
+    };
+    // Best-effort send; ignore errors (no receivers).
+    let _ = sink.send(envelope);
 }

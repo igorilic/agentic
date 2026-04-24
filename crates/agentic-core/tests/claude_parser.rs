@@ -211,9 +211,7 @@ async fn rate_limit_emits_recoverable_error() {
         .iter()
         .filter_map(|e| {
             if let Event::Error {
-                code,
-                recoverable,
-                ..
+                code, recoverable, ..
             } = e
             {
                 Some((code.clone(), *recoverable))
@@ -229,10 +227,7 @@ async fn rate_limit_emits_recoverable_error() {
         "expected exactly 1 Error event from rate_limit, got: {events:?}"
     );
     assert_eq!(errors[0].0, "rate_limit_event");
-    assert!(
-        errors[0].1,
-        "rate_limit_event must be recoverable"
-    );
+    assert!(errors[0].1, "rate_limit_event must be recoverable");
 }
 
 // ---------------------------------------------------------------------------
