@@ -67,8 +67,7 @@ impl Paths {
     /// `<data_dir>/runs/<run_id>/step-<NN>-<agent>`.
     /// `seq` is zero-padded to 2 digits.
     pub fn step_dir(&self, run_id: &str, seq: usize, agent: &str) -> PathBuf {
-        self.run_dir(run_id)
-            .join(format!("step-{seq:02}-{agent}"))
+        self.run_dir(run_id).join(format!("step-{seq:02}-{agent}"))
     }
 
     /// Create the step directory (including all parents) and return its path.

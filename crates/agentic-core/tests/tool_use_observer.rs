@@ -7,9 +7,7 @@
 
 use std::time::Duration;
 
-use agentic_core::{
-    Db, Event, EventBus, EventEnvelope, EventPersister, Paths, ToolUseObserver,
-};
+use agentic_core::{Db, Event, EventBus, EventEnvelope, EventPersister, Paths, ToolUseObserver};
 use serde_json::json;
 use tempfile::TempDir;
 use tokio_util::sync::CancellationToken;
@@ -129,10 +127,13 @@ async fn observer_captures_edit_tooluse_and_emits_filechange() {
                 |r| r.get(0),
             )
             .unwrap();
-        let event: Event = rmp_serde::from_slice(&payload)
-            .expect("payload should decode as Event");
+        let event: Event = rmp_serde::from_slice(&payload).expect("payload should decode as Event");
         match event {
-            Event::FileChange { before_hash, after_hash, .. } => {
+            Event::FileChange {
+                before_hash,
+                after_hash,
+                ..
+            } => {
                 assert_ne!(
                     before_hash, after_hash,
                     "before_hash and after_hash should differ"

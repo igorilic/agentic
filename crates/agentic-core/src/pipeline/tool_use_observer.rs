@@ -12,9 +12,9 @@ use std::path::{Path, PathBuf};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use crate::backends::file_snapshots::{FileSnapshotter, FinalizeReport};
 use crate::backends::EventSink;
-use crate::events::{Event, EventEnvelope, EventBus};
+use crate::backends::file_snapshots::{FileSnapshotter, FinalizeReport};
+use crate::events::{Event, EventBus, EventEnvelope};
 
 /// Handle returned by [`ToolUseObserver::spawn`]. Used to finalize the
 /// observer after the step's backend has returned.
@@ -41,7 +41,9 @@ impl ToolUseObserverHandle {
         // Receive the snapshotter from the task. If the sender was dropped (e.g.
         // task panicked), create an empty snapshotter as a safe fallback.
         let snapshotter = self.done_rx.await.unwrap_or_else(|_| {
-            tracing::warn!("ToolUseObserver: done_rx dropped before sending snapshotter; using empty fallback");
+            tracing::warn!(
+                "ToolUseObserver: done_rx dropped before sending snapshotter; using empty fallback"
+            );
             FileSnapshotter::new(PathBuf::new())
         });
 
@@ -59,7 +61,7 @@ impl ToolUseObserver {
     /// after the step's backend has returned, or on any early-exit path.
     pub fn spawn(
         bus: &EventBus,
-        run_id: String,
+        _run_id: String,
         step_id: String,
         ws_root: PathBuf,
         stop: CancellationToken,

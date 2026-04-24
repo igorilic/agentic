@@ -293,6 +293,7 @@ async fn cmd_run_ticket(
             ws_root: &ws_root,
             ticket_text: &ticket_text,
             model_override: model_id,
+            paths,
         },
         &pipeline,
         factory,

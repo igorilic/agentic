@@ -7,8 +7,9 @@ use anyhow::Result;
 use tokio_util::sync::CancellationToken;
 
 use agentic_core::{
-    Backend, Db, Event, EventBus, EventEnvelope, ExecuteRequest, ModelId, Pipeline, PipelineStep,
-    RunId, RunRepo, RunStatus, Step, StepId, StepRepo, StepStatus, WorkspaceRef, discover_agent,
+    Backend, Db, Event, EventBus, EventEnvelope, ExecuteRequest, ModelId, Paths, Pipeline,
+    PipelineStep, RunId, RunRepo, RunStatus, Step, StepId, StepRepo, StepStatus, ToolUseObserver,
+    WorkspaceRef, discover_agent,
 };
 
 /// Injectable factory: given a `PipelineStep`, produce a backend for that step.
@@ -26,6 +27,7 @@ pub struct PipelineRunContext<'a> {
     pub ws_root: &'a Path,
     pub ticket_text: &'a str,
     pub model_override: Option<ModelId>,
+    pub paths: &'a Paths,
 }
 
 /// Derive a stable workspace id from the canonical absolute path.
@@ -65,6 +67,7 @@ pub async fn execute_pipeline<'a>(
         ws_root,
         ticket_text,
         model_override,
+        paths,
     } = ctx;
     let runs = RunRepo::new(db);
     let steps = StepRepo::new(db);
@@ -89,15 +92,45 @@ pub async fn execute_pipeline<'a>(
             retry_count: 0,
         })?;
 
+        // Ensure step directory exists and compute diff path.
+        let step_dir = paths
+            .ensure_step_dir(run_id, i, &pipeline_step.agent)
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "failed to create step dir for '{}': {}",
+                    pipeline_step.agent,
+                    e
+                )
+            })?;
+        let diff_path = step_dir.join("file_changes.diff");
+
+        // Spawn the tool-use observer BEFORE calling the backend.
+        let observer_stop = CancellationToken::new();
+        let observer = ToolUseObserver::spawn(
+            bus,
+            run_id.to_string(),
+            step_id.clone(),
+            ws_root.to_path_buf(),
+            observer_stop.clone(),
+        );
+
         // Discover agent file.
-        let agent = discover_agent(ws_root, &pipeline_step.agent).map_err(|e| {
-            anyhow::anyhow!(
-                "agent '{}' not found in workspace '{}': {}",
-                pipeline_step.agent,
-                ws_root.display(),
-                e
-            )
-        })?;
+        let agent = match discover_agent(ws_root, &pipeline_step.agent) {
+            Ok(a) => a,
+            Err(e) => {
+                // Cancel observer on early exit.
+                observer_stop.cancel();
+                let _ignored = observer
+                    .finalize_into(&diff_path, &bus.sender(), run_id, &step_id)
+                    .await;
+                return Err(anyhow::anyhow!(
+                    "agent '{}' not found in workspace '{}': {}",
+                    pipeline_step.agent,
+                    ws_root.display(),
+                    e
+                ));
+            }
+        };
 
         // Build effective model: CLI override wins, then agent's own default.
         let model = model_override
@@ -128,7 +161,27 @@ pub async fn execute_pipeline<'a>(
         };
 
         let backend = backend_factory(pipeline_step);
-        let outcome = backend.execute(req, bus.sender()).await.map_err(|e| {
+        let execute_result = backend.execute(req, bus.sender()).await;
+
+        // Stop the observer and finalize in all paths.
+        observer_stop.cancel();
+        let _report = observer
+            .finalize_into(&diff_path, &bus.sender(), run_id, &step_id)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "file snapshot finalize failed for agent '{}': {}",
+                    pipeline_step.agent,
+                    e
+                )
+            })?;
+        tracing::debug!(
+            run_id = run_id,
+            step_id = %step_id,
+            "file snapshot finalized"
+        );
+
+        let outcome = execute_result.map_err(|e| {
             anyhow::anyhow!("backend error for agent '{}': {}", pipeline_step.agent, e)
         })?;
 
@@ -187,7 +240,9 @@ mod tests {
     use tempfile::TempDir;
 
     /// Create a minimal tempdir workspace with DB and agent fixture files.
-    fn setup_workspace(agent_names: &[&str]) -> (TempDir, Db, EventBus, String) {
+    /// Returns `(tmp, paths, db, bus, ws_id)` — `tmp` must be kept alive for
+    /// the duration of the test.
+    fn setup_workspace(agent_names: &[&str]) -> (TempDir, Paths, Db, EventBus, String) {
         let tmp = TempDir::new().unwrap();
         let base = tmp.path();
 
@@ -220,7 +275,7 @@ mod tests {
         }
 
         let bus = EventBus::new();
-        (tmp, db, bus, ws_id)
+        (tmp, paths, db, bus, ws_id)
     }
 
     /// Seed a run row in Running status (workaround for GH #17).
@@ -274,7 +329,7 @@ mod tests {
     #[tokio::test]
     async fn execute_pipeline_happy_path_drives_all_steps() {
         let agent_names = ["architect", "tdd-developer", "qa", "reviewer"];
-        let (tmp, db, bus, ws_id) = setup_workspace(&agent_names);
+        let (tmp, paths, db, bus, ws_id) = setup_workspace(&agent_names);
         let ws_root = tmp.path().to_path_buf();
 
         let run_id = "happy-run-01";
@@ -301,6 +356,7 @@ mod tests {
                 ws_root: &ws_root,
                 ticket_text: "implement feature X",
                 model_override: None,
+                paths: &paths,
             },
             pipeline,
             passing_factory(),
@@ -344,7 +400,7 @@ mod tests {
         // The default pipeline has stop_on_failure = true for architect (step 0)
         // and tdd-developer (step 1). We'll make step 1 fail.
         let agent_names = ["architect", "tdd-developer", "qa", "reviewer"];
-        let (tmp, db, bus, ws_id) = setup_workspace(&agent_names);
+        let (tmp, paths, db, bus, ws_id) = setup_workspace(&agent_names);
         let ws_root = tmp.path().to_path_buf();
 
         let run_id = "fail-run-01";
@@ -414,6 +470,7 @@ mod tests {
                 ws_root: &ws_root,
                 ticket_text: "implement feature X",
                 model_override: None,
+                paths: &paths,
             },
             pipeline,
             factory,
@@ -447,7 +504,7 @@ mod tests {
     async fn execute_pipeline_missing_agent_file_errors_cleanly() {
         // Only architect and tdd-developer agents exist; qa is missing.
         let agent_names = ["architect", "tdd-developer", "reviewer"];
-        let (tmp, db, bus, ws_id) = setup_workspace(&agent_names);
+        let (tmp, paths, db, bus, ws_id) = setup_workspace(&agent_names);
         let ws_root = tmp.path().to_path_buf();
 
         let run_id = "missing-agent-run-01";
@@ -489,6 +546,7 @@ mod tests {
                 ws_root: &ws_root,
                 ticket_text: "implement feature X",
                 model_override: None,
+                paths: &paths,
             },
             pipeline,
             factory,

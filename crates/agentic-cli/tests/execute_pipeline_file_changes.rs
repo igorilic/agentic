@@ -5,13 +5,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use agentic_cli::ticket_run::{BackendFactory, PipelineRunContext, execute_pipeline};
+use agentic_core::backends::EventSink;
 use agentic_core::{
     Backend, BackendId, Db, Event, EventBus, EventEnvelope, EventPersister, ExecuteOutcome,
     ExecuteRequest, HealthStatus, ModelId, Paths, Pipeline, PipelineStep, Run, RunRepo, RunStatus,
     StepStatus, TokenUsage,
 };
-use agentic_core::backends::EventSink;
-use agentic_cli::ticket_run::{BackendFactory, PipelineRunContext, execute_pipeline};
 use async_trait::async_trait;
 use rusqlite::params;
 use serde_json::json;
@@ -37,7 +37,10 @@ struct FileEditingBackend {
 
 impl FileEditingBackend {
     fn new(ws_root: PathBuf, step_id_out: Arc<Mutex<Option<String>>>) -> Self {
-        Self { ws_root, step_id_out }
+        Self {
+            ws_root,
+            step_id_out,
+        }
     }
 }
 
@@ -59,7 +62,11 @@ impl Backend for FileEditingBackend {
         Ok(HealthStatus::Healthy)
     }
 
-    async fn execute(&self, req: ExecuteRequest, event_sink: EventSink) -> agentic_core::Result<ExecuteOutcome> {
+    async fn execute(
+        &self,
+        req: ExecuteRequest,
+        event_sink: EventSink,
+    ) -> agentic_core::Result<ExecuteOutcome> {
         // Record the step_id so the test can look it up later.
         *self.step_id_out.lock().await = Some(req.step_id.0.clone());
 
@@ -149,9 +156,8 @@ fn setup_workspace(tmp: &TempDir, agent_names: &[&str]) -> (Db, EventBus, String
     std::fs::create_dir_all(&agents_dir).unwrap();
 
     for &name in agent_names {
-        let content = format!(
-            "+++\nname = \"{name}\"\ndescription = \"test agent\"\n+++\nYou are {name}.\n"
-        );
+        let content =
+            format!("+++\nname = \"{name}\"\ndescription = \"test agent\"\n+++\nYou are {name}.\n");
         std::fs::write(agents_dir.join(format!("{name}.md")), content).unwrap();
     }
 
