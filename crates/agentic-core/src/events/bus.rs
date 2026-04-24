@@ -3,7 +3,24 @@ use tokio::sync::broadcast::{self, Receiver, Sender};
 use crate::events::EventEnvelope;
 
 /// Default broadcast channel capacity (events buffered per-subscriber).
-pub const DEFAULT_CAPACITY: usize = 1024;
+///
+/// Raised to 16 384 (16× the original 1 024) to accommodate real Claude
+/// runs that can emit hundreds of `TextDelta` events per step across a
+/// multi-step pipeline. A slow subscriber (e.g. the persister doing
+/// per-event SQLite inserts) can lag behind the producer without dropping
+/// events at this headroom.
+///
+/// Override at runtime with the [`CAPACITY_ENV_VAR`] environment variable.
+pub const DEFAULT_CAPACITY: usize = 16_384;
+
+/// Env var name to override the default capacity at bus construction.
+///
+/// Useful for testing extreme cases or constraining memory in embedded
+/// deployments. The value must parse as a positive `usize`; invalid or
+/// zero values are silently ignored and [`DEFAULT_CAPACITY`] is used.
+///
+/// Example: `AGENTIC_BUS_CAPACITY=65536 agentic-cli run --ticket "…"`
+pub const CAPACITY_ENV_VAR: &str = "AGENTIC_BUS_CAPACITY";
 
 /// In-process event broadcast bus. Clone is cheap (internal Arc via the
 /// `broadcast::Sender` wrapper). Subscribers receive every published event
@@ -16,9 +33,16 @@ pub struct EventBus {
 }
 
 impl EventBus {
-    /// New bus with [`DEFAULT_CAPACITY`] (1024).
+    /// New bus with [`DEFAULT_CAPACITY`] (16 384) unless
+    /// [`CAPACITY_ENV_VAR`] (`AGENTIC_BUS_CAPACITY`) is set to a valid
+    /// positive integer.
     pub fn new() -> Self {
-        Self::with_capacity(DEFAULT_CAPACITY)
+        let cap = std::env::var(CAPACITY_ENV_VAR)
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .filter(|n| *n > 0)
+            .unwrap_or(DEFAULT_CAPACITY);
+        Self::with_capacity(cap)
     }
 
     /// New bus with an explicit capacity. Must be > 0.

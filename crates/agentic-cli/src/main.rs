@@ -65,6 +65,14 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    use tracing_subscriber::EnvFilter;
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
+        )
+        .with_writer(std::io::stderr)
+        .init();
+
     let cli = Cli::parse();
     match run_command(cli).await {
         Ok(()) => ExitCode::SUCCESS,

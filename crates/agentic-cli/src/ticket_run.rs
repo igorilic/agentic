@@ -433,6 +433,35 @@ mod tests {
         let runs_repo = RunRepo::new(&db);
         let run = runs_repo.get(run_id).unwrap().unwrap();
         assert_eq!(run.status, RunStatus::Completed);
+
+        // Assert the persister actually wrote events to stream_events.
+        // Each step's ScriptedBackend emits: StepStarted + TextDelta + StepComplete = 3 events.
+        // execute_pipeline publishes 1 RunComplete. Total: 4 steps × 3 + 1 = 13.
+        let conn = db.conn().unwrap();
+        let total: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM stream_events WHERE run_id = ?1",
+                params![run_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            total, 13,
+            "expected 13 persisted events (4×3 step events + 1 RunComplete)"
+        );
+
+        let count_by_type = |event_type: &str| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM stream_events WHERE run_id = ?1 AND event_type = ?2",
+                params![run_id, event_type],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(count_by_type("StepStarted"), 4);
+        assert_eq!(count_by_type("TextDelta"), 4);
+        assert_eq!(count_by_type("StepComplete"), 4);
+        assert_eq!(count_by_type("RunComplete"), 1);
     }
 
     #[tokio::test]
