@@ -25,6 +25,14 @@ use self::parser::parse_stream;
 use self::pricing::pricing_for;
 use self::runner::ClaudeRunner;
 
+/// Build argv for `claude` subprocess invocation.
+/// Does NOT include the binary itself (the runner prepends that).
+pub(crate) fn build_claude_argv(req: &ExecuteRequest) -> Vec<String> {
+    // Placeholder — implemented in GREEN phase.
+    let _ = req;
+    vec![]
+}
+
 /// Backend adapter that drives the `claude` CLI.
 #[derive(Debug, Clone)]
 pub struct ClaudeCodeBackend {
@@ -198,5 +206,108 @@ impl Backend for ClaudeCodeBackend {
             token_usage: parse_outcome.token_usage,
             cost_usd,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backends::{ModelId, ToolName};
+    use tokio_util::sync::CancellationToken;
+
+    fn make_test_request() -> ExecuteRequest {
+        ExecuteRequest {
+            workspace: crate::backends::WorkspaceRef {
+                id: "ws-test".to_string(),
+                root_path: std::env::temp_dir(),
+            },
+            run_id: crate::RunId("run-test".to_string()),
+            step_id: crate::StepId("step-test".to_string()),
+            agent_name: "test-agent".to_string(),
+            agent_prompt: "You are a test assistant.".to_string(),
+            user_context: "Do the thing.".to_string(),
+            model: None,
+            tools: vec![],
+            cwd: std::env::temp_dir(),
+            timeout: None,
+            cancel: CancellationToken::new(),
+        }
+    }
+
+    #[test]
+    fn argv_contains_verbose_for_stream_json() {
+        let req = make_test_request();
+        let argv = build_claude_argv(&req);
+        assert!(argv.contains(&"-p".to_string()));
+        assert!(argv.iter().any(|a| a == "--output-format"));
+        assert!(argv.iter().any(|a| a == "stream-json"));
+        assert!(
+            argv.iter().any(|a| a == "--verbose"),
+            "argv missing --verbose: {argv:?}"
+        );
+    }
+
+    #[test]
+    fn argv_passes_prompt_inline_not_as_path() {
+        let mut req = make_test_request();
+        req.agent_prompt = "You are a test assistant.\nFollow instructions.".to_string();
+        let argv = build_claude_argv(&req);
+        let prompt_idx = argv
+            .iter()
+            .position(|a| a == "--append-system-prompt")
+            .expect("--append-system-prompt not in argv");
+        let prompt_val = &argv[prompt_idx + 1];
+        assert_eq!(
+            prompt_val,
+            "You are a test assistant.\nFollow instructions.",
+            "expected inline prompt, got: {prompt_val}"
+        );
+        assert!(
+            !prompt_val.starts_with("/tmp/"),
+            "looks like a temp file path: {prompt_val}"
+        );
+        assert!(
+            !prompt_val.starts_with("/var/"),
+            "looks like a temp file path (macOS tmpdir): {prompt_val}"
+        );
+    }
+
+    #[test]
+    fn argv_includes_model_when_specified() {
+        let mut req = make_test_request();
+        req.model = Some(ModelId("claude-sonnet-4-6".into()));
+        let argv = build_claude_argv(&req);
+        let i = argv
+            .iter()
+            .position(|a| a == "--model")
+            .expect("--model missing");
+        assert_eq!(argv[i + 1], "claude-sonnet-4-6");
+    }
+
+    #[test]
+    fn argv_omits_model_when_none() {
+        let mut req = make_test_request();
+        req.model = None;
+        let argv = build_claude_argv(&req);
+        assert!(
+            !argv.iter().any(|a| a == "--model"),
+            "argv should not contain --model when req.model is None"
+        );
+    }
+
+    #[test]
+    fn argv_joins_tools_with_comma() {
+        let mut req = make_test_request();
+        req.tools = vec![
+            ToolName("Read".into()),
+            ToolName("Edit".into()),
+            ToolName("Bash".into()),
+        ];
+        let argv = build_claude_argv(&req);
+        let i = argv
+            .iter()
+            .position(|a| a == "--allowed-tools")
+            .expect("--allowed-tools missing");
+        assert_eq!(argv[i + 1], "Read,Edit,Bash");
     }
 }
