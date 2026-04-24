@@ -135,6 +135,18 @@ impl Backend for ClaudeCodeBackend {
         // Stdin: user_context as bytes.
         let stdin_bytes = req.user_context.into_bytes();
 
+        // Honour the optional deadline: spawn a task that fires the cancel token
+        // after the timeout duration. If the run finishes first the token is
+        // already cancelled — a second cancel() on a CancellationToken is a no-op.
+        let start = tokio::time::Instant::now();
+        if let Some(deadline) = req.timeout {
+            let cancel_clone = req.cancel.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(deadline).await;
+                cancel_clone.cancel();
+            });
+        }
+
         // Run the subprocess.
         let run_outcome = self
             .runner
@@ -151,7 +163,12 @@ impl Backend for ClaudeCodeBackend {
             parse_stream(reader, event_sink, req.run_id.0, Some(req.step_id.0)).await?;
 
         // Determine status.
-        let (status, summary) = if run_outcome.was_cancelled {
+        // Distinguish timeout from external cancel: if a deadline was set and we
+        // reached or exceeded it, report "timeout" (spec §11.4 error code).
+        let timed_out = req.timeout.is_some_and(|t| start.elapsed() >= t);
+        let (status, summary) = if run_outcome.was_cancelled && timed_out {
+            (StepStatus::Failed, "timeout".to_string())
+        } else if run_outcome.was_cancelled {
             (StepStatus::Failed, "cancelled".to_string())
         } else if parse_outcome.saw_unrecoverable_error {
             let msg = parse_outcome

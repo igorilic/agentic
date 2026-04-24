@@ -9,11 +9,11 @@ mod unix_tests {
     use std::path::PathBuf;
     use std::time::Duration;
 
+    use agentic_core::Event;
     use agentic_core::backends::claude_code::ClaudeCodeBackend;
     use agentic_core::{
         Backend, ExecuteOutcome, ExecuteRequest, ModelId, RunId, StepId, StepStatus, WorkspaceRef,
     };
-    use agentic_core::Event;
     use tokio::sync::broadcast;
     use tokio_util::sync::CancellationToken;
 
@@ -24,8 +24,11 @@ mod unix_tests {
             .join(name)
     }
 
-    fn make_request(binary: PathBuf, cancel: CancellationToken) -> (ClaudeCodeBackend, ExecuteRequest) {
-        let backend = ClaudeCodeBackend::with_binary(binary);
+    fn make_request(
+        binary: PathBuf,
+        cancel: CancellationToken,
+    ) -> (ClaudeCodeBackend, ExecuteRequest) {
+        let backend = ClaudeCodeBackend::with_binary_and_grace(binary, Duration::from_millis(300));
         let req = ExecuteRequest {
             workspace: WorkspaceRef {
                 id: "ws-test".to_string(),
@@ -99,9 +102,7 @@ mod unix_tests {
             events.push(env.event);
         }
         assert!(
-            events
-                .iter()
-                .any(|e| matches!(e, Event::TextDelta { .. })),
+            events.iter().any(|e| matches!(e, Event::TextDelta { .. })),
             "expected at least one TextDelta event to be forwarded; got: {events:?}"
         );
     }
@@ -190,6 +191,44 @@ mod unix_tests {
         assert!(
             summary_lower.contains("cancelled") || summary_lower.contains("subprocess_killed"),
             "expected 'cancelled' or 'subprocess_killed' in summary, got: {:?}",
+            outcome.summary
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Timeout: req.timeout fires cancel token → Failed with "timeout" summary
+    // -----------------------------------------------------------------------
+
+    /// fake-claude-trap.sh traps SIGTERM and runs indefinitely.
+    /// Setting req.timeout to 200ms must cause execute() to return Failed with
+    /// "timeout" in the summary (spec §11.4 error code).
+    #[tokio::test]
+    async fn execute_respects_timeout_and_fails_with_timeout_summary() {
+        let binary = fixture_bin("fake-claude-trap.sh");
+        let cancel = CancellationToken::new();
+        let backend =
+            ClaudeCodeBackend::with_binary_and_grace(binary.clone(), Duration::from_millis(300));
+        let mut req = {
+            let (_ignored_backend, r) = make_request(binary, cancel);
+            r
+        };
+        req.timeout = Some(Duration::from_millis(200));
+
+        let (sink, _rx) = broadcast::channel(64);
+        let outcome = backend
+            .execute(req, sink)
+            .await
+            .expect("execute must return Ok even on timeout");
+
+        assert_eq!(
+            outcome.status,
+            StepStatus::Failed,
+            "expected Failed for timed-out run, got {:?}",
+            outcome.status
+        );
+        assert!(
+            outcome.summary.contains("timeout"),
+            "expected 'timeout' in summary, got: {}",
             outcome.summary
         );
     }
