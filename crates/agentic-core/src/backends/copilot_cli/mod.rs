@@ -332,7 +332,10 @@ mod tests {
     fn supported_models_returns_bundled_list() {
         let backend = CopilotCliBackend::from_env();
         let models = backend.supported_models();
-        assert!(!models.is_empty(), "supported_models should return bundled list");
+        assert!(
+            !models.is_empty(),
+            "supported_models should return bundled list"
+        );
         assert!(models.iter().any(|m| m.0 == "claude-opus-4.6"));
     }
 
