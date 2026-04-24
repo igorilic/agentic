@@ -106,6 +106,8 @@ async fn observer_captures_edit_tooluse_and_emits_filechange() {
 
     // Assert: stream_events has a FileChange row with distinct hashes.
     {
+        use agentic_core::Event;
+
         let conn = db.conn().unwrap();
         let count: i64 = conn
             .query_row(
@@ -119,37 +121,27 @@ async fn observer_captures_edit_tooluse_and_emits_filechange() {
             "stream_events should have at least one FileChange row; got {count}"
         );
 
-        // Verify before_hash != after_hash in the serialized payload.
-        let payload: String = conn
+        // Payload is MessagePack-encoded Event. Decode and check hashes differ.
+        let payload: Vec<u8> = conn
             .query_row(
                 "SELECT payload FROM stream_events WHERE event_type = 'FileChange' LIMIT 1",
                 [],
                 |r| r.get(0),
             )
             .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
-        let before_hash = v
-            .get("data")
-            .and_then(|d| d.get("before_hash"))
-            .and_then(|h| h.as_str())
-            .unwrap_or("");
-        let after_hash = v
-            .get("data")
-            .and_then(|d| d.get("after_hash"))
-            .and_then(|h| h.as_str())
-            .unwrap_or("");
-        assert_ne!(
-            before_hash, after_hash,
-            "before_hash and after_hash should differ; payload: {payload}"
-        );
-        assert!(
-            !before_hash.is_empty(),
-            "before_hash should not be empty; payload: {payload}"
-        );
-        assert!(
-            !after_hash.is_empty(),
-            "after_hash should not be empty; payload: {payload}"
-        );
+        let event: Event = rmp_serde::from_slice(&payload)
+            .expect("payload should decode as Event");
+        match event {
+            Event::FileChange { before_hash, after_hash, .. } => {
+                assert_ne!(
+                    before_hash, after_hash,
+                    "before_hash and after_hash should differ"
+                );
+                assert!(!before_hash.is_empty(), "before_hash should not be empty");
+                assert!(!after_hash.is_empty(), "after_hash should not be empty");
+            }
+            other => panic!("expected FileChange, got {other:?}"),
+        }
     }
 }
 
