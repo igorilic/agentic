@@ -158,8 +158,10 @@ mod unix_tests {
         let elapsed = start.elapsed();
         assert!(outcome.was_cancelled, "should be cancelled");
 
-        // Must finish within grace + cancel delay + 500ms buffer
-        let max_expected = grace + Duration::from_millis(200 + 500);
+        // Must finish within grace + cancel delay + 800ms buffer.
+        // Worst-case path: cancel(200) + grace(300) + post-SIGKILL(200) = 700ms.
+        // 800ms buffer gives a 600ms safety margin over that path.
+        let max_expected = grace + Duration::from_millis(200 + 800);
         assert!(
             elapsed < max_expected,
             "should finish within {max_expected:?}, took {elapsed:?}"

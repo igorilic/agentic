@@ -5,7 +5,7 @@
 //! stdin piping.  Cancellation is handled via a [`CancellationToken`]:
 //!
 //!   1. On cancel: send **SIGTERM** (Unix only) and wait up to `grace_duration`.
-//!   2. If still alive after grace: send **SIGKILL** and wait 500ms more.
+//!   2. If still alive after grace: send **SIGKILL** and wait 200ms more.
 //!
 //! The runner collects stdout as `Vec<String>` (one entry per non-empty line).
 //! Parser integration (step 6.3) will wire this into the stream parser.
@@ -172,26 +172,31 @@ async fn terminate_child(child: &mut tokio::process::Child, grace: Duration) {
     use nix::sys::signal::{Signal, killpg};
     use nix::unistd::Pid;
 
-    if let Some(pid) = child.id() {
-        // Kill the entire process group (negative PID) so sub-shells and their
-        // children (e.g., `sleep`) also receive the signal.
-        let pgid = Pid::from_raw(pid as i32);
+    // Capture PGID once before any wait() call — child.id() may return None
+    // after the child is reaped inside the grace-period timeout.
+    let pgid = child.id().map(|p| Pid::from_raw(p as i32));
+
+    if let Some(pgid) = pgid {
+        // Kill the entire process group so sub-shells and their children
+        // (e.g., `sleep`) also receive the signal.
         let _ = killpg(pgid, Signal::SIGTERM);
+    } else {
+        // Child already gone — nothing to signal.
+        return;
     }
 
     // Wait up to `grace` for voluntary exit after SIGTERM
     let exited = tokio::time::timeout(grace, child.wait()).await;
 
     if exited.is_err() {
-        // Grace period expired — escalate to SIGKILL on the whole group
-        if let Some(pid) = child.id() {
-            let pgid = Pid::from_raw(pid as i32);
-            use nix::sys::signal::killpg;
+        // Grace period expired — escalate to SIGKILL on the whole group.
+        // Re-use the PGID captured before the timeout (child.id() may be None now).
+        if let Some(pgid) = pgid {
             let _ = killpg(pgid, Signal::SIGKILL);
         }
         let _ = child.start_kill(); // also send to direct child just in case
-        // Give it 500ms to actually die after SIGKILL
-        let _ = tokio::time::timeout(Duration::from_millis(500), child.wait()).await;
+        // Give it 200ms to actually die after SIGKILL (kernel-level, very fast)
+        let _ = tokio::time::timeout(Duration::from_millis(200), child.wait()).await;
     }
 }
 
