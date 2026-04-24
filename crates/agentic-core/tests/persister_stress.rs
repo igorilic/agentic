@@ -182,3 +182,134 @@ async fn persister_writes_all_events_under_heavy_volume() {
     let step = steps_repo.get(&step_id).unwrap().unwrap();
     assert_eq!(step.status, StepStatus::Passed);
 }
+
+#[tokio::test]
+async fn persister_and_orchestrator_survive_interleaved_writes() {
+    init_tracing();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let paths = Paths::for_tests(tmp.path());
+    paths.ensure_dirs().unwrap();
+    let db = Db::open(&paths).expect("Db::open");
+    let bus = EventBus::new();
+
+    seed_workspace(&db, "ws-int");
+    let runs = RunRepo::new(&db);
+    let steps_repo = StepRepo::new(&db);
+    runs.insert(seed_run_running("run-int", "ws-int")).unwrap();
+
+    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone());
+    let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
+
+    // Simulate 3 sequential steps with real orchestrator + persister interleaving.
+    // Yield between every event so the orchestrator task has a chance to run
+    // concurrently with persister writes — approximating real-Claude async timing.
+    const STEPS: usize = 3;
+    const EVENTS_PER_STEP: usize = 500;
+
+    for step_idx in 0..STEPS {
+        let step_id = format!("step-int-{step_idx}");
+        steps_repo
+            .insert(agentic_core::Step {
+                id: step_id.clone(),
+                run_id: "run-int".to_string(),
+                seq: step_idx as i64,
+                agent_name: format!("agent-{step_idx}"),
+                status: StepStatus::Pending,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                token_usage: None,
+                cost_usd: None,
+                summary: None,
+                retry_count: 0,
+            })
+            .unwrap();
+
+        // StepStarted — orchestrator updates step row.
+        bus.publish(EventEnvelope::now(
+            "run-int".to_string(),
+            Some(step_id.clone()),
+            Event::StepStarted {
+                agent: format!("agent-{step_idx}"),
+                model: ModelId("fake".to_string()),
+            },
+        ));
+        tokio::task::yield_now().await;
+
+        for i in 0..EVENTS_PER_STEP {
+            bus.publish(EventEnvelope::now(
+                "run-int".to_string(),
+                Some(step_id.clone()),
+                Event::TextDelta {
+                    content: format!("chunk {i}"),
+                },
+            ));
+            if i % 50 == 0 {
+                tokio::task::yield_now().await;
+            }
+        }
+
+        bus.publish(EventEnvelope::now(
+            "run-int".to_string(),
+            Some(step_id.clone()),
+            Event::StepComplete {
+                status: StepStatus::Passed,
+                summary: "ok".to_string(),
+                token_usage: TokenUsage::default(),
+                cost_usd: None,
+                duration_ms: 50,
+            },
+        ));
+        tokio::task::yield_now().await;
+    }
+
+    bus.publish(EventEnvelope::now(
+        "run-int".to_string(),
+        None,
+        Event::RunComplete {
+            status: RunStatus::Completed,
+            duration_ms: 150,
+            summary: "done".to_string(),
+        },
+    ));
+
+    drop(bus);
+    let _ = tokio::time::timeout(Duration::from_secs(60), orch_handle)
+        .await
+        .expect("orch");
+    let _ = tokio::time::timeout(Duration::from_secs(60), pers_handle)
+        .await
+        .expect("pers");
+
+    // Assert ALL events persisted.
+    let conn = db.conn().unwrap();
+    let total: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM stream_events WHERE run_id = 'run-int'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let expected = (STEPS * (EVENTS_PER_STEP + 2) + 1) as i64; // +2 for StepStarted/Complete, +1 RunComplete
+    assert_eq!(
+        total,
+        expected,
+        "persister dropped events: got {total}, expected {expected}"
+    );
+
+    // Assert all step rows reached Passed.
+    for step_idx in 0..STEPS {
+        let step_id = format!("step-int-{step_idx}");
+        let step = steps_repo.get(&step_id).unwrap().unwrap();
+        assert_eq!(
+            step.status,
+            StepStatus::Passed,
+            "step {step_idx} not Passed (SQLITE_BUSY_SNAPSHOT dropped the transition?)"
+        );
+    }
+
+    // Assert run row reached Completed.
+    let run = runs.get("run-int").unwrap().unwrap();
+    assert_eq!(run.status, RunStatus::Completed);
+}
