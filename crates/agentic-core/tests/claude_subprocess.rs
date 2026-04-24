@@ -40,7 +40,11 @@ mod unix_tests {
 
         let outcome: RunOutcome = runner
             .run(
-                vec!["-p".to_string(), "--output-format".to_string(), "stream-json".to_string()],
+                vec![
+                    "-p".to_string(),
+                    "--output-format".to_string(),
+                    "stream-json".to_string(),
+                ],
                 HashMap::new(),
                 cwd,
                 stdin_bytes,
@@ -64,25 +68,25 @@ mod unix_tests {
         );
 
         // The three synthetic Claude stream events must follow
-        let types: Vec<&str> = outcome
+        let types: Vec<String> = outcome
             .stdout_lines
             .iter()
             .filter_map(|l| {
                 let v: serde_json::Value = serde_json::from_str(l).ok()?;
-                v.get("type")?.as_str().map(|s| s)
+                v.get("type")?.as_str().map(|s| s.to_owned())
             })
             .collect();
 
         assert!(
-            types.contains(&"message_start"),
+            types.iter().any(|t| t == "message_start"),
             "must contain message_start; got types: {types:?}"
         );
         assert!(
-            types.contains(&"content_block_delta"),
+            types.iter().any(|t| t == "content_block_delta"),
             "must contain content_block_delta; got types: {types:?}"
         );
         assert!(
-            types.contains(&"message_stop"),
+            types.iter().any(|t| t == "message_stop"),
             "must contain message_stop; got types: {types:?}"
         );
     }
@@ -111,13 +115,7 @@ mod unix_tests {
 
         let start = Instant::now();
         let outcome = runner
-            .run(
-                vec![],
-                HashMap::new(),
-                cwd,
-                vec![],
-                cancel,
-            )
+            .run(vec![], HashMap::new(), cwd, vec![], cancel)
             .await
             .expect("runner must return Ok even when cancelled");
 
@@ -141,10 +139,7 @@ mod unix_tests {
     async fn sigkill_escalation_after_grace_period() {
         // Short grace (300ms) so the test completes quickly
         let grace = Duration::from_millis(300);
-        let runner = ClaudeRunner::with_binary_and_grace(
-            fixture_bin("fake-claude-trap.sh"),
-            grace,
-        );
+        let runner = ClaudeRunner::with_binary_and_grace(fixture_bin("fake-claude-trap.sh"), grace);
         let cwd = std::env::temp_dir();
         let cancel = CancellationToken::new();
 
@@ -156,13 +151,7 @@ mod unix_tests {
 
         let start = Instant::now();
         let outcome = runner
-            .run(
-                vec![],
-                HashMap::new(),
-                cwd,
-                vec![],
-                cancel,
-            )
+            .run(vec![], HashMap::new(), cwd, vec![], cancel)
             .await
             .expect("runner must return Ok even when killed");
 

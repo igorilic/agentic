@@ -162,7 +162,10 @@ async fn bad_json_line_emits_protocol_error_and_continues() {
         "expected exactly 1 Error event from bad json, got: {events:?}"
     );
     assert_eq!(errors[0].0, "protocol_error");
-    assert!(errors[0].1, "protocol_error should be recoverable (parse hiccup, stream continues)");
+    assert!(
+        errors[0].1,
+        "protocol_error should be recoverable (parse hiccup, stream continues)"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +247,10 @@ async fn upstream_error_auth_failure_emits_nonrecoverable() {
         "expected exactly 1 Error event, got: {events:?}"
     );
     assert_eq!(errors[0].0, "authentication_error");
-    assert!(!errors[0].1, "authentication_error should be non-recoverable");
+    assert!(
+        !errors[0].1,
+        "authentication_error should be non-recoverable"
+    );
 }
 
 // ---------------------------------------------------------------------------
