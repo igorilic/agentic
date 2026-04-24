@@ -1,8 +1,9 @@
-//! Per-step observer that drives [`FileSnapshotter`] from `Edit`/`Write` tool-use events.
+//! Per-step observer that drives [`FileSnapshotter`] from `Edit`/`Write`/`MultiEdit`
+//! tool-use events.
 //!
 //! [`ToolUseObserver`] subscribes to the [`EventBus`], filters for
-//! `Event::ToolUseStart` events whose `tool_name` is `"Edit"` or `"Write"`,
-//! and captures the before-state of the referenced file via
+//! `Event::ToolUseStart` events whose `tool_name` is `"Edit"`, `"Write"`, or
+//! `"MultiEdit"`, and captures the before-state of the referenced file via
 //! [`FileSnapshotter::capture`]. After the step completes, call
 //! [`ToolUseObserverHandle::finalize_into`] to compute diffs, emit
 //! `Event::FileChange` events, and write `file_changes.diff`.
@@ -61,7 +62,7 @@ impl ToolUseObserver {
     /// after the step's backend has returned, or on any early-exit path.
     pub fn spawn(
         bus: &EventBus,
-        _run_id: String,
+        run_id: String,
         step_id: String,
         ws_root: PathBuf,
         stop: CancellationToken,
@@ -78,7 +79,7 @@ impl ToolUseObserver {
                     res = rx.recv() => {
                         match res {
                             Ok(envelope) => {
-                                handle_envelope(&mut snapshotter, &envelope, &step_id, &ws_root);
+                                handle_envelope(&mut snapshotter, &envelope, &run_id, &step_id, &ws_root);
                             }
                             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                             Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
@@ -94,19 +95,26 @@ impl ToolUseObserver {
 }
 
 /// Process one bus envelope: capture the before-state if this is an
-/// `Edit`/`Write` ToolUseStart for the observed step.
+/// `Edit`/`Write`/`MultiEdit` ToolUseStart for the observed `(run_id, step_id)` pair.
 fn handle_envelope(
     snapshotter: &mut FileSnapshotter,
     envelope: &EventEnvelope,
+    run_id: &str,
     step_id: &str,
     ws_root: &Path,
 ) {
+    // Filter by run_id (belt-and-suspenders: ULIDs make collisions unlikely
+    // but the contract should be enforced).
+    if envelope.run_id != run_id {
+        return;
+    }
+
     // Filter by step_id.
     if envelope.step_id.as_deref() != Some(step_id) {
         return;
     }
 
-    // Only act on ToolUseStart for Edit or Write tools.
+    // Only act on ToolUseStart for Edit, Write, or MultiEdit tools.
     let (tool_name, input) = match &envelope.event {
         Event::ToolUseStart {
             tool_name, input, ..
@@ -114,7 +122,7 @@ fn handle_envelope(
         _ => return,
     };
 
-    if tool_name != "Edit" && tool_name != "Write" {
+    if tool_name != "Edit" && tool_name != "Write" && tool_name != "MultiEdit" {
         return;
     }
 

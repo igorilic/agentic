@@ -3,7 +3,6 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use agentic_cli::ticket_run::{BackendFactory, PipelineRunContext, execute_pipeline};
 use agentic_core::backends::EventSink;
@@ -102,9 +101,11 @@ impl Backend for FileEditingBackend {
             },
         ));
 
-        // 4. Brief yield so the observer task processes ToolUseStart and
+        // 4. Yield to scheduler so the observer task processes ToolUseStart and
         //    captures the pre-state before we overwrite.
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
 
         // 5. Overwrite the file (simulates Claude writing the new content).
         std::fs::write(&greet_path, b"hello\n").unwrap();

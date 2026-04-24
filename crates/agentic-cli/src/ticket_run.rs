@@ -224,19 +224,20 @@ async fn execute_single_step<'a>(
     let backend = backend_factory(pipeline_step);
     let execute_result = backend.execute(req, bus.sender()).await;
 
-    // Stop observer and finalize in all paths.
+    // Stop observer and finalize on every path.
+    // Finalize errors are logged but must not mask the backend outcome.
     observer_stop.cancel();
-    let _report = observer
+    if let Err(e) = observer
         .finalize_into(&diff_path, &bus.sender(), run_id, &step_id)
         .await
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "file snapshot finalize failed for agent '{}': {}",
-                pipeline_step.agent,
-                e
-            )
-        })?;
-    tracing::debug!(run_id = run_id, step_id = %step_id, "file snapshot finalized");
+    {
+        tracing::warn!(
+            run_id = run_id,
+            step_id = %step_id,
+            error = %e,
+            "file snapshot finalize failed"
+        );
+    }
 
     let outcome = execute_result
         .map_err(|e| anyhow::anyhow!("backend error for agent '{}': {}", pipeline_step.agent, e))?;

@@ -4,13 +4,20 @@
 //!         emits a `FileChange` event after finalize.
 //! Test 2: observer ignores wrong tool names, wrong step ids, and missing
 //!         `file_path` keys.
-
-use std::time::Duration;
+//! Test 3: observer ignores envelopes from a different run_id.
 
 use agentic_core::{Db, Event, EventBus, EventEnvelope, EventPersister, Paths, ToolUseObserver};
 use serde_json::json;
 use tempfile::TempDir;
 use tokio_util::sync::CancellationToken;
+
+/// Yield to the scheduler `n` times to allow spawned tasks to make progress.
+/// More deterministic than `tokio::time::sleep` under CI load.
+async fn yield_many(n: usize) {
+    for _ in 0..n {
+        tokio::task::yield_now().await;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Test 1: captures Edit tool-use and emits FileChange
@@ -67,7 +74,7 @@ async fn observer_captures_edit_tooluse_and_emits_filechange() {
     ));
 
     // Give observer task time to process the envelope before mutating disk.
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    yield_many(10).await;
 
     // Simulate Claude's edit: overwrite foo.txt.
     std::fs::write(&foo_path, b"world\n").unwrap();
@@ -214,7 +221,7 @@ async fn observer_ignores_non_edit_tools_and_other_steps() {
     ));
 
     // Give observer time to process all envelopes.
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    yield_many(10).await;
 
     observer_stop.cancel();
     let report = observer
@@ -253,4 +260,80 @@ async fn observer_ignores_non_edit_tools_and_other_steps() {
             "should be no FileChange rows when all events were ignored"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Test 3: observer ignores envelopes from a different run_id (F4 guard)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn observer_ignores_envelopes_from_different_run() {
+    let tmp = TempDir::new().unwrap();
+    let base = tmp.path();
+
+    let ws_root = base.join("ws");
+    std::fs::create_dir_all(&ws_root).unwrap();
+    let baz_path = ws_root.join("baz.txt");
+    std::fs::write(&baz_path, b"original\n").unwrap();
+
+    let paths = Paths::for_tests(base);
+    paths.ensure_dirs().unwrap();
+    let db = Db::open(&paths).unwrap();
+
+    let diff_dir = base.join("diffs");
+    std::fs::create_dir_all(&diff_dir).unwrap();
+    let diff_path = diff_dir.join("file_changes.diff");
+
+    let bus = EventBus::new();
+    let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
+
+    // Observer is for run "r1", step "s1".
+    let observer_stop = CancellationToken::new();
+    let observer = ToolUseObserver::spawn(
+        &bus,
+        "r1".to_string(),
+        "s1".to_string(),
+        ws_root.clone(),
+        observer_stop.clone(),
+    );
+
+    // Publish ToolUseStart with the correct step_id but a DIFFERENT run_id ("r2").
+    // The observer must ignore this envelope.
+    bus.publish(EventEnvelope::now(
+        "r2".to_string(), // wrong run
+        Some("s1".to_string()),
+        Event::ToolUseStart {
+            tool_call_id: "t_wrong_run".to_string(),
+            tool_name: "Edit".to_string(),
+            input: json!({ "file_path": baz_path.to_string_lossy().as_ref() }),
+        },
+    ));
+
+    // Give observer time to process the envelope.
+    yield_many(10).await;
+
+    // Mutate the file — if capture ran, a diff would be produced.
+    std::fs::write(&baz_path, b"mutated\n").unwrap();
+
+    observer_stop.cancel();
+    let report = observer
+        .finalize_into(&diff_path, &bus.sender(), "r1", "s1")
+        .await
+        .expect("finalize_into should succeed");
+
+    drop(bus);
+    pers_handle.await.unwrap();
+
+    // Assert: no files captured because the envelope was from run "r2".
+    assert!(
+        report.changed_paths.is_empty(),
+        "changed_paths should be empty when envelope run_id differs; got: {:?}",
+        report.changed_paths
+    );
+
+    // Assert: no diff file written.
+    assert!(
+        !diff_path.exists(),
+        "diff_path should not exist when envelope was ignored due to run_id mismatch"
+    );
 }
