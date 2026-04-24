@@ -7,6 +7,7 @@
 //! Pricing is not yet available for Copilot (no equivalent to `pricing.rs`).
 //! `cost_usd` is always `None`. A pricing table can be added in a follow-up step.
 
+pub mod models;
 pub mod parser;
 pub mod runner;
 
@@ -85,8 +86,7 @@ impl Backend for CopilotCliBackend {
     }
 
     fn supported_models(&self) -> Vec<ModelId> {
-        // Step 7.4 will populate this via `copilot models list`.
-        vec![]
+        models::bundled_models()
     }
 
     async fn health_check(&self) -> Result<HealthStatus> {
@@ -329,12 +329,11 @@ mod tests {
     }
 
     #[test]
-    fn supported_models_returns_empty_for_now() {
+    fn supported_models_returns_bundled_list() {
         let backend = CopilotCliBackend::from_env();
-        assert!(
-            backend.supported_models().is_empty(),
-            "supported_models should be empty until step 7.4"
-        );
+        let models = backend.supported_models();
+        assert!(!models.is_empty(), "supported_models should return bundled list");
+        assert!(models.iter().any(|m| m.0 == "claude-opus-4.6"));
     }
 
     #[test]
