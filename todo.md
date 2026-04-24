@@ -864,7 +864,7 @@ Legend:
 
 ---
 
-### Step 6.4: File-snapshot diffing
+### Step 6.4: File-snapshot diffing [x]
 
 **Goal**: Before/after per step, walk affected paths (gathered from `Edit`/`Write` tool-use events), compute hashes, emit `FileChange`, and persist a unified-diff patch into `file_changes.diff`.
 
@@ -899,7 +899,7 @@ Legend:
 
 ## Phase 7 — Core: Copilot CLI backend adapter
 
-### Step 7.1: Copilot CLI probe + decision point
+### [x] Step 7.1: Copilot CLI probe + decision point
 
 **Goal**: Verify the current Copilot CLI JSON output schema (spec §25.1 explicitly defers this).
 
@@ -923,7 +923,7 @@ Legend:
 
 ---
 
-### Step 7.2: Copilot parser
+### Step 7.2: Copilot parser [x]
 
 **Goal**: Parse Copilot JSONL into core `Event`s.
 
@@ -941,7 +941,7 @@ Legend:
 
 ---
 
-### Step 7.3: Copilot subprocess runner + backend impl
+### [x] Step 7.3: Copilot subprocess runner + backend impl
 
 **Goal**: Analogous to Steps 6.2 + 6.3 for Copilot.
 
