@@ -187,7 +187,10 @@ mod unix_tests {
         let cwd = std::env::temp_dir();
 
         let start = Instant::now();
-        let StreamingRun { stdout, wait_handle } = runner
+        let StreamingRun {
+            stdout,
+            wait_handle,
+        } = runner
             .run_streaming(vec![], HashMap::new(), cwd, Vec::new(), cancel)
             .expect("run_streaming must not error on spawn");
 
@@ -216,11 +219,7 @@ mod unix_tests {
             .await
             .expect("wait_handle must not panic")
             .expect("wait_handle must return Ok");
-        assert_eq!(
-            wait_outcome.exit_code,
-            Some(0),
-            "subprocess should exit 0"
-        );
+        assert_eq!(wait_outcome.exit_code, Some(0), "subprocess should exit 0");
         assert!(!wait_outcome.was_cancelled, "should not be cancelled");
     }
 }

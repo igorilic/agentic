@@ -97,20 +97,81 @@ impl ClaudeRunner {
     /// passing it to the stream parser) and for awaiting
     /// `StreamingRun::wait_handle` to collect the exit outcome.
     ///
-    /// Stderr is drained to `/dev/null` internally so it never blocks the
-    /// subprocess.
+    /// Stderr is drained internally so it never blocks the subprocess.
     ///
     /// # Errors
     /// Returns `Err` if the subprocess cannot be spawned.
     pub fn run_streaming(
         &self,
-        _args: Vec<String>,
-        _env: HashMap<String, String>,
-        _cwd: PathBuf,
-        _stdin_bytes: Vec<u8>,
-        _cancel: CancellationToken,
+        args: Vec<String>,
+        env: HashMap<String, String>,
+        cwd: PathBuf,
+        stdin_bytes: Vec<u8>,
+        cancel: CancellationToken,
     ) -> Result<StreamingRun> {
-        todo!("run_streaming not yet implemented — RED phase stub")
+        let mut cmd = Command::new(&self.binary);
+        cmd.args(&args)
+            .current_dir(&cwd)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+
+        for (k, v) in &env {
+            cmd.env(k, v);
+        }
+
+        #[cfg(unix)]
+        cmd.process_group(0);
+
+        let mut child = cmd.spawn().map_err(|e| CoreError::Backend(e.to_string()))?;
+
+        // Take stdout before spawning tasks (must happen synchronously).
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| CoreError::Backend("no stdout handle".to_string()))?;
+
+        // Spawn task: write stdin bytes then drop the pipe so subprocess sees EOF.
+        if let Some(mut stdin_pipe) = child.stdin.take() {
+            tokio::spawn(async move {
+                let _ = stdin_pipe.write_all(&stdin_bytes).await;
+                // Drop closes the pipe.
+            });
+        }
+
+        // Spawn task: drain stderr so the subprocess never blocks on a full pipe.
+        if let Some(stderr) = child.stderr.take() {
+            tokio::spawn(async move {
+                use tokio::io::{AsyncBufReadExt, BufReader};
+                let mut lines = BufReader::new(stderr).lines();
+                while let Ok(Some(_)) = lines.next_line().await {}
+            });
+        }
+
+        let grace = self.grace_duration;
+
+        // Spawn wait task: handles cancellation + signal escalation.
+        let wait_handle = tokio::spawn(async move {
+            let (exit_code, was_cancelled) = tokio::select! {
+                status = child.wait() => {
+                    let code = status.ok().and_then(|s| s.code());
+                    (code, false)
+                },
+                _ = cancel.cancelled() => {
+                    terminate_child(&mut child, grace).await;
+                    (None, true)
+                },
+            };
+            Ok(WaitOutcome {
+                exit_code,
+                was_cancelled,
+            })
+        });
+
+        Ok(StreamingRun {
+            stdout,
+            wait_handle,
+        })
     }
 
     /// Run the subprocess, pipe `stdin_bytes` into its stdin, collect stdout.

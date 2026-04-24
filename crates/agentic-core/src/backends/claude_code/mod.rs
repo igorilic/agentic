@@ -8,7 +8,6 @@ pub mod pricing;
 pub mod runner;
 
 use std::collections::HashMap;
-use std::io::Cursor;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
@@ -18,12 +17,12 @@ use tokio_util::sync::CancellationToken;
 use crate::backends::{
     Backend, BackendId, EventSink, ExecuteOutcome, ExecuteRequest, HealthStatus, ModelId,
 };
-use crate::error::Result;
+use crate::error::{CoreError, Result};
 use crate::events::{Event, EventEnvelope, StepStatus};
 
 use self::parser::parse_stream;
 use self::pricing::pricing_for;
-use self::runner::ClaudeRunner;
+use self::runner::{ClaudeRunner, StreamingRun};
 
 /// Build argv for `claude` subprocess invocation.
 /// Does NOT include the binary itself (the runner prepends that).
@@ -160,24 +159,39 @@ impl Backend for ClaudeCodeBackend {
             });
         }
 
-        // Run the subprocess.
-        let run_outcome = self
+        // Spawn the subprocess and get a live stdout reader (streaming path).
+        // Stderr is drained inside run_streaming so the subprocess never blocks.
+        let StreamingRun {
+            stdout,
+            wait_handle,
+        } = self
             .runner
-            .run(args, HashMap::new(), req.cwd, stdin_bytes, req.cancel)
-            .await?;
+            .run_streaming(args, HashMap::new(), req.cwd, stdin_bytes, req.cancel)
+            .map_err(|e| CoreError::Backend(e.to_string()))?;
 
         // Capture run_id and step_id as strings before parse_stream takes ownership.
         let run_id_str = req.run_id.0.clone();
         let step_id_str = req.step_id.0.clone();
 
-        // Feed collected stdout lines through the parser.
-        // parse_stream takes ownership of event_sink; clone the sender first so
-        // we can emit StepComplete after parsing.
+        // Clone sink before parse_stream consumes it.
         let sink_for_complete = event_sink.clone();
-        let stdout = run_outcome.stdout_lines.join("\n");
-        let reader = BufReader::new(Cursor::new(stdout.into_bytes()));
-        let parse_outcome =
-            parse_stream(reader, event_sink, req.run_id.0, Some(req.step_id.0)).await?;
+
+        // Run parser and wait concurrently.
+        // parse_stream drains stdout live; wait_handle resolves once the subprocess exits.
+        // We use tokio::join! (not try_join!) so both futures always run to completion
+        // and we can handle their errors independently.
+        let reader = BufReader::new(stdout);
+        let (parse_result, wait_result) = tokio::join!(
+            parse_stream(reader, event_sink, req.run_id.0, Some(req.step_id.0)),
+            async {
+                wait_handle
+                    .await
+                    .map_err(|e| CoreError::Backend(format!("wait task panicked: {e}")))?
+            }
+        );
+
+        let parse_outcome = parse_result?;
+        let run_outcome = wait_result?;
 
         // Determine status.
         // Distinguish timeout from external cancel: if a deadline was set and we
