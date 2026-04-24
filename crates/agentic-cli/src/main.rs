@@ -1,16 +1,18 @@
 #![deny(unsafe_code)]
 
 use agentic_cli::doctor::{SystemWhichProbe, run_doctor};
+use agentic_cli::ticket_run::{BackendFactory, execute_pipeline};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use agentic_core::{
-    Backend, BackendId, Db, Event, EventBus, EventEnvelope, EventPersister, ExecuteRequest,
-    ModelId, Paths, PipelineOrchestrator, ProfileId, Run, RunId, RunRepo, RunStatus,
-    ScriptedBackend, Step, StepId, StepRepo, StepStatus, TicketKind, TicketRef, WorkspaceRef,
+    Backend, BackendId, ClaudeCodeBackend, Db, Event, EventBus, EventEnvelope, EventPersister,
+    ExecuteRequest, ModelId, Paths, PipelineConfig, PipelineOrchestrator, PipelineStep, ProfileId,
+    Run, RunId, RunRepo, RunStatus, ScriptedBackend, Step, StepId, StepRepo, StepStatus,
+    TicketKind, TicketRef, WorkspaceRef,
 };
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
 use tokio_util::sync::CancellationToken;
 
 #[derive(Parser, Debug)]
@@ -30,13 +32,26 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Run a scripted pipeline: load a JSON array of Events from `path` and
-    /// replay them through the orchestrator + persister, printing each
-    /// envelope as JSON-per-line to stdout.
+    /// Run a pipeline. Use --scripted for a JSON event replay, or --ticket
+    /// for a ticket-driven run using the claude-code backend.
+    #[command(group(
+        ArgGroup::new("source")
+            .required(true)
+            .multiple(false)
+            .args(["scripted", "ticket"])
+    ))]
     Run {
         /// Path to a JSON file containing a `[Event, Event, ...]` array.
         #[arg(long)]
-        scripted: PathBuf,
+        scripted: Option<PathBuf>,
+
+        /// Free-text ticket description to drive the default pipeline.
+        #[arg(long)]
+        ticket: Option<String>,
+
+        /// Override the model for all pipeline steps (requires --ticket).
+        #[arg(long, requires = "ticket")]
+        model: Option<String>,
     },
     /// Probe the environment for required tools. (Stub at Step 5.1;
     /// implemented in Step 5.2.)
@@ -68,7 +83,20 @@ async fn run_command(cli: Cli) -> Result<()> {
         .context("ensure data directory exists")?;
 
     match cli.command {
-        Command::Run { scripted } => cmd_run(&paths, &scripted).await,
+        Command::Run {
+            scripted: Some(path),
+            ticket: None,
+            model: None,
+        } => cmd_run(&paths, &path).await,
+        Command::Run {
+            scripted: None,
+            ticket: Some(ticket_text),
+            model,
+        } => cmd_run_ticket(&paths, ticket_text, model).await,
+        Command::Run { .. } => {
+            // clap ArgGroup ensures we can't get here; but the compiler needs exhaustiveness.
+            anyhow::bail!("run requires exactly one of --scripted or --ticket")
+        }
         Command::Doctor => cmd_doctor(),
         Command::Migrate => cmd_migrate(&paths).await,
     }
@@ -163,6 +191,109 @@ async fn cmd_run(paths: &Paths, script_path: &std::path::Path) -> Result<()> {
     pers_handle.await.context("persister task")?;
     printer_handle.abort();
     Ok(())
+}
+
+async fn cmd_run_ticket(
+    paths: &Paths,
+    ticket_text: String,
+    model_override: Option<String>,
+) -> Result<()> {
+    use rusqlite::params;
+
+    let db = Db::open(paths).context("open sqlite database")?;
+    let runs_repo = RunRepo::new(&db);
+    let steps_repo = StepRepo::new(&db);
+    let bus = EventBus::new();
+
+    // Use the process working directory as the workspace root so agent
+    // discovery can find `.agentic/agents/` relative to where the user
+    // invoked the CLI.
+    let ws_root = std::env::current_dir().context("determine working directory")?;
+    let ws_id = format!("ticket-ws-{}", ulid::Ulid::new().to_string().to_lowercase());
+    let run_id = ulid::Ulid::new().to_string().to_lowercase();
+
+    // Seed workspace row.
+    {
+        let conn = db.conn().context("get conn for seeding workspace")?;
+        conn.execute(
+            "INSERT OR IGNORE INTO workspaces \
+             (id, name, root_path, profile, created_at, last_opened) \
+             VALUES (?1, 'ticket-ws', ?2, 'custom', 0, 0)",
+            params![ws_id, ws_root.to_string_lossy().to_string()],
+        )?;
+    }
+
+    // Seed run row directly as Running (workaround for GH #17:
+    // Pending→Running transition is not fully wired in the orchestrator yet).
+    runs_repo.insert(Run {
+        id: run_id.clone(),
+        workspace_id: ws_id.clone(),
+        pipeline_name: "default".to_string(),
+        status: RunStatus::Running,
+        ticket_type: Some("free-text".to_string()),
+        ticket_ref: None,
+        ticket_title: None,
+        ticket_body: Some(ticket_text.clone()),
+        backend: "claude-code".to_string(),
+        model: model_override
+            .clone()
+            .unwrap_or_else(|| "default".to_string()),
+        started_at: 0,
+        completed_at: None,
+        duration_ms: None,
+        token_usage: None,
+        cost_usd: None,
+        summary: None,
+        subprocess_pid: None,
+    })?;
+
+    // Spawn orchestrator + persister.
+    let orch_handle =
+        PipelineOrchestrator::spawn(bus.clone(), runs_repo.clone(), steps_repo.clone());
+    let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
+
+    // JSON-stdout printer.
+    let mut printer_rx = bus.subscribe();
+    let printer_handle = tokio::spawn(async move {
+        while let Ok(envelope) = printer_rx.recv().await {
+            match serde_json::to_string(&envelope) {
+                Ok(line) => println!("{line}"),
+                Err(e) => eprintln!("printer: serialize failed: {e}"),
+            }
+        }
+    });
+
+    // Load default pipeline config (from .agentic/pipeline.toml or built-in).
+    let pipeline_config = PipelineConfig::load(&ws_root).context("load pipeline config")?;
+    let pipeline = pipeline_config.default_pipeline().clone();
+
+    let model_id = model_override.map(ModelId);
+
+    // Build backend factory: one ClaudeCodeBackend per step.
+    let factory: BackendFactory<'_> = Box::new(move |_step: &PipelineStep| -> Box<dyn Backend> {
+        Box::new(ClaudeCodeBackend::from_env())
+    });
+
+    let result = execute_pipeline(
+        &db,
+        &bus,
+        &run_id,
+        &ws_id,
+        &ws_root,
+        &pipeline,
+        &ticket_text,
+        model_id,
+        factory,
+    )
+    .await;
+
+    // Shut down cleanly.
+    drop(bus);
+    orch_handle.await.context("orchestrator task")?;
+    pers_handle.await.context("persister task")?;
+    printer_handle.abort();
+
+    result.context("pipeline execution failed")
 }
 
 fn cmd_doctor() -> Result<()> {

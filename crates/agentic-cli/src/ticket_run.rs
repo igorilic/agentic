@@ -23,6 +23,7 @@ pub type BackendFactory<'a> = Box<dyn Fn(&PipelineStep) -> Box<dyn Backend> + Se
 /// 4. If a step fails and `stop_on_failure` is set, returns `Err` immediately.
 ///
 /// After the loop, publishes `RunComplete { status: Completed }`.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_pipeline(
     db: &Db,
     bus: &EventBus,
