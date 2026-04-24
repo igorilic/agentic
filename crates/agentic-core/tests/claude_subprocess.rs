@@ -10,7 +10,8 @@ mod unix_tests {
     use std::path::PathBuf;
     use std::time::{Duration, Instant};
 
-    use agentic_core::backends::claude_code::runner::{ClaudeRunner, RunOutcome};
+    use agentic_core::backends::claude_code::runner::{ClaudeRunner, RunOutcome, StreamingRun};
+    use tokio::io::{AsyncBufReadExt, BufReader};
     use tokio_util::sync::CancellationToken;
 
     /// Return the absolute path to a named fixture in `tests/fixtures/bin/`.
@@ -166,5 +167,60 @@ mod unix_tests {
             elapsed < max_expected,
             "should finish within {max_expected:?}, took {elapsed:?}"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Streaming: run_streaming yields stdout BEFORE subprocess exits
+    // -----------------------------------------------------------------------
+
+    /// fake-claude-slow-stream.sh emits "line1", sleeps 2s, then "line2".
+    /// run_streaming must expose a live stdout reader so the first line is
+    /// readable well before the 2-second sleep completes (proving that we are
+    /// streaming, not buffering the full output).
+    #[tokio::test]
+    async fn run_streaming_yields_stdout_line_before_subprocess_exits() {
+        let runner = ClaudeRunner::with_binary_and_grace(
+            fixture_bin("fake-claude-slow-stream.sh"),
+            Duration::from_millis(300),
+        );
+        let cancel = CancellationToken::new();
+        let cwd = std::env::temp_dir();
+
+        let start = Instant::now();
+        let StreamingRun { stdout, wait_handle } = runner
+            .run_streaming(vec![], HashMap::new(), cwd, Vec::new(), cancel)
+            .expect("run_streaming must not error on spawn");
+
+        let mut reader = BufReader::new(stdout);
+        let mut first_line = String::new();
+        reader
+            .read_line(&mut first_line)
+            .await
+            .expect("must be able to read first line");
+
+        let elapsed = start.elapsed();
+
+        // The first line should arrive almost immediately (the script emits it
+        // before the 2-second sleep).  Allow up to 1 second for scheduler jitter.
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "first line should arrive before subprocess exits (streaming, not buffered); took {elapsed:?}"
+        );
+        assert!(
+            first_line.contains("line1"),
+            "first line should contain 'line1', got: {first_line:?}"
+        );
+
+        // Let the subprocess finish and verify clean exit.
+        let wait_outcome = wait_handle
+            .await
+            .expect("wait_handle must not panic")
+            .expect("wait_handle must return Ok");
+        assert_eq!(
+            wait_outcome.exit_code,
+            Some(0),
+            "subprocess should exit 0"
+        );
+        assert!(!wait_outcome.was_cancelled, "should not be cancelled");
     }
 }

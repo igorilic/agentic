@@ -35,6 +35,25 @@ pub struct RunOutcome {
     pub was_cancelled: bool,
 }
 
+/// Outcome returned by the wait handle of a streaming run.
+#[derive(Debug)]
+pub struct WaitOutcome {
+    /// Process exit code, or `None` if the process was killed before exiting.
+    pub exit_code: Option<i32>,
+    /// `true` when the run was terminated via the [`CancellationToken`].
+    pub was_cancelled: bool,
+}
+
+/// A live subprocess with an exposed stdout reader.
+/// Returned by [`ClaudeRunner::run_streaming`].
+pub struct StreamingRun {
+    /// Live stdout from the subprocess — pipe open until the subprocess exits.
+    pub stdout: tokio::process::ChildStdout,
+    /// Background task that handles cancellation/signal escalation and waits
+    /// for the subprocess to exit.
+    pub wait_handle: tokio::task::JoinHandle<Result<WaitOutcome>>,
+}
+
 /// Spawns and manages a Claude Code subprocess.
 #[derive(Debug, Clone)]
 pub struct ClaudeRunner {
@@ -70,6 +89,28 @@ impl ClaudeRunner {
             binary,
             grace_duration,
         }
+    }
+
+    /// Spawn the subprocess and return a live stdout reader plus a wait handle.
+    ///
+    /// The caller is responsible for draining `StreamingRun::stdout` (e.g. by
+    /// passing it to the stream parser) and for awaiting
+    /// `StreamingRun::wait_handle` to collect the exit outcome.
+    ///
+    /// Stderr is drained to `/dev/null` internally so it never blocks the
+    /// subprocess.
+    ///
+    /// # Errors
+    /// Returns `Err` if the subprocess cannot be spawned.
+    pub fn run_streaming(
+        &self,
+        _args: Vec<String>,
+        _env: HashMap<String, String>,
+        _cwd: PathBuf,
+        _stdin_bytes: Vec<u8>,
+        _cancel: CancellationToken,
+    ) -> Result<StreamingRun> {
+        todo!("run_streaming not yet implemented — RED phase stub")
     }
 
     /// Run the subprocess, pipe `stdin_bytes` into its stdin, collect stdout.
