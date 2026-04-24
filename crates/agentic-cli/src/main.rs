@@ -8,14 +8,31 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use agentic_core::{
-    Backend, BackendId, ClaudeCodeBackend, Db, Event, EventBus, EventEnvelope, EventPersister,
-    ExecuteRequest, ModelId, Paths, PipelineConfig, PipelineOrchestrator, PipelineStep, ProfileId,
-    Run, RunId, RunRepo, RunStatus, ScriptedBackend, Step, StepId, StepRepo, StepStatus,
-    TicketKind, TicketRef, WorkspaceRef,
+    Backend, BackendId, ClaudeCodeBackend, CopilotCliBackend, Db, Event, EventBus, EventEnvelope,
+    EventPersister, ExecuteRequest, ModelId, Paths, PipelineConfig, PipelineOrchestrator,
+    PipelineStep, ProfileId, Run, RunId, RunRepo, RunStatus, ScriptedBackend, Step, StepId,
+    StepRepo, StepStatus, TicketKind, TicketRef, WorkspaceRef,
 };
 use anyhow::{Context, Result};
-use clap::{ArgGroup, Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 use tokio_util::sync::CancellationToken;
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum BackendKind {
+    #[value(name = "claude-code")]
+    ClaudeCode,
+    #[value(name = "copilot-cli")]
+    CopilotCli,
+}
+
+impl BackendKind {
+    fn id_str(self) -> &'static str {
+        match self {
+            BackendKind::ClaudeCode => "claude-code",
+            BackendKind::CopilotCli => "copilot-cli",
+        }
+    }
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -54,6 +71,11 @@ enum Command {
         /// Override the model for all pipeline steps (requires --ticket).
         #[arg(long, requires = "ticket")]
         model: Option<String>,
+
+        /// Which backend to invoke for ticket-driven runs. Default: claude-code.
+        /// Only valid with --ticket.
+        #[arg(long, value_enum, default_value_t = BackendKind::ClaudeCode, requires = "ticket")]
+        backend: BackendKind,
     },
     /// Probe the environment for required tools. (Stub at Step 5.1;
     /// implemented in Step 5.2.)
@@ -95,14 +117,14 @@ async fn run_command(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Run {
             scripted: Some(path),
-            ticket: None,
-            model: None,
+            ..
         } => cmd_run(&paths, &path).await,
         Command::Run {
             scripted: None,
             ticket: Some(ticket_text),
             model,
-        } => cmd_run_ticket(&paths, ticket_text, model).await,
+            backend,
+        } => cmd_run_ticket(&paths, ticket_text, model, backend).await,
         Command::Run { .. } => {
             // clap ArgGroup ensures we can't get here; but the compiler needs exhaustiveness.
             anyhow::bail!("run requires exactly one of --scripted or --ticket")
@@ -226,6 +248,7 @@ async fn cmd_run_ticket(
     paths: &Paths,
     ticket_text: String,
     model_override: Option<String>,
+    backend_kind: BackendKind,
 ) -> Result<()> {
     use rusqlite::params;
 
@@ -265,7 +288,7 @@ async fn cmd_run_ticket(
         ticket_ref: None,
         ticket_title: None,
         ticket_body: Some(ticket_text.clone()),
-        backend: "claude-code".to_string(),
+        backend: backend_kind.id_str().to_string(),
         model: model_override
             .clone()
             .unwrap_or_else(|| "default".to_string()),
@@ -287,10 +310,15 @@ async fn cmd_run_ticket(
 
     let model_id = model_override.map(ModelId);
 
-    // Build backend factory: one ClaudeCodeBackend per step.
-    let factory: BackendFactory<'_> = Box::new(move |_step: &PipelineStep| -> Box<dyn Backend> {
-        Box::new(ClaudeCodeBackend::from_env())
-    });
+    // Build backend factory based on selected backend kind.
+    let factory: BackendFactory<'_> = match backend_kind {
+        BackendKind::ClaudeCode => Box::new(|_step: &PipelineStep| -> Box<dyn Backend> {
+            Box::new(ClaudeCodeBackend::from_env())
+        }),
+        BackendKind::CopilotCli => Box::new(|_step: &PipelineStep| -> Box<dyn Backend> {
+            Box::new(CopilotCliBackend::from_env())
+        }),
+    };
 
     let result = execute_pipeline(
         PipelineRunContext {
@@ -328,17 +356,6 @@ async fn cmd_migrate(paths: &Paths) -> Result<()> {
     let _db = Db::open(paths).context("run migrations")?;
     println!("migrate: database up to date");
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn backend_kind_id_str_matches_clap_value_name() {
-        assert_eq!(BackendKind::ClaudeCode.id_str(), "claude-code");
-        assert_eq!(BackendKind::CopilotCli.id_str(), "copilot-cli");
-    }
 }
 
 fn seed_minimal_run(db: &Db, runs: &RunRepo, steps: &StepRepo) -> Result<()> {
@@ -392,4 +409,15 @@ fn seed_minimal_run(db: &Db, runs: &RunRepo, steps: &StepRepo) -> Result<()> {
         })?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BackendKind;
+
+    #[test]
+    fn backend_kind_id_str_matches_clap_value_name() {
+        assert_eq!(BackendKind::ClaudeCode.id_str(), "claude-code");
+        assert_eq!(BackendKind::CopilotCli.id_str(), "copilot-cli");
+    }
 }

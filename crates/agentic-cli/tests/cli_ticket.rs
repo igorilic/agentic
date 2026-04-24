@@ -113,9 +113,18 @@ fn run_default_backend_is_claude_code_when_flag_omitted() {
         .output()
         .expect("spawn cli");
     let help = String::from_utf8_lossy(&output.stdout);
-    assert!(help.contains("--backend"), "--backend flag should appear in help");
-    assert!(help.contains("claude-code"), "claude-code should be a value");
-    assert!(help.contains("copilot-cli"), "copilot-cli should be a value");
+    assert!(
+        help.contains("--backend"),
+        "--backend flag should appear in help"
+    );
+    assert!(
+        help.contains("claude-code"),
+        "claude-code should be a value"
+    );
+    assert!(
+        help.contains("copilot-cli"),
+        "copilot-cli should be a value"
+    );
 }
 
 #[test]
