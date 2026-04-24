@@ -27,6 +27,7 @@ pub use paths::Paths;
 pub mod pipeline;
 pub use pipeline::{
     Pipeline, PipelineConfig, PipelineOrchestrator, PipelineSm, PipelineStep, SmInput,
+    ToolUseObserver, ToolUseObserverHandle,
 };
 pub mod db;
 pub use db::Db;

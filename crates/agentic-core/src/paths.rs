@@ -57,4 +57,29 @@ impl Paths {
         std::fs::create_dir_all(self.log_dir())?;
         Ok(())
     }
+
+    /// Path to the directory for a specific run: `<data_dir>/runs/<run_id>`.
+    pub fn run_dir(&self, run_id: &str) -> PathBuf {
+        self.data_root.join("runs").join(run_id)
+    }
+
+    /// Path to the directory for a specific step:
+    /// `<data_dir>/runs/<run_id>/step-<NN>-<agent>`.
+    /// `seq` is zero-padded to 2 digits.
+    pub fn step_dir(&self, run_id: &str, seq: usize, agent: &str) -> PathBuf {
+        self.run_dir(run_id)
+            .join(format!("step-{seq:02}-{agent}"))
+    }
+
+    /// Create the step directory (including all parents) and return its path.
+    pub fn ensure_step_dir(
+        &self,
+        run_id: &str,
+        seq: usize,
+        agent: &str,
+    ) -> std::io::Result<PathBuf> {
+        let p = self.step_dir(run_id, seq, agent);
+        std::fs::create_dir_all(&p)?;
+        Ok(p)
+    }
 }
