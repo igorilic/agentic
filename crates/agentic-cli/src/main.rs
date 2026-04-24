@@ -330,6 +330,17 @@ async fn cmd_migrate(paths: &Paths) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backend_kind_id_str_matches_clap_value_name() {
+        assert_eq!(BackendKind::ClaudeCode.id_str(), "claude-code");
+        assert_eq!(BackendKind::CopilotCli.id_str(), "copilot-cli");
+    }
+}
+
 fn seed_minimal_run(db: &Db, runs: &RunRepo, steps: &StepRepo) -> Result<()> {
     use rusqlite::params;
     // Workspace row (stream_events has no FK to workspaces, but runs.workspace_id does).
