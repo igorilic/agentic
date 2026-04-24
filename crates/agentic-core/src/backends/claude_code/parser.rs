@@ -34,6 +34,10 @@ use crate::time::now_ms;
 pub struct ParseOutcome {
     /// Accumulated token usage for this message.
     pub token_usage: TokenUsage,
+    /// `true` if at least one `Event::Error { recoverable: false }` was observed.
+    pub saw_unrecoverable_error: bool,
+    /// The message from the first non-recoverable error seen, if any.
+    pub error_message: Option<String>,
 }
 
 /// Parse a line-delimited Claude SDK event stream.
@@ -60,6 +64,17 @@ pub async fn parse_stream<R: AsyncBufRead + Unpin>(
             Ok(json) => {
                 let events = state.process_line(&json);
                 for event in events {
+                    // Track non-recoverable errors before forwarding.
+                    if let Event::Error {
+                        recoverable: false,
+                        ref message,
+                        ..
+                    } = event
+                        && !state.saw_unrecoverable_error
+                    {
+                        state.saw_unrecoverable_error = true;
+                        state.error_message = Some(message.clone());
+                    }
                     let envelope = EventEnvelope {
                         schema_version: CURRENT_SCHEMA_VERSION,
                         event_id: ulid::Ulid::new().to_string(),
@@ -94,6 +109,8 @@ pub async fn parse_stream<R: AsyncBufRead + Unpin>(
 
     Ok(ParseOutcome {
         token_usage: state.token_acc.finalize(),
+        saw_unrecoverable_error: state.saw_unrecoverable_error,
+        error_message: state.error_message,
     })
 }
 
@@ -150,6 +167,10 @@ struct ParserState {
     token_acc: TokenAccumulator,
     /// Present when we are inside a `tool_use` content block.
     current_tool: Option<ToolUseBlock>,
+    /// Set to `true` on the first non-recoverable `Error` event.
+    saw_unrecoverable_error: bool,
+    /// Error message from the first non-recoverable error, if any.
+    error_message: Option<String>,
 }
 
 impl ParserState {
@@ -159,6 +180,8 @@ impl ParserState {
             step_id,
             token_acc: TokenAccumulator::default(),
             current_tool: None,
+            saw_unrecoverable_error: false,
+            error_message: None,
         }
     }
 
