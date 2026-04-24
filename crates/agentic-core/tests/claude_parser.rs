@@ -34,24 +34,12 @@ async fn run_parser(bytes: Vec<u8>) -> (Vec<Event>, ParseOutcome) {
 }
 
 // ---------------------------------------------------------------------------
-// message_start — should produce NO core events
+// assistant_text — should emit exactly one TextDelta
 // ---------------------------------------------------------------------------
-#[tokio::test]
-async fn message_start_emits_no_events() {
-    let bytes = fixture("message_start.jsonl");
-    let (events, _outcome) = run_parser(bytes).await;
-    assert!(
-        events.is_empty(),
-        "expected no events for message_start, got: {events:?}"
-    );
-}
 
-// ---------------------------------------------------------------------------
-// text_delta — should emit 2× TextDelta
-// ---------------------------------------------------------------------------
 #[tokio::test]
-async fn text_delta_emits_two_text_delta_events() {
-    let bytes = fixture("text_delta.jsonl");
+async fn assistant_text_emits_one_text_delta() {
+    let bytes = fixture("assistant_text.jsonl");
     let (events, _outcome) = run_parser(bytes).await;
 
     let text_deltas: Vec<&str> = events
@@ -67,19 +55,41 @@ async fn text_delta_emits_two_text_delta_events() {
 
     assert_eq!(
         text_deltas.len(),
-        2,
-        "expected 2 TextDelta events, got: {events:?}"
+        1,
+        "expected exactly 1 TextDelta event, got: {events:?}"
     );
-    assert_eq!(text_deltas[0], "Hello, ");
-    assert_eq!(text_deltas[1], "world!");
+    assert_eq!(text_deltas[0], "Hello! How can I help you today?");
 }
 
 // ---------------------------------------------------------------------------
-// tool_use — should emit 1× ToolUseStart with correct id, name, and input
+// assistant_text — token usage is accumulated into ParseOutcome
 // ---------------------------------------------------------------------------
+
 #[tokio::test]
-async fn tool_use_emits_tool_use_start() {
-    let bytes = fixture("tool_use.jsonl");
+async fn assistant_usage_is_accumulated_into_parse_outcome() {
+    let bytes = fixture("assistant_text.jsonl");
+    let (_events, outcome) = run_parser(bytes).await;
+
+    let expected = TokenUsage {
+        input_tokens: 5,
+        output_tokens: 5,
+        cache_creation_input_tokens: 37438,
+        cache_read_input_tokens: 0,
+    };
+    assert_eq!(
+        outcome.token_usage, expected,
+        "token usage mismatch: got {:?}",
+        outcome.token_usage
+    );
+}
+
+// ---------------------------------------------------------------------------
+// assistant_with_tool_use — should emit exactly one ToolUseStart
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn tool_use_block_emits_tool_use_start() {
+    let bytes = fixture("assistant_with_tool_use.jsonl");
     let (events, _outcome) = run_parser(bytes).await;
 
     let tool_starts: Vec<_> = events
@@ -101,7 +111,7 @@ async fn tool_use_emits_tool_use_start() {
     assert_eq!(
         tool_starts.len(),
         1,
-        "expected 1 ToolUseStart event, got: {events:?}"
+        "expected exactly 1 ToolUseStart event, got: {events:?}"
     );
     let (id, name, input) = &tool_starts[0];
     assert_eq!(id, "toolu_01A09q90qw90lq917835lq9");
@@ -110,46 +120,30 @@ async fn tool_use_emits_tool_use_start() {
 }
 
 // ---------------------------------------------------------------------------
-// message_delta_usage — token accumulator reflects usage from message_start
-// and message_delta combined
+// tool_use_roundtrip — ToolUseStart then ToolUseEnd for the same tool_call_id
 // ---------------------------------------------------------------------------
-#[tokio::test]
-async fn message_delta_accumulates_token_usage() {
-    let bytes = fixture("message_delta_usage.jsonl");
-    let (_events, outcome) = run_parser(bytes).await;
 
-    // message_start gave input_tokens=100
-    // message_delta gave output_tokens=42, cache_read=20, cache_creation=5
-    let expected = TokenUsage {
-        input_tokens: 100,
-        output_tokens: 42,
-        cache_read_input_tokens: 20,
-        cache_creation_input_tokens: 5,
-    };
-    assert_eq!(
-        outcome.token_usage, expected,
-        "token usage mismatch: got {:?}",
-        outcome.token_usage
-    );
-}
-
-// ---------------------------------------------------------------------------
-// bad_json — parser emits exactly one Error event and then continues
-// (the final message_stop line still processes without panic)
-// ---------------------------------------------------------------------------
 #[tokio::test]
-async fn bad_json_line_emits_protocol_error_and_continues() {
-    let bytes = fixture("bad_json.jsonl");
+async fn tool_result_emits_tool_use_end() {
+    let bytes = fixture("tool_use_roundtrip.jsonl");
     let (events, _outcome) = run_parser(bytes).await;
 
-    let errors: Vec<_> = events
+    let start_ids: Vec<&str> = events
         .iter()
         .filter_map(|e| {
-            if let Event::Error {
-                code, recoverable, ..
-            } = e
-            {
-                Some((code.clone(), recoverable))
+            if let Event::ToolUseStart { tool_call_id, .. } = e {
+                Some(tool_call_id.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let end_ids: Vec<&str> = events
+        .iter()
+        .filter_map(|e| {
+            if let Event::ToolUseEnd { tool_call_id, .. } = e {
+                Some(tool_call_id.as_str())
             } else {
                 None
             }
@@ -157,37 +151,60 @@ async fn bad_json_line_emits_protocol_error_and_continues() {
         .collect();
 
     assert_eq!(
-        errors.len(),
+        start_ids.len(),
         1,
-        "expected exactly 1 Error event from bad json, got: {events:?}"
+        "expected exactly 1 ToolUseStart, got: {events:?}"
     );
-    assert_eq!(errors[0].0, "protocol_error");
+    assert_eq!(
+        end_ids.len(),
+        1,
+        "expected exactly 1 ToolUseEnd, got: {events:?}"
+    );
+    assert_eq!(
+        start_ids[0], end_ids[0],
+        "ToolUseStart and ToolUseEnd must share the same tool_call_id"
+    );
+    assert_eq!(start_ids[0], "toolu_roundtrip_01");
+}
+
+// ---------------------------------------------------------------------------
+// hooks_noise — hook lines are silently ignored; only assistant events appear
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn system_hooks_are_ignored() {
+    let bytes = fixture("hooks_noise.jsonl");
+    let (events, _outcome) = run_parser(bytes).await;
+
+    // No Error events should be emitted for hook lines
+    let errors: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, Event::Error { .. }))
+        .collect();
     assert!(
-        errors[0].1,
-        "protocol_error should be recoverable (parse hiccup, stream continues)"
+        errors.is_empty(),
+        "hook lines must not produce Error events, got: {errors:?}"
+    );
+
+    // The assistant text block should still be emitted
+    let text_deltas: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, Event::TextDelta { .. }))
+        .collect();
+    assert_eq!(
+        text_deltas.len(),
+        1,
+        "expected exactly 1 TextDelta (from assistant, not hooks), got: {events:?}"
     );
 }
 
 // ---------------------------------------------------------------------------
-// bad_json — parser continues after the bad line (no panic, outcome ok)
+// rate_limit — emits one recoverable Error with code "rate_limit_event"
 // ---------------------------------------------------------------------------
-#[tokio::test]
-async fn bad_json_parser_continues_after_error() {
-    let bytes = fixture("bad_json.jsonl");
-    // Just verifying parse_stream returns Ok (no panic/Err) after bad JSON.
-    let (sink, _rx) = tokio::sync::broadcast::channel(64);
-    let reader = BufReader::new(Cursor::new(bytes));
-    parse_stream(reader, sink, "run-x".to_string(), None)
-        .await
-        .expect("parse_stream should return Ok even when a line is bad JSON");
-}
 
-// ---------------------------------------------------------------------------
-// upstream_error — overloaded_error → recoverable=true, parsing continues
-// ---------------------------------------------------------------------------
 #[tokio::test]
-async fn upstream_error_event_emits_recoverable_error() {
-    let bytes = fixture("upstream_error.jsonl");
+async fn rate_limit_emits_recoverable_error() {
+    let bytes = fixture("rate_limit.jsonl");
     let (events, _outcome) = run_parser(bytes).await;
 
     let errors: Vec<_> = events
@@ -195,12 +212,11 @@ async fn upstream_error_event_emits_recoverable_error() {
         .filter_map(|e| {
             if let Event::Error {
                 code,
-                message,
                 recoverable,
-                retry_after_ms,
+                ..
             } = e
             {
-                Some((code.clone(), message.clone(), *recoverable, *retry_after_ms))
+                Some((code.clone(), *recoverable))
             } else {
                 None
             }
@@ -210,21 +226,22 @@ async fn upstream_error_event_emits_recoverable_error() {
     assert_eq!(
         errors.len(),
         1,
-        "expected exactly 1 Error event, got: {events:?}"
+        "expected exactly 1 Error event from rate_limit, got: {events:?}"
     );
-    let (code, message, recoverable, retry_after_ms) = &errors[0];
-    assert_eq!(code, "overloaded_error");
-    assert_eq!(message, "servers are busy");
-    assert!(recoverable, "overloaded_error should be recoverable");
-    assert_eq!(*retry_after_ms, None);
+    assert_eq!(errors[0].0, "rate_limit_event");
+    assert!(
+        errors[0].1,
+        "rate_limit_event must be recoverable"
+    );
 }
 
 // ---------------------------------------------------------------------------
-// upstream_error — authentication_error → recoverable=false
+// bad_json — parser emits exactly one protocol_error and then continues
 // ---------------------------------------------------------------------------
+
 #[tokio::test]
-async fn upstream_error_auth_failure_emits_nonrecoverable() {
-    let bytes = fixture("authentication_error.jsonl");
+async fn bad_json_line_emits_protocol_error_and_continues() {
+    let bytes = fixture("bad_json.jsonl");
     let (events, _outcome) = run_parser(bytes).await;
 
     let errors: Vec<_> = events
@@ -244,47 +261,37 @@ async fn upstream_error_auth_failure_emits_nonrecoverable() {
     assert_eq!(
         errors.len(),
         1,
-        "expected exactly 1 Error event, got: {events:?}"
+        "expected exactly 1 Error event from bad json, got: {events:?}"
     );
-    assert_eq!(errors[0].0, "authentication_error");
+    assert_eq!(errors[0].0, "protocol_error");
     assert!(
-        !errors[0].1,
-        "authentication_error should be non-recoverable"
+        errors[0].1,
+        "protocol_error should be recoverable (parse hiccup, stream continues)"
+    );
+
+    // Parser must have continued past the bad line — the assistant TextDelta
+    // that follows in the fixture must also be present.
+    let text_deltas: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, Event::TextDelta { .. }))
+        .collect();
+    assert_eq!(
+        text_deltas.len(),
+        1,
+        "expected a TextDelta after the bad line (parser must continue), got: {events:?}"
     );
 }
 
 // ---------------------------------------------------------------------------
-// upstream_error — rate_limit_error → recoverable=true, retry_after_ms set
+// bad_json — parser returns Ok even after encountering a bad line
 // ---------------------------------------------------------------------------
+
 #[tokio::test]
-async fn upstream_error_rate_limit_emits_retry_after() {
-    let bytes = fixture("rate_limit_error.jsonl");
-    let (events, _outcome) = run_parser(bytes).await;
-
-    let errors: Vec<_> = events
-        .iter()
-        .filter_map(|e| {
-            if let Event::Error {
-                code,
-                recoverable,
-                retry_after_ms,
-                ..
-            } = e
-            {
-                Some((code.clone(), *recoverable, *retry_after_ms))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    assert_eq!(
-        errors.len(),
-        1,
-        "expected exactly 1 Error event, got: {events:?}"
-    );
-    let (code, recoverable, retry_after_ms) = &errors[0];
-    assert_eq!(code, "rate_limit_error");
-    assert!(recoverable, "rate_limit_error should be recoverable");
-    assert_eq!(*retry_after_ms, Some(30_000));
+async fn bad_json_parser_continues_after_error() {
+    let bytes = fixture("bad_json.jsonl");
+    let (sink, _rx) = tokio::sync::broadcast::channel(64);
+    let reader = BufReader::new(Cursor::new(bytes));
+    parse_stream(reader, sink, "run-x".to_string(), None)
+        .await
+        .expect("parse_stream should return Ok even when a line is bad JSON");
 }

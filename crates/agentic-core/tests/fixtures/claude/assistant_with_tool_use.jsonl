@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","session_id":"sess_abc123","model":"claude-opus-4-7","cwd":"/tmp","tools":["Read"],"uuid":"init-uuid-001"}
+{"type":"assistant","message":{"model":"claude-opus-4-7","id":"msg_01abc","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"Read","input":{"file_path":"/etc/hosts"}}],"stop_reason":null,"usage":{"input_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":10}},"parent_tool_use_id":null,"session_id":"sess_abc123","uuid":"msg-uuid-002"}
+{"type":"result","subtype":"success","duration_ms":2000,"session_id":"sess_abc123"}

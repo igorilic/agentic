@@ -1,0 +1,6 @@
+{"type":"system","subtype":"hook_started","hook":"pre_tool","uuid":"hook-uuid-001"}
+{"type":"system","subtype":"hook_response","hook":"pre_tool","result":"ok","uuid":"hook-uuid-002"}
+{"type":"system","subtype":"hook_started","hook":"post_tool","uuid":"hook-uuid-003"}
+{"type":"system","subtype":"hook_response","hook":"post_tool","result":"ok","uuid":"hook-uuid-004"}
+{"type":"assistant","message":{"model":"claude-opus-4-7","id":"msg_01abc","type":"message","role":"assistant","content":[{"type":"text","text":"Hooks are just noise."}],"stop_reason":null,"usage":{"input_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5}},"parent_tool_use_id":null,"session_id":"sess_abc123","uuid":"msg-uuid-001"}
+{"type":"result","subtype":"success","duration_ms":500,"session_id":"sess_abc123"}

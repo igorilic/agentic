@@ -1,3 +1,4 @@
-{"type":"message_start","message":{"id":"msg_04bad","type":"message","role":"assistant","content":[],"model":"claude-opus-4-5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":0}}}
+{"type":"system","subtype":"init","session_id":"sess_abc123","model":"claude-opus-4-7","cwd":"/tmp","tools":[],"uuid":"init-uuid-001"}
 this is not valid json at all {{{
-{"type":"message_stop"}
+{"type":"assistant","message":{"model":"claude-opus-4-7","id":"msg_01abc","type":"message","role":"assistant","content":[{"type":"text","text":"Recovered after bad line."}],"stop_reason":null,"usage":{"input_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5}},"parent_tool_use_id":null,"session_id":"sess_abc123","uuid":"msg-uuid-001"}
+{"type":"result","subtype":"success","duration_ms":100,"session_id":"sess_abc123"}

@@ -1,0 +1,1 @@
+{"type":"system","subtype":"init","session_id":"sess_abc123","model":"claude-opus-4-7","cwd":"/tmp","tools":["Read","Write"],"uuid":"init-uuid-001"}
