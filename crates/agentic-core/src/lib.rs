@@ -7,6 +7,9 @@ pub mod events;
 #[cfg(any(test, feature = "testing"))]
 pub use backends::ScriptedBackend;
 pub use backends::claude_code::ClaudeCodeBackend;
+pub use backends::file_snapshots::{
+    FileSnapshotter, FileState, FinalizeReport, MAX_DIFF_FILE_SIZE, SkipReason,
+};
 pub use backends::{
     Backend, BackendId, EventSink, ExecuteOutcome, ExecuteRequest, HealthStatus, ModelId, RunId,
     StepId, TokenUsage, ToolName, WorkspaceRef,

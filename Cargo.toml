@@ -34,3 +34,4 @@ tokio-util = "0.7"
 clap = { version = "4", features = ["derive"] }
 tempfile = "3"
 which = "8"
+similar = "2"

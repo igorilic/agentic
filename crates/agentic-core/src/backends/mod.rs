@@ -4,6 +4,7 @@ pub mod scripted;
 pub use scripted::ScriptedBackend;
 
 pub mod claude_code;
+pub mod file_snapshots;
 
 use std::path::PathBuf;
 use std::time::Duration;

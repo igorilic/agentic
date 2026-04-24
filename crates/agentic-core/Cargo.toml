@@ -27,6 +27,7 @@ rmp-serde = { workspace = true }
 async-trait = { workspace = true }
 tokio-util = { workspace = true }
 tempfile = { workspace = true }
+similar = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.30", default-features = false, features = ["signal"] }
