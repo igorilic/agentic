@@ -37,6 +37,8 @@ pub use db::steps::{Step, StepRepo};
 pub use db::workspaces::{Workspace, WorkspaceRepo};
 pub mod settings;
 pub use settings::{EnvProvider, Key, MockEnv, RealEnv, Resolver, Setting, SettingsError, Source};
+pub mod ticket_sources;
+pub use ticket_sources::{FreeTextTicketSource, Ticket, TicketSource, TicketSourceError};
 mod time;
 
 /// The semver version string of the `agentic-core` crate.
