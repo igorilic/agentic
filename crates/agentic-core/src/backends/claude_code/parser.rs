@@ -76,6 +76,12 @@ pub async fn parse_stream<R: AsyncBufRead + Unpin>(
     run_id: String,
     step_id: Option<String>,
 ) -> Result<ParseOutcome> {
+    tracing::info!(
+        run_id = %run_id,
+        step_id = ?step_id,
+        "claude parser: starting stream parse"
+    );
+
     let mut token_usage = TokenUsage::default();
     let mut saw_unrecoverable_error = false;
     let mut error_message: Option<String> = None;
@@ -101,6 +107,11 @@ pub async fn parse_stream<R: AsyncBufRead + Unpin>(
                         saw_unrecoverable_error = true;
                         error_message = Some(message.clone());
                     }
+                    tracing::debug!(
+                        event_type = event_type_str(&event),
+                        tool_call_id = %tool_call_id_of(&event).unwrap_or(""),
+                        "claude parser: emitting event"
+                    );
                     send_event(&sink, &run_id, &step_id, event);
                 }
             }
@@ -212,6 +223,13 @@ fn dispatch_envelope(json: &Value, token_usage: &mut TokenUsage) -> Vec<Event> {
                 "init" => {
                     tracing::debug!(subtype = "init", "claude parser: session init");
                 }
+                "tools_updated" => {
+                    let model = json["model"].as_str().unwrap_or("<unknown>");
+                    tracing::info!(
+                        model = model,
+                        "claude parser: tools_updated — model identified"
+                    );
+                }
                 "hook_started" | "hook_response" => {
                     // Silently ignore hook lifecycle events.
                 }
@@ -230,6 +248,10 @@ fn dispatch_envelope(json: &Value, token_usage: &mut TokenUsage) -> Vec<Event> {
                     return vec![];
                 }
             };
+
+            if msg.content.is_empty() {
+                tracing::warn!("claude parser: assistant message has empty content[]");
+            }
 
             let mut events = Vec::new();
 
@@ -316,6 +338,37 @@ fn dispatch_envelope(json: &Value, token_usage: &mut TokenUsage) -> Vec<Event> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Return a short string name for the event variant, used in tracing.
+fn event_type_str(event: &Event) -> &'static str {
+    match event {
+        Event::RunStarted { .. } => "RunStarted",
+        Event::RunComplete { .. } => "RunComplete",
+        Event::StepStarted { .. } => "StepStarted",
+        Event::StepComplete { .. } => "StepComplete",
+        Event::TextDelta { .. } => "TextDelta",
+        Event::ThinkingDelta { .. } => "ThinkingDelta",
+        Event::ToolUseStart { .. } => "ToolUseStart",
+        Event::ToolUseDelta { .. } => "ToolUseDelta",
+        Event::ToolUseEnd { .. } => "ToolUseEnd",
+        Event::FileChange { .. } => "FileChange",
+        Event::Finding { .. } => "Finding",
+        Event::ClarifyingQuestion { .. } => "ClarifyingQuestion",
+        Event::RetryStarted { .. } => "RetryStarted",
+        Event::Error { .. } => "Error",
+        Event::UserActionNeeded { .. } => "UserActionNeeded",
+    }
+}
+
+/// Return the `tool_call_id` for events that carry one, otherwise `None`.
+fn tool_call_id_of(event: &Event) -> Option<&str> {
+    match event {
+        Event::ToolUseStart { tool_call_id, .. } => Some(tool_call_id.as_str()),
+        Event::ToolUseDelta { tool_call_id, .. } => Some(tool_call_id.as_str()),
+        Event::ToolUseEnd { tool_call_id, .. } => Some(tool_call_id.as_str()),
+        _ => None,
+    }
+}
 
 fn send_event(sink: &EventSink, run_id: &str, step_id: &Option<String>, event: Event) {
     let envelope = EventEnvelope {
