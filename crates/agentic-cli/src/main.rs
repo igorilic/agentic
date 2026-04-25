@@ -107,7 +107,7 @@ async fn main() -> ExitCode {
 
 async fn run_command(cli: Cli) -> Result<()> {
     let paths = match cli.data_dir {
-        Some(dir) => Paths::for_tests(&dir),
+        Some(dir) => Paths::with_root(&dir),
         None => Paths::from_os().context("resolve OS data directory")?,
     };
     paths

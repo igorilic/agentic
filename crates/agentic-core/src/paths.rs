@@ -21,6 +21,19 @@ impl Paths {
         })
     }
 
+    /// Production constructor for an explicit root path (e.g. `--data-dir`
+    /// CLI flag, Docker volume mount, CI override).
+    ///
+    /// `config_dir()` resolves to `root/config`, `data_dir()` to `root/data`.
+    /// Functionally identical to [`Paths::for_tests`]; the separate name
+    /// makes it clear this is a supported production path, not test scaffolding.
+    pub fn with_root(root: &Path) -> Self {
+        Self {
+            root: root.join("config"),
+            data_root: root.join("data"),
+        }
+    }
+
     /// Deterministic test-only constructor.
     /// `config_dir()` resolves to `base/config`, `data_dir()` to `base/data`.
     pub fn for_tests(base: &Path) -> Self {
