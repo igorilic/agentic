@@ -47,7 +47,7 @@ fn parse_ref(reference: &str) -> Result<(String, String, u64), TicketSourceError
     Ok((owner.to_string(), repo.to_string(), num))
 }
 
-fn parse_acceptance_criteria(body: &str) -> Option<String> {
+pub(crate) fn parse_acceptance_criteria(body: &str) -> Option<String> {
     let lines = body.lines();
     let mut found = false;
     let mut buf = String::new();

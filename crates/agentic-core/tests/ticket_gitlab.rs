@@ -1,5 +1,7 @@
 use agentic_core::events::{TicketKind, TicketRef};
-use agentic_core::ticket_sources::{GitlabAuth, GitlabTicketSource, TicketSource, TicketSourceError};
+use agentic_core::ticket_sources::{
+    GitlabAuth, GitlabTicketSource, TicketSource, TicketSourceError,
+};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 

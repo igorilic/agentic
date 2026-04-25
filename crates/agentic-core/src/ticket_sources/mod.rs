@@ -10,6 +10,9 @@ pub(crate) mod http;
 mod github;
 pub use github::GithubTicketSource;
 
+mod gitlab;
+pub use gitlab::{GitlabAuth, GitlabTicketSource};
+
 /// A fully-fetched ticket with body, comments, optional AC field, and URL.
 /// `TicketRef` (in events) is the lightweight pointer; `Ticket` is the
 /// content the pipeline consumes.
