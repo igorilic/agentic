@@ -50,6 +50,7 @@ pub use auth::{
     SecretStoreError, start_loopback,
 };
 pub use auth::{PkceChallenge, generate_state};
+pub use auth::{AccessToken, GithubOauthClient, GithubOauthError, validate_state};
 mod time;
 
 /// The semver version string of the `agentic-core` crate.
