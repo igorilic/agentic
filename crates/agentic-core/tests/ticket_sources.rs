@@ -12,7 +12,10 @@ fn make_ref(kind: TicketKind, reference: &str) -> TicketRef {
 #[tokio::test]
 async fn free_text_returns_body_as_is() {
     let src = FreeTextTicketSource;
-    let r = make_ref(TicketKind::FreeText, "create README.md\n\nWith hello world.");
+    let r = make_ref(
+        TicketKind::FreeText,
+        "create README.md\n\nWith hello world.",
+    );
     let ticket: Ticket = src.fetch(&r).await.unwrap();
     assert_eq!(ticket.body, "create README.md\n\nWith hello world.");
     assert!(ticket.comments.is_empty());
@@ -23,7 +26,10 @@ async fn free_text_returns_body_as_is() {
 #[tokio::test]
 async fn free_text_synthesizes_title_from_first_line() {
     let src = FreeTextTicketSource;
-    let r = make_ref(TicketKind::FreeText, "fix the bug in main.rs\n\nDetails follow.");
+    let r = make_ref(
+        TicketKind::FreeText,
+        "fix the bug in main.rs\n\nDetails follow.",
+    );
     let ticket = src.fetch(&r).await.unwrap();
     assert_eq!(ticket.title, "fix the bug in main.rs");
 }
