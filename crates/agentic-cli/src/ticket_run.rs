@@ -966,4 +966,149 @@ mod tests {
             "different paths should produce different workspace ids"
         );
     }
+
+    // -----------------------------------------------------------------------
+    // GH #34: execute_pipeline must publish RunStarted before any step runs.
+    // -----------------------------------------------------------------------
+
+    /// `execute_pipeline` must emit exactly one `RunStarted` event that is
+    /// persisted to `stream_events` before any step event.
+    #[tokio::test]
+    async fn execute_pipeline_publishes_run_started_event() {
+        let agent_names = ["architect", "tdd-developer", "qa", "reviewer"];
+        let (tmp, paths, db, bus, ws_id) = setup_workspace(&agent_names);
+        let ws_root = tmp.path().to_path_buf();
+
+        let run_id = "run-started-test-01";
+        seed_run(&db, run_id, &ws_id);
+
+        let orch_handle = agentic_core::PipelineOrchestrator::spawn(
+            bus.clone(),
+            RunRepo::new(&db),
+            StepRepo::new(&db),
+        );
+        let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
+
+        let pipeline = PipelineConfig::builtin_default();
+        let pipeline = pipeline.default_pipeline();
+
+        let result = execute_pipeline(
+            PipelineRunContext {
+                db: &db,
+                bus: &bus,
+                run_id,
+                ws_id: &ws_id,
+                ws_root: &ws_root,
+                ticket_text: "implement feature X",
+                model_override: None,
+                paths: &paths,
+            },
+            pipeline,
+            passing_factory(),
+        )
+        .await;
+
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+
+        drop(bus);
+        orch_handle.await.unwrap();
+        pers_handle.await.unwrap();
+
+        let conn = db.conn().unwrap();
+        let count_by_type = |event_type: &str| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM stream_events WHERE run_id = ?1 AND event_type = ?2",
+                params![run_id, event_type],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+
+        // GH #34: RunStarted must be present in the event log.
+        assert_eq!(
+            count_by_type("RunStarted"),
+            1,
+            "execute_pipeline must publish exactly one RunStarted event"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // GH #37: when execute_pipeline returns Err (non-stop_on_failure path),
+    // the run row must NOT stay at Running — a RunComplete(Failed) must be
+    // published so the orchestrator marks it Failed.
+    // -----------------------------------------------------------------------
+
+    /// When `execute_pipeline` errors on a non-stop_on_failure path (e.g.,
+    /// missing agent file), the run row must be `Failed` after the bus drains —
+    /// not stuck at `Running`.
+    #[tokio::test]
+    async fn execute_pipeline_missing_agent_marks_run_failed() {
+        // qa agent is missing so step 2 errors without stop_on_failure path.
+        let agent_names = ["architect", "tdd-developer", "reviewer"];
+        let (tmp, paths, db, bus, ws_id) = setup_workspace(&agent_names);
+        let ws_root = tmp.path().to_path_buf();
+
+        let run_id = "err-marks-failed-01";
+        seed_run(&db, run_id, &ws_id);
+
+        let orch_handle = agentic_core::PipelineOrchestrator::spawn(
+            bus.clone(),
+            RunRepo::new(&db),
+            StepRepo::new(&db),
+        );
+        let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
+
+        let factory: BackendFactory<'_> = Box::new(|_step: &PipelineStep| -> Box<dyn Backend> {
+            Box::new(ScriptedBackend::new(vec![
+                Event::StepStarted {
+                    agent: "test".to_string(),
+                    model: ModelId("fake".to_string()),
+                },
+                Event::StepComplete {
+                    status: StepStatus::Passed,
+                    summary: "ok".to_string(),
+                    token_usage: TokenUsage::default(),
+                    cost_usd: None,
+                    duration_ms: 50,
+                },
+            ]))
+        });
+
+        let pipeline = PipelineConfig::builtin_default();
+        let pipeline = pipeline.default_pipeline();
+
+        let result = execute_pipeline(
+            PipelineRunContext {
+                db: &db,
+                bus: &bus,
+                run_id,
+                ws_id: &ws_id,
+                ws_root: &ws_root,
+                ticket_text: "implement feature X",
+                model_override: None,
+                paths: &paths,
+            },
+            pipeline,
+            factory,
+        )
+        .await;
+
+        assert!(result.is_err(), "expected Err for missing agent");
+
+        // GH #37: publish the synthetic RunComplete(Failed) that the fix will add.
+        // After the fix lands in execute_pipeline, this will be published internally.
+        // For now this test asserts the DB state AFTER the fix publishes it.
+        drop(bus);
+        orch_handle.await.unwrap();
+        pers_handle.await.unwrap();
+
+        let runs_repo = RunRepo::new(&db);
+        let run = runs_repo.get(run_id).unwrap().unwrap();
+        assert_eq!(
+            run.status,
+            RunStatus::Failed,
+            "run must be Failed when execute_pipeline returns Err; was {:?}",
+            run.status
+        );
+    }
 }
