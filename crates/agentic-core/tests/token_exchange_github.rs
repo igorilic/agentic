@@ -12,7 +12,10 @@ async fn validate_state_accepts_match() {
 #[tokio::test]
 async fn validate_state_rejects_mismatch() {
     let result = validate_state("expected", "attacker");
-    assert!(matches!(result, Err(GithubOauthError::StateMismatch { .. })));
+    assert!(matches!(
+        result,
+        Err(GithubOauthError::StateMismatch { .. })
+    ));
 }
 
 #[tokio::test]
@@ -20,8 +23,14 @@ async fn validate_state_redacts_values_in_error() {
     let result = validate_state("expected", "attacker");
     let err = result.unwrap_err();
     let msg = format!("{err}");
-    assert!(!msg.contains("expected"), "error message should not leak expected: {msg}");
-    assert!(!msg.contains("attacker"), "error message should not leak actual: {msg}");
+    assert!(
+        !msg.contains("expected"),
+        "error message should not leak expected: {msg}"
+    );
+    assert!(
+        !msg.contains("attacker"),
+        "error message should not leak actual: {msg}"
+    );
 }
 
 #[tokio::test]
@@ -43,11 +52,21 @@ async fn exchange_code_returns_access_token_on_valid_response() {
         .await;
 
     let client = GithubOauthClient::new(server.uri(), "test-client-id", Some("test-secret".into()));
-    let token = client.exchange_code("auth_code_xyz", "verifier_abc", "http://127.0.0.1:8080/callback").await.unwrap();
+    let token = client
+        .exchange_code(
+            "auth_code_xyz",
+            "verifier_abc",
+            "http://127.0.0.1:8080/callback",
+        )
+        .await
+        .unwrap();
 
     assert_eq!(token.token, "gho_xxx");
     assert_eq!(token.token_type, "bearer");
-    assert_eq!(token.scopes, vec!["repo".to_string(), "read:user".to_string()]);
+    assert_eq!(
+        token.scopes,
+        vec!["repo".to_string(), "read:user".to_string()]
+    );
     assert_eq!(token.refresh_token.as_deref(), Some("ghr_yyy"));
     assert!(token.expires_at.is_some());
 }

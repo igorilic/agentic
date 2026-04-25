@@ -45,12 +45,12 @@ pub use ticket_sources::{
 pub mod auth;
 #[cfg(any(test, feature = "testing"))]
 pub use auth::MemSecretStore;
+pub use auth::{AccessToken, GithubOauthClient, GithubOauthError, validate_state};
 pub use auth::{
     CallbackQuery, KeyringSecretStore, LoopbackError, LoopbackListener, SecretStore,
     SecretStoreError, start_loopback,
 };
 pub use auth::{PkceChallenge, generate_state};
-pub use auth::{AccessToken, GithubOauthClient, GithubOauthError, validate_state};
 mod time;
 
 /// The semver version string of the `agentic-core` crate.
