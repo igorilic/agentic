@@ -28,6 +28,8 @@ async-trait = { workspace = true }
 tokio-util = { workspace = true }
 tempfile = { workspace = true }
 similar = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.30", default-features = false, features = ["signal"] }
@@ -38,3 +40,4 @@ serial_test = "3"
 tempfile = { workspace = true }
 proptest = { workspace = true }
 serde_json = { workspace = true }
+wiremock = { workspace = true }
