@@ -388,6 +388,89 @@ fn multi_file_diff_output_is_deterministic() {
 }
 
 // ---------------------------------------------------------------------------
+// Test 8: large file (>1 MiB) is hashed via stream without buffering all bytes
+//
+// Verifies:
+//  - FileChange event is still emitted with 64-char blake3 hashes.
+//  - skipped_paths records the file with SkipReason::TooLarge.
+//  - file_changes.diff does NOT exist (no diff content for large files).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn large_file_over_1mib_is_skipped_with_streamed_hash_and_no_diff() {
+    let dir = TempDir::new().unwrap();
+    let file_path = dir.path().join("large_file.bin");
+
+    // Write ~5 MiB of ASCII bytes so it's valid UTF-8 but larger than MAX_DIFF_FILE_SIZE.
+    // Using b'A' repeated makes it reproducible and avoids non-UTF-8 skip reason.
+    const FIVE_MIB: usize = 5 * 1024 * 1024;
+    let content: Vec<u8> = vec![b'A'; FIVE_MIB];
+    fs::write(&file_path, &content).unwrap();
+
+    let mut snapshotter = FileSnapshotter::new();
+    snapshotter.capture(&file_path).unwrap();
+
+    // Mutate: change one byte so before != after hashes.
+    let mut modified = content.clone();
+    modified[0] = b'B';
+    fs::write(&file_path, &modified).unwrap();
+
+    let diff_path = dir.path().join("file_changes.diff");
+    let (sink, mut rx) = make_sink();
+
+    let report = snapshotter
+        .finalize(&diff_path, &sink, "run-large", Some("step-large"))
+        .unwrap();
+
+    // FileChange event must be emitted with valid 64-char hashes.
+    let events = collect_file_change_events(&mut rx);
+    assert_eq!(
+        events.len(),
+        1,
+        "expected one FileChange event for large file"
+    );
+    let (_path, before_hash, after_hash) = &events[0];
+    assert_eq!(
+        before_hash.len(),
+        64,
+        "before_hash must be 64-char blake3 hex"
+    );
+    assert_eq!(
+        after_hash.len(),
+        64,
+        "after_hash must be 64-char blake3 hex"
+    );
+    assert_ne!(before_hash, after_hash, "hashes must differ after mutation");
+
+    // skipped_paths must contain the file with TooLarge reason.
+    let skip_entry = report
+        .skipped_paths
+        .iter()
+        .find(|(p, _)| p == Path::new(&file_path));
+    assert!(
+        skip_entry.is_some(),
+        "skipped_paths should include the large file"
+    );
+    assert!(
+        matches!(skip_entry.unwrap().1, SkipReason::TooLarge(_)),
+        "skip reason must be TooLarge, got: {:?}",
+        skip_entry.unwrap().1
+    );
+    if let SkipReason::TooLarge(reported_size) = skip_entry.unwrap().1 {
+        assert_eq!(
+            reported_size as usize, FIVE_MIB,
+            "TooLarge size must match file size"
+        );
+    }
+
+    // diff file must NOT be created (no diff content for large files).
+    assert!(
+        !diff_path.exists(),
+        "diff file should not be created for a large file with no other changes"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Test 7: modify diff contains valid unified-diff markers (patch-applicability)
 // ---------------------------------------------------------------------------
 

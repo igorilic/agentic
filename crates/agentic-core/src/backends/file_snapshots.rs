@@ -28,7 +28,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::Write as _;
+use std::io::{BufReader, Read as _, Write as _};
 use std::path::{Path, PathBuf};
 
 use similar::TextDiff;
@@ -187,16 +187,19 @@ fn read_file_state(path: &Path) -> std::io::Result<FileState> {
     match fs::metadata(path) {
         Ok(meta) => {
             let size = meta.len();
-            let bytes = fs::read(path)?;
 
+            // For files exceeding the diff size limit, stream-hash without
+            // loading the full contents into RAM. This avoids a 500 MB
+            // allocation before deciding to skip.
             if size > MAX_DIFF_FILE_SIZE {
-                let hash = blake3_hex(&bytes);
+                let hash = blake3_stream_hex(path)?;
                 return Ok(FileState::Skipped {
                     hash,
                     reason: SkipReason::TooLarge(size),
                 });
             }
 
+            let bytes = fs::read(path)?;
             match std::str::from_utf8(&bytes) {
                 Ok(text) => {
                     let hash = blake3_hex(&bytes);
@@ -221,6 +224,24 @@ fn read_file_state(path: &Path) -> std::io::Result<FileState> {
 
 fn blake3_hex(bytes: &[u8]) -> String {
     blake3::hash(bytes).to_hex().to_string()
+}
+
+/// Hash a file by streaming it through a [`blake3::Hasher`] in chunks.
+/// This avoids loading the entire file into memory, which is important for
+/// files larger than [`MAX_DIFF_FILE_SIZE`].
+fn blake3_stream_hex(path: &Path) -> std::io::Result<String> {
+    let file = fs::File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let mut hasher = blake3::Hasher::new();
+    let mut buf = [0u8; 65536]; // 64 KiB read buffer
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hasher.finalize().to_hex().to_string())
 }
 
 /// Return the hash string for a state, or `""` for `Absent`.
