@@ -42,6 +42,8 @@ pub use ticket_sources::{
     FreeTextTicketSource, GithubTicketSource, GitlabAuth, GitlabTicketSource, JiraTicketSource,
     Ticket, TicketComment, TicketSource, TicketSourceError,
 };
+pub mod auth;
+pub use auth::{KeyringSecretStore, MemSecretStore, SecretStore, SecretStoreError};
 mod time;
 
 /// The semver version string of the `agentic-core` crate.
