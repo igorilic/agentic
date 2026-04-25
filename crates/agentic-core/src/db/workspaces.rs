@@ -72,8 +72,13 @@ impl WorkspaceRepo {
              (id, name, root_path, remote_url, profile, created_at, last_opened) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
-                ws.id, ws.name, ws.root_path, ws.remote_url, ws.profile,
-                ws.created_at, ws.last_opened,
+                ws.id,
+                ws.name,
+                ws.root_path,
+                ws.remote_url,
+                ws.profile,
+                ws.created_at,
+                ws.last_opened,
             ],
         )?;
         Ok(ws)
