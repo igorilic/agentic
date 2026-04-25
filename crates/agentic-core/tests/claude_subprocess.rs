@@ -170,6 +170,52 @@ mod unix_tests {
     }
 
     // -----------------------------------------------------------------------
+    // #28 — missing binary returns Err
+    // -----------------------------------------------------------------------
+
+    /// Runner launched with a nonexistent binary path must return Err, not panic.
+    #[tokio::test]
+    async fn run_with_nonexistent_binary_returns_error() {
+        let runner = ClaudeRunner::with_binary(PathBuf::from("/nonexistent/bin/claude"));
+        let cancel = CancellationToken::new();
+        let result = runner
+            .run(vec![], HashMap::new(), std::env::temp_dir(), vec![], cancel)
+            .await;
+        assert!(result.is_err(), "nonexistent binary must return Err");
+    }
+
+    // -----------------------------------------------------------------------
+    // #31 — pre-cancel returns immediately
+    // -----------------------------------------------------------------------
+
+    /// Token cancelled before run() is called. The runner must return Ok quickly
+    /// (cancelled outcome) without blocking.
+    #[tokio::test]
+    async fn pre_cancelled_token_returns_cancelled_outcome() {
+        let runner = ClaudeRunner::with_binary_and_grace(
+            fixture_bin("fake-claude-long.sh"),
+            Duration::from_millis(300),
+        );
+        let cancel = CancellationToken::new();
+        // Cancel BEFORE calling run.
+        cancel.cancel();
+        let start = Instant::now();
+        let outcome = runner
+            .run(vec![], HashMap::new(), std::env::temp_dir(), vec![], cancel)
+            .await
+            .expect("pre-cancelled run must still return Ok");
+        let elapsed = start.elapsed();
+        assert!(
+            outcome.was_cancelled,
+            "expected was_cancelled=true for pre-cancelled token"
+        );
+        assert!(
+            elapsed < Duration::from_millis(2000),
+            "pre-cancelled run should complete quickly, took {elapsed:?}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
     // Streaming: run_streaming yields stdout BEFORE subprocess exits
     // -----------------------------------------------------------------------
 

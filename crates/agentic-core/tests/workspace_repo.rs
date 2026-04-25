@@ -1,5 +1,10 @@
 use agentic_core::{Db, Paths, Workspace, WorkspaceRepo};
 
+fn in_memory_repo() -> WorkspaceRepo {
+    let db = Db::open_in_memory().expect("in-memory Db");
+    WorkspaceRepo::new(&db)
+}
+
 fn setup() -> (tempfile::TempDir, WorkspaceRepo) {
     let tmp = tempfile::tempdir().unwrap();
     let paths = Paths::for_tests(tmp.path());
@@ -70,6 +75,31 @@ fn touch_updates_last_opened() {
         "expected last_opened to increase after touch: {} -> {}",
         before.last_opened,
         after.last_opened
+    );
+}
+
+// #9 — list_recent LIMIT clause is exercised
+#[test]
+fn list_recent_respects_limit() {
+    let repo = in_memory_repo();
+    for i in 0..5u64 {
+        repo.insert(sample(&format!("ws-{i}"), &format!("w{i}"), i as i64))
+            .unwrap();
+    }
+    let recent = repo.list_recent(3).expect("list_recent");
+    assert_eq!(recent.len(), 3, "expected exactly 3 results with limit=3");
+    // Newest first (ws-4 has last_opened=4, the highest)
+    assert_eq!(recent[0].id, "ws-4", "first result should be newest");
+}
+
+// #10 — touch on unknown id is a silent no-op
+#[test]
+fn touch_on_unknown_id_is_silent_no_op() {
+    let repo = in_memory_repo();
+    let result = repo.touch("does-not-exist");
+    assert!(
+        result.is_ok(),
+        "touch on unknown id must return Ok, got: {result:?}"
     );
 }
 

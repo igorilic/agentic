@@ -121,6 +121,81 @@ fn cancel_during_any_running_step_yields_cancelled() {
     assert!(result.is_err(), "terminal state must reject further input");
 }
 
+// #16 — Crash input transitions to Crashed and emits RunComplete{Crashed}
+#[test]
+fn crash_during_running_yields_crashed() {
+    let mut sm = default_sm();
+    sm.handle(start_input()).expect("start");
+    assert_eq!(sm.state(), RunStatus::Running);
+
+    let events = sm.handle(SmInput::Crash).expect("crash");
+    assert_eq!(sm.state(), RunStatus::Crashed);
+    assert!(
+        events.iter().any(|e| matches!(
+            e,
+            Event::RunComplete {
+                status: RunStatus::Crashed,
+                ..
+            }
+        )),
+        "expected RunComplete{{Crashed}} event"
+    );
+    // Terminal: further input must error.
+    assert!(sm.handle(SmInput::StepPassed).is_err());
+}
+
+// #16 — StepSkipped advances to next step without failing
+#[test]
+fn step_skipped_advances_to_next_step() {
+    let mut sm = default_sm();
+    sm.handle(start_input()).expect("start"); // architect running
+
+    let events = sm.handle(SmInput::StepSkipped).expect("skip architect");
+    // Should advance to tdd-developer
+    assert_eq!(sm.state(), RunStatus::Running);
+    assert!(
+        events.iter().any(|e| matches!(
+            e,
+            Event::StepComplete {
+                status: StepStatus::Skipped,
+                ..
+            }
+        )),
+        "expected StepComplete{{Skipped}}"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, Event::StepStarted { agent, .. } if agent == "tdd-developer")),
+        "expected StepStarted for tdd-developer after skip"
+    );
+}
+
+// #16 — non-qa step with stop_on_failure=true fails → RunStatus::Failed
+#[test]
+fn non_qa_step_stop_on_failure_yields_failed() {
+    // In the default pipeline, architect has stop_on_failure=true.
+    let mut sm = default_sm();
+    sm.handle(start_input()).expect("start"); // architect running
+
+    let events = sm.handle(SmInput::StepFailed).expect("architect failed");
+    assert_eq!(
+        sm.state(),
+        RunStatus::Failed,
+        "stop_on_failure=true step failure should set run to Failed"
+    );
+    assert!(
+        events.iter().any(|e| matches!(
+            e,
+            Event::RunComplete {
+                status: RunStatus::Failed,
+                ..
+            }
+        )),
+        "expected RunComplete{{Failed}}"
+    );
+}
+
 proptest! {
     #[test]
     fn sm_invariants_hold_over_random_input_sequences(

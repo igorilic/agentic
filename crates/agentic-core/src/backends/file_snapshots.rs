@@ -74,24 +74,35 @@ pub struct FinalizeReport {
 /// Records before-states of filesystem paths, then after mutations are applied,
 /// computes diffs and emits [`Event::FileChange`] events.
 pub struct FileSnapshotter {
-    /// Workspace root — not used for path logic but kept for context.
-    #[allow(dead_code)]
-    root: PathBuf,
     before: HashMap<PathBuf, FileState>,
 }
 
+impl Default for FileSnapshotter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FileSnapshotter {
-    /// Create a new snapshotter rooted at `root`.
-    pub fn new(root: PathBuf) -> Self {
+    /// Create a new snapshotter. Paths are tracked absolutely and are not
+    /// restricted to any workspace root.
+    pub fn new() -> Self {
         Self {
-            root,
             before: HashMap::new(),
         }
     }
 
     /// Capture the current on-disk state of `path` as the "before" snapshot.
     /// Call this **before** mutations are applied to the path.
+    ///
+    /// **Idempotent**: if `path` has already been captured in this snapshotter
+    /// session, this call is a no-op. The first-captured state is preserved so
+    /// that repeated `ToolUseStart` events for the same file do not overwrite
+    /// the genuine pre-edit snapshot with an intermediate state.
     pub fn capture(&mut self, path: &Path) -> std::io::Result<()> {
+        if self.before.contains_key(path) {
+            return Ok(());
+        }
         let state = read_file_state(path)?;
         self.before.insert(path.to_path_buf(), state);
         Ok(())

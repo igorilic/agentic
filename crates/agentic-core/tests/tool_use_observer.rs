@@ -583,6 +583,181 @@ async fn observer_ignores_copilot_view_tool_use() {
 }
 
 // ---------------------------------------------------------------------------
+// #35 Test 8: duplicate ToolUseStart for same file — idempotent capture
+// ---------------------------------------------------------------------------
+//
+// Same file sent via ToolUseStart twice before any mutation. The snapshotter
+// must only capture the FIRST pre-state (subsequent calls are no-ops for
+// already-captured paths). The final hash should reflect the state at first
+// capture, not an intermediate state.
+
+#[tokio::test]
+async fn observer_captures_pre_state_only_once_for_duplicate_tooluse() {
+    let setup = TestSetup::new();
+    let foo_path = setup.ws_root.join("dup.txt");
+    std::fs::write(&foo_path, b"original\n").unwrap();
+
+    let pers_handle = EventPersister::spawn(setup.bus.subscribe(), setup.db.clone());
+
+    let observer_stop = CancellationToken::new();
+    let observer = ToolUseObserver::spawn(
+        &setup.bus,
+        "r1".to_string(),
+        "s1".to_string(),
+        setup.ws_root.clone(),
+        observer_stop.clone(),
+    );
+
+    // First ToolUseStart — captures "original" as the before-state.
+    setup.bus.publish(EventEnvelope::now(
+        "r1".to_string(),
+        Some("s1".to_string()),
+        Event::ToolUseStart {
+            tool_call_id: "t1".to_string(),
+            tool_name: "Edit".to_string(),
+            input: json!({
+                "file_path": foo_path.to_string_lossy().as_ref(),
+                "old_string": "original",
+                "new_string": "intermediate"
+            }),
+        },
+    ));
+
+    yield_many(10).await;
+
+    // Mutate the file between two ToolUseStart events.
+    std::fs::write(&foo_path, b"intermediate\n").unwrap();
+
+    // Second ToolUseStart for the same file — must not re-capture (idempotent).
+    setup.bus.publish(EventEnvelope::now(
+        "r1".to_string(),
+        Some("s1".to_string()),
+        Event::ToolUseStart {
+            tool_call_id: "t2".to_string(),
+            tool_name: "Edit".to_string(),
+            input: json!({
+                "file_path": foo_path.to_string_lossy().as_ref(),
+                "old_string": "intermediate",
+                "new_string": "final"
+            }),
+        },
+    ));
+
+    yield_many(10).await;
+
+    // Final mutation.
+    std::fs::write(&foo_path, b"final\n").unwrap();
+
+    observer_stop.cancel();
+    let report = observer
+        .finalize_into(&setup.diff_path, &setup.bus.sender(), "r1", "s1")
+        .await
+        .expect("finalize_into should succeed");
+
+    drop(setup.bus);
+    pers_handle.await.unwrap();
+
+    // File changed (original → final), so it should be in changed_paths.
+    assert!(
+        report.changed_paths.iter().any(|p| p == &foo_path),
+        "changed_paths should include dup.txt; got: {:?}",
+        report.changed_paths
+    );
+
+    // Verify the FileChange event's before_hash reflects the FIRST-captured state.
+    let conn = setup.db.conn().unwrap();
+    let payload: Vec<u8> = conn
+        .query_row(
+            "SELECT payload FROM stream_events WHERE event_type = 'FileChange' LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let event: agentic_core::Event =
+        rmp_serde::from_slice(&payload).expect("payload should decode");
+    match event {
+        agentic_core::Event::FileChange {
+            before_hash,
+            after_hash,
+            ..
+        } => {
+            assert_ne!(
+                before_hash, after_hash,
+                "before and after hashes must differ"
+            );
+            // before_hash encodes "original\n" content — must NOT equal the
+            // "intermediate\n" hash, proving the second ToolUseStart didn't re-capture.
+            let intermediate_hash = blake3::hash(b"intermediate\n").to_hex().to_string();
+            assert_ne!(
+                before_hash, intermediate_hash,
+                "before_hash must reflect first-captured state, not intermediate"
+            );
+        }
+        other => panic!("expected FileChange, got {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// #35 Test 9: absolute path outside ws_root is accepted and captured
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn observer_captures_absolute_path_outside_workspace() {
+    let setup = TestSetup::new();
+
+    // A file in a completely separate temp dir (outside ws_root).
+    let outside_tmp = tempfile::TempDir::new().unwrap();
+    let outside_path = outside_tmp.path().join("outside.txt");
+    std::fs::write(&outside_path, b"outside content\n").unwrap();
+
+    let pers_handle = EventPersister::spawn(setup.bus.subscribe(), setup.db.clone());
+
+    let observer_stop = CancellationToken::new();
+    let observer = ToolUseObserver::spawn(
+        &setup.bus,
+        "r1".to_string(),
+        "s1".to_string(),
+        setup.ws_root.clone(),
+        observer_stop.clone(),
+    );
+
+    setup.bus.publish(EventEnvelope::now(
+        "r1".to_string(),
+        Some("s1".to_string()),
+        Event::ToolUseStart {
+            tool_call_id: "t_outside".to_string(),
+            tool_name: "Edit".to_string(),
+            input: json!({
+                "file_path": outside_path.to_string_lossy().as_ref(),
+                "old_string": "outside content",
+                "new_string": "changed"
+            }),
+        },
+    ));
+
+    yield_many(10).await;
+
+    // Mutate the outside file.
+    std::fs::write(&outside_path, b"changed\n").unwrap();
+
+    observer_stop.cancel();
+    let report = observer
+        .finalize_into(&setup.diff_path, &setup.bus.sender(), "r1", "s1")
+        .await
+        .expect("finalize_into should succeed");
+
+    drop(setup.bus);
+    pers_handle.await.unwrap();
+
+    // Observer should have captured the outside path.
+    assert!(
+        report.changed_paths.iter().any(|p| p == &outside_path),
+        "changed_paths should include outside.txt; got: {:?}",
+        report.changed_paths
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Test 7: observer ignores Copilot `bash` tool-use (not supported per spec)
 // ---------------------------------------------------------------------------
 

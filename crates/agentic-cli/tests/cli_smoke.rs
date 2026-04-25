@@ -72,6 +72,29 @@ fn run_scripted_exits_0_and_emits_json_per_line() {
     }
 }
 
+// #22 — malformed JSON script exits non-zero
+#[test]
+fn run_scripted_malformed_json_exits_nonzero() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data_dir = tmp.path().join("data");
+    let script_path = tmp.path().join("bad.json");
+    std::fs::write(&script_path, b"{ this is not valid json !!!").unwrap();
+
+    let output = Command::new(cargo_bin())
+        .arg("--data-dir")
+        .arg(&data_dir)
+        .arg("run")
+        .arg("--scripted")
+        .arg(&script_path)
+        .output()
+        .expect("spawn");
+    assert!(
+        !output.status.success(),
+        "run --scripted with malformed JSON should exit non-zero; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[test]
 fn invalid_data_dir_exits_with_code_2() {
     // Use a path that can't be used as a data dir — a read-only device

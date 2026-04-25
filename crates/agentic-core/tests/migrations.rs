@@ -612,10 +612,13 @@ fn settings_scope_check_enforces_allowed_values() {
         "INSERT INTO settings (key, value, scope, updated_at) VALUES ('k2', '{}', 'workspace:abc123', 101)",
         [],
     ).expect("'workspace:abc123' scope must be accepted");
-    // Rejects arbitrary strings
-    for bad in ["invalid", "", "workspace", "workspace:"] {
+    // Rejects arbitrary strings — keys are enumerated to guarantee distinct PKs.
+    for (i, bad) in ["invalid", "", "workspace", "workspace:"]
+        .iter()
+        .enumerate()
+    {
         let result = conn.execute(
-            &format!("INSERT INTO settings (key, value, scope, updated_at) VALUES ('k-{bad}', '{{}}', '{bad}', 200)"),
+            &format!("INSERT INTO settings (key, value, scope, updated_at) VALUES ('k-bad-{i}', '{{}}', '{bad}', {i})"),
             [],
         );
         match result {

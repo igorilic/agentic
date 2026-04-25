@@ -34,3 +34,25 @@ fn result_alias_works() {
     }
     assert_eq!(ok().unwrap(), 42);
 }
+
+// #4 — CoreError::Other(anyhow) exposes .source() when the anyhow error wraps
+// a typed source via context(). A bare anyhow!("msg") has no inner source.
+#[test]
+fn other_variant_preserves_source_chain() {
+    use std::error::Error;
+    // Wrap a real typed error with context so there is a source chain.
+    let io_err = std::io::Error::other("root cause");
+    let with_context = anyhow::Error::new(io_err).context("outer context");
+    let err: CoreError = with_context.into();
+    assert!(
+        err.source().is_some(),
+        "Other variant should expose source when anyhow wraps a typed error; got: {err}"
+    );
+    let chain: Vec<String> = std::iter::successors(err.source(), |e| (*e).source())
+        .map(|e| e.to_string())
+        .collect();
+    assert!(
+        chain.iter().any(|s| s.contains("root cause")),
+        "source chain should contain 'root cause'; chain: {chain:?}"
+    );
+}

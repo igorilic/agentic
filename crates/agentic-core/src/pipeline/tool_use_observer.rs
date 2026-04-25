@@ -45,7 +45,7 @@ impl ToolUseObserverHandle {
             tracing::warn!(
                 "ToolUseObserver: done_rx dropped before sending snapshotter; using empty fallback"
             );
-            FileSnapshotter::new(PathBuf::new())
+            FileSnapshotter::new()
         });
 
         snapshotter.finalize(diff_path, sink, run_id, Some(step_id))
@@ -68,7 +68,7 @@ impl ToolUseObserver {
         stop: CancellationToken,
     ) -> ToolUseObserverHandle {
         let mut rx = bus.subscribe();
-        let snapshotter = FileSnapshotter::new(ws_root.clone());
+        let snapshotter = FileSnapshotter::new();
         let (done_tx, done_rx) = tokio::sync::oneshot::channel();
 
         let join = tokio::spawn(async move {

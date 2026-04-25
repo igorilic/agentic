@@ -51,6 +51,25 @@ pub struct ParseOutcome {
 /// Reads lines from `reader`, translates each JSON object into zero or more
 /// core [`Event`]s that are sent via `sink`, and returns a [`ParseOutcome`]
 /// with aggregated token usage on completion.
+///
+/// # Line-length assumption (GH #26)
+///
+/// Each line is read via [`tokio::io::AsyncBufReadExt::lines`], which allocates
+/// each line as a full `String` bounded only by available memory. There is no
+/// hard per-line size limit. Very long lines (e.g. base64-encoded file contents
+/// inline in a `ToolUse` block) will be fully buffered before dispatch.
+/// If this becomes a problem, a streaming NDJSON parser can be introduced at the
+/// protocol layer; the public API of this function would remain unchanged.
+///
+/// # Orphan-delta invariant (GH #25)
+///
+/// The previous SSE-based parser tracked `block_start` / `block_stop` pairing
+/// and had to handle orphaned partial deltas on subprocess kill. That invariant
+/// is **obsolete** after the Step-6.1 rewrite: the Claude CLI now emits
+/// complete, atomic JSON envelopes per line. A killed subprocess produces a
+/// partial line, which `serde_json::from_str` rejects, causing a single
+/// `Event::Error { code: "protocol_error" }` to be emitted. There is no delta
+/// state to orphan.
 pub async fn parse_stream<R: AsyncBufRead + Unpin>(
     reader: R,
     sink: EventSink,

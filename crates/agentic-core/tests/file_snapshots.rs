@@ -45,7 +45,7 @@ fn file_modified_emits_file_change_with_different_hashes() {
 
     fs::write(&file_path, b"original content").unwrap();
 
-    let mut snapshotter = FileSnapshotter::new(dir.path().to_path_buf());
+    let mut snapshotter = FileSnapshotter::new();
     snapshotter.capture(&file_path).unwrap();
 
     // Mutate after capture
@@ -94,7 +94,7 @@ fn file_created_emits_file_change_with_absent_before_hash() {
     let file_path = dir.path().join("new_file.txt");
 
     // Capture BEFORE the file exists
-    let mut snapshotter = FileSnapshotter::new(dir.path().to_path_buf());
+    let mut snapshotter = FileSnapshotter::new();
     snapshotter.capture(&file_path).unwrap();
 
     // Now create the file
@@ -148,7 +148,7 @@ fn file_deleted_emits_file_change_with_absent_after_hash() {
 
     fs::write(&file_path, b"will be deleted").unwrap();
 
-    let mut snapshotter = FileSnapshotter::new(dir.path().to_path_buf());
+    let mut snapshotter = FileSnapshotter::new();
     snapshotter.capture(&file_path).unwrap();
 
     // Delete after capture
@@ -203,7 +203,7 @@ fn binary_file_over_1mb_skipped_from_diff_but_hashed() {
     let big_content: Vec<u8> = vec![0xFF_u8; 1_572_864]; // 1.5 MB
     fs::write(&file_path, &big_content).unwrap();
 
-    let mut snapshotter = FileSnapshotter::new(dir.path().to_path_buf());
+    let mut snapshotter = FileSnapshotter::new();
     snapshotter.capture(&file_path).unwrap();
 
     // Mutate: write slightly different content
@@ -279,7 +279,7 @@ fn unchanged_file_does_not_emit_file_change() {
 
     fs::write(&file_path, b"same content").unwrap();
 
-    let mut snapshotter = FileSnapshotter::new(dir.path().to_path_buf());
+    let mut snapshotter = FileSnapshotter::new();
     snapshotter.capture(&file_path).unwrap();
 
     // No mutation — file stays the same
@@ -322,7 +322,7 @@ fn multi_file_diff_output_is_deterministic() {
     fs::write(&middle, b"middle original\n").unwrap();
 
     // First run: capture, mutate, finalize
-    let mut snap1 = FileSnapshotter::new(dir.path().to_path_buf());
+    let mut snap1 = FileSnapshotter::new();
     snap1.capture(&zebra).unwrap();
     snap1.capture(&alpha).unwrap();
     snap1.capture(&middle).unwrap();
@@ -343,7 +343,7 @@ fn multi_file_diff_output_is_deterministic() {
     fs::write(&middle, b"middle original\n").unwrap();
 
     // Second run (captures in different order to stress HashMap non-determinism)
-    let mut snap2 = FileSnapshotter::new(dir.path().to_path_buf());
+    let mut snap2 = FileSnapshotter::new();
     snap2.capture(&middle).unwrap();
     snap2.capture(&zebra).unwrap();
     snap2.capture(&alpha).unwrap();
@@ -398,7 +398,7 @@ fn modify_diff_contains_unified_diff_markers() {
 
     fs::write(&file_path, b"line one\nline two\nline three\n").unwrap();
 
-    let mut snapshotter = FileSnapshotter::new(dir.path().to_path_buf());
+    let mut snapshotter = FileSnapshotter::new();
     snapshotter.capture(&file_path).unwrap();
 
     fs::write(&file_path, b"line one\nline two modified\nline three\n").unwrap();
