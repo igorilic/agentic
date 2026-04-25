@@ -6,7 +6,11 @@ use agentic_core::auth::loopback::{CallbackQuery, LoopbackError, start};
 async fn port_is_in_ephemeral_range() {
     let listener = start(Duration::from_secs(5)).await.unwrap();
     assert!(listener.port > 1024, "port {} is not > 1024", listener.port);
-    assert!(listener.port < 65535, "port {} is not < 65535", listener.port);
+    assert!(
+        listener.port < 65535,
+        "port {} is not < 65535",
+        listener.port
+    );
     listener.callback.abort();
 }
 
