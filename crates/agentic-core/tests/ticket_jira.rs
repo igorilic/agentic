@@ -88,12 +88,7 @@ async fn fetch_uses_ac_custom_field_when_configured() {
         .mount(&server)
         .await;
 
-    let src = JiraTicketSource::new(
-        server.uri(),
-        "u",
-        "t",
-        Some("customfield_10100".into()),
-    );
+    let src = JiraTicketSource::new(server.uri(), "u", "t", Some("customfield_10100".into()));
     let r = jira_ref("PROJ-2");
     let ticket = src.fetch(&r).await.unwrap();
     assert_eq!(ticket.ac_field.as_deref(), Some("AC from custom field."));
@@ -128,12 +123,7 @@ async fn fetch_returns_no_ac_when_custom_field_absent_from_response() {
         .mount(&server)
         .await;
 
-    let src = JiraTicketSource::new(
-        server.uri(),
-        "u",
-        "t",
-        Some("customfield_10100".into()),
-    );
+    let src = JiraTicketSource::new(server.uri(), "u", "t", Some("customfield_10100".into()));
     let r = jira_ref("PROJ-3");
     let ticket = src.fetch(&r).await.unwrap();
     assert!(
@@ -165,12 +155,12 @@ async fn fetch_returns_not_found_on_404() {
 async fn fetch_returns_auth_error_on_401() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/issue/PROJ-4B"))
+        .and(path("/issue/PROJ-401"))
         .respond_with(ResponseTemplate::new(401))
         .mount(&server)
         .await;
     let src = JiraTicketSource::new(server.uri(), "u", "bad-token", None);
-    let r = jira_ref("PROJ-4B");
+    let r = jira_ref("PROJ-401");
     let err = src.fetch(&r).await.unwrap_err();
     assert!(
         matches!(err, TicketSourceError::Auth { .. }),

@@ -38,3 +38,4 @@ similar = "2"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 wiremock = "0.6"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+base64 = "0.22"
