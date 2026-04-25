@@ -1,4 +1,6 @@
+#[cfg(any(test, feature = "testing"))]
 use std::collections::HashMap;
+#[cfg(any(test, feature = "testing"))]
 use std::sync::Mutex;
 
 #[derive(Debug, thiserror::Error)]
@@ -26,17 +28,20 @@ pub trait SecretStore: Send + Sync {
 }
 
 /// In-memory secret store for tests and fixtures. Thread-safe via Mutex.
+#[cfg(any(test, feature = "testing"))]
 #[derive(Debug, Default)]
 pub struct MemSecretStore {
     inner: Mutex<HashMap<String, String>>,
 }
 
+#[cfg(any(test, feature = "testing"))]
 impl MemSecretStore {
     pub fn new() -> Self {
         Self::default()
     }
 }
 
+#[cfg(any(test, feature = "testing"))]
 impl SecretStore for MemSecretStore {
     fn get(&self, key: &str) -> Result<String, SecretStoreError> {
         let map = self.inner.lock().map_err(|_| SecretStoreError::Lock)?;

@@ -43,7 +43,9 @@ pub use ticket_sources::{
     Ticket, TicketComment, TicketSource, TicketSourceError,
 };
 pub mod auth;
-pub use auth::{KeyringSecretStore, MemSecretStore, SecretStore, SecretStoreError};
+#[cfg(any(test, feature = "testing"))]
+pub use auth::MemSecretStore;
+pub use auth::{KeyringSecretStore, SecretStore, SecretStoreError};
 mod time;
 
 /// The semver version string of the `agentic-core` crate.

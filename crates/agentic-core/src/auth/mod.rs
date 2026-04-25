@@ -1,3 +1,5 @@
 pub mod secrets;
 
-pub use secrets::{KeyringSecretStore, MemSecretStore, SecretStore, SecretStoreError};
+#[cfg(any(test, feature = "testing"))]
+pub use secrets::MemSecretStore;
+pub use secrets::{KeyringSecretStore, SecretStore, SecretStoreError};
