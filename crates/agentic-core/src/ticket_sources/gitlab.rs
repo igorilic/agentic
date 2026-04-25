@@ -79,9 +79,8 @@ fn url_encode_path(path: &str) -> String {
 #[derive(serde::Deserialize)]
 struct GitlabIssueResponse {
     title: String,
-    /// `description` may be null for empty issues; default to "".
-    #[serde(default)]
-    description: String,
+    /// `description` may be null for empty issues; defaults to "".
+    description: Option<String>,
     web_url: String,
 }
 
@@ -159,11 +158,12 @@ impl TicketSource for GitlabTicketSource {
             _ => Vec::new(),
         };
 
-        let ac_field = parse_acceptance_criteria(&issue.description);
+        let description = issue.description.unwrap_or_default();
+        let ac_field = parse_acceptance_criteria(&description);
 
         Ok(Ticket {
             title: issue.title,
-            body: issue.description,
+            body: description,
             comments,
             ac_field,
             url: Some(issue.web_url),

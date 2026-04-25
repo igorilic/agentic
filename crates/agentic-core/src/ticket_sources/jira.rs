@@ -86,6 +86,13 @@ fn walk_adf(node: &serde_json::Value, out: &mut String) {
     }
 }
 
+fn browse_url(base_url: &str, key: &str) -> String {
+    let host = base_url
+        .trim_end_matches("/rest/api/3")
+        .trim_end_matches("/rest/api/2");
+    format!("{host}/browse/{key}")
+}
+
 fn parse_jira_datetime(s: &str) -> i64 {
     // Jira format: "2026-04-24T10:00:00.000+0000"
     chrono::DateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.3f%z")
@@ -198,7 +205,7 @@ impl TicketSource for JiraTicketSource {
             })
             .unwrap_or_default();
 
-        let url_str = raw.get("self").and_then(|v| v.as_str()).map(String::from);
+        let url_str = Some(browse_url(&self.base_url, key));
 
         Ok(Ticket {
             title,

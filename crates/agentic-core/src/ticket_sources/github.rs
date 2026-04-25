@@ -53,7 +53,8 @@ pub(crate) fn parse_acceptance_criteria(body: &str) -> Option<String> {
     let mut buf = String::new();
     for line in lines {
         if !found {
-            if line.trim_start().starts_with("##")
+            let trimmed = line.trim_start();
+            if trimmed.starts_with('#')
                 && line
                     .trim_start_matches('#')
                     .trim()
@@ -86,7 +87,7 @@ fn parse_iso8601(s: &str) -> i64 {
 #[derive(serde::Deserialize)]
 struct GithubIssueResponse {
     title: String,
-    body: String,
+    body: Option<String>,
     html_url: String,
 }
 
@@ -174,11 +175,12 @@ impl TicketSource for GithubTicketSource {
             _ => Vec::new(),
         };
 
-        let ac_field = parse_acceptance_criteria(&issue.body);
+        let body = issue.body.unwrap_or_default();
+        let ac_field = parse_acceptance_criteria(&body);
 
         Ok(Ticket {
             title: issue.title,
-            body: issue.body,
+            body,
             comments,
             ac_field,
             url: Some(issue.html_url),

@@ -158,3 +158,29 @@ async fn fetch_rejects_non_gitlab_kind() {
         }
     ));
 }
+
+#[tokio::test]
+async fn fetch_handles_null_description() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/projects/g%2Fr/issues/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "title": "no description issue",
+            "description": null,
+            "web_url": "https://gitlab.com/g/r/-/issues/1"
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/projects/g%2Fr/issues/1/notes"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&server)
+        .await;
+
+    let src = GitlabTicketSource::new(server.uri(), "", GitlabAuth::PrivateToken);
+    let r = gitlab_ref("g/r#1");
+    let ticket = src.fetch(&r).await.unwrap();
+    assert_eq!(ticket.title, "no description issue");
+    assert_eq!(ticket.body, "");
+    assert!(ticket.ac_field.is_none());
+}

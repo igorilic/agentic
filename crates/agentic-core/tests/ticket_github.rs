@@ -34,7 +34,13 @@ async fn fetch_returns_parsed_ticket_on_200_ok() {
     let ticket = src.fetch(&r).await.unwrap();
     assert_eq!(ticket.title, "Add a feature");
     assert!(ticket.body.contains("Description here"));
-    assert!(ticket.ac_field.as_deref().unwrap().contains("Feature works"));
+    assert!(
+        ticket
+            .ac_field
+            .as_deref()
+            .unwrap()
+            .contains("Feature works")
+    );
     assert!(ticket.ac_field.as_deref().unwrap().contains("Tests pass"));
     assert!(!ticket.ac_field.as_deref().unwrap().contains("Notes"));
     assert_eq!(
@@ -157,4 +163,61 @@ async fn fetch_returns_parse_error_on_malformed_reference() {
     let r = github_ref("not-a-valid-ref");
     let err = src.fetch(&r).await.unwrap_err();
     assert!(matches!(err, TicketSourceError::Parse { .. }));
+}
+
+#[tokio::test]
+async fn fetch_handles_null_body() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/repos/o/r/issues/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "title": "no body issue",
+            "body": null,
+            "html_url": "https://github.com/o/r/issues/1"
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/repos/o/r/issues/1/comments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&server)
+        .await;
+
+    let src = GithubTicketSource::new(server.uri(), "");
+    let r = github_ref("o/r#1");
+    let ticket = src.fetch(&r).await.unwrap();
+    assert_eq!(ticket.title, "no body issue");
+    assert_eq!(ticket.body, "");
+    assert!(ticket.ac_field.is_none());
+}
+
+#[tokio::test]
+async fn fetch_parses_h1_acceptance_criteria() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/repos/o/r/issues/2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "title": "h1 ac test",
+            "body": "Description.\n\n# Acceptance Criteria\n- [ ] Must work\n\n# Notes\nIgnored.",
+            "html_url": "https://github.com/o/r/issues/2"
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/repos/o/r/issues/2/comments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&server)
+        .await;
+
+    let src = GithubTicketSource::new(server.uri(), "");
+    let r = github_ref("o/r#2");
+    let ticket = src.fetch(&r).await.unwrap();
+    assert!(
+        ticket.ac_field.as_deref().unwrap().contains("Must work"),
+        "H1 Acceptance Criteria section should be parsed"
+    );
+    assert!(
+        !ticket.ac_field.as_deref().unwrap().contains("Ignored"),
+        "content after next H1 should not be included"
+    );
 }

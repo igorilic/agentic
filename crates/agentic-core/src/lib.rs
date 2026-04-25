@@ -38,7 +38,10 @@ pub use db::workspaces::{Workspace, WorkspaceRepo};
 pub mod settings;
 pub use settings::{EnvProvider, Key, MockEnv, RealEnv, Resolver, Setting, SettingsError, Source};
 pub mod ticket_sources;
-pub use ticket_sources::{FreeTextTicketSource, Ticket, TicketSource, TicketSourceError};
+pub use ticket_sources::{
+    FreeTextTicketSource, GithubTicketSource, GitlabAuth, GitlabTicketSource, JiraTicketSource,
+    Ticket, TicketComment, TicketSource, TicketSourceError,
+};
 mod time;
 
 /// The semver version string of the `agentic-core` crate.
