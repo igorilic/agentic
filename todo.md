@@ -982,7 +982,7 @@ Legend:
 
 ## Phase 8 — Core: ticket sources
 
-### Step 8.1: `TicketSource` trait
+### [x] Step 8.1: `TicketSource` trait
 
 **Goal**: Define the trait with `fetch(ref: &TicketRef) -> Result<Ticket>`; `Ticket` has title, body, comments, ac_field, url.
 
@@ -1002,7 +1002,7 @@ Legend:
 
 ---
 
-### Step 8.2: GitHub Issues ticket source (using wiremock)
+### Step 8.2: GitHub Issues ticket source (using wiremock) [x]
 
 **Goal**: Fetch an issue from github.com or GHES, including ACs parsed from body.
 
@@ -1028,7 +1028,7 @@ Legend:
 
 ---
 
-### Step 8.3: GitLab Issues ticket source
+### [x] Step 8.3: GitLab Issues ticket source
 
 **Goal**: Analogous to 8.2 for GitLab (cloud + self-hosted base URL).
 
@@ -1046,7 +1046,7 @@ Legend:
 
 ---
 
-### Step 8.4: Jira ticket source
+### [x] Step 8.4: Jira ticket source
 
 **Goal**: Fetch a Jira Cloud issue by key (e.g. `PROJ-123`). AC parsing reads the `customfield_*` for AC if configured, else the description.
 
