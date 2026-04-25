@@ -139,8 +139,8 @@ async fn run_command(cli: Cli) -> Result<()> {
 ///
 /// Returns `(orch_handle, pers_handle, printer_handle)`. Caller must:
 ///   1. Drop `bus` to signal shutdown.
-///   2. `.await` orch and pers handles for graceful drain.
-///   3. `.abort()` the printer handle (it loops until the channel closes).
+///   2. `.await` all three handles for graceful drain — the printer exits
+///      naturally when the broadcast channel closes (`RecvError::Closed`).
 fn spawn_infra(
     bus: &EventBus,
     db: &Db,
@@ -240,7 +240,7 @@ async fn cmd_run(paths: &Paths, script_path: &std::path::Path) -> Result<()> {
     drop(bus);
     orch_handle.await.context("orchestrator task")?;
     pers_handle.await.context("persister task")?;
-    printer_handle.abort();
+    printer_handle.await.context("printer task")?;
     Ok(())
 }
 
@@ -340,7 +340,7 @@ async fn cmd_run_ticket(
     drop(bus);
     orch_handle.await.context("orchestrator task")?;
     pers_handle.await.context("persister task")?;
-    printer_handle.abort();
+    printer_handle.await.context("printer task")?;
 
     result.context("pipeline execution failed")
 }

@@ -55,7 +55,6 @@ struct SingleStepCtx<'a> {
     model_override: Option<ModelId>,
     paths: &'a Paths,
     steps: &'a StepRepo,
-    run_start: &'a Instant,
 }
 
 /// Execute all steps in `pipeline` against `ctx.ticket_text`.
@@ -66,7 +65,8 @@ struct SingleStepCtx<'a> {
 /// 3. Builds an `ExecuteRequest` and calls `backend_factory(step).execute(req, sink)`.
 /// 4. If a step fails and `stop_on_failure` is set, returns `Err` immediately.
 ///
-/// After the loop, publishes `RunComplete { status: Completed }`.
+/// Publishes `RunStarted` before the first step, and `RunComplete` on both
+/// success and error paths so the run row is never left at `Running`.
 pub async fn execute_pipeline<'a>(
     ctx: PipelineRunContext<'a>,
     pipeline: &Pipeline,
@@ -86,37 +86,74 @@ pub async fn execute_pipeline<'a>(
     let steps = StepRepo::new(db);
     let run_start = Instant::now();
 
-    for (i, pipeline_step) in pipeline.steps.iter().enumerate() {
-        let step_ctx = SingleStepCtx {
-            bus,
-            run_id,
-            ws_id,
-            ws_root,
-            ticket_text,
-            model_override: model_override.clone(),
-            paths,
-            steps: &steps,
-            run_start: &run_start,
-        };
-        execute_single_step(step_ctx, pipeline_step, i, &backend_factory).await?;
-    }
-
-    // All steps completed; publish final RunComplete.
-    let elapsed_ms = run_start.elapsed().as_millis() as u64;
+    // GH #34: publish RunStarted before any step executes so the event log
+    // starts consistently in both ticket mode and scripted mode.
     bus.publish(EventEnvelope::now(
         run_id.to_string(),
         None,
-        Event::RunComplete {
-            status: RunStatus::Completed,
-            duration_ms: elapsed_ms,
-            summary: "ticket run complete".to_string(),
+        Event::RunStarted {
+            ticket: agentic_core::TicketRef {
+                kind: agentic_core::TicketKind::FreeText,
+                reference: ticket_text.to_string(),
+                title: None,
+            },
+            profile: agentic_core::ProfileId("default".to_string()),
+            backend: agentic_core::BackendId("ticket".to_string()),
+            model: model_override
+                .clone()
+                .unwrap_or_else(|| agentic_core::ModelId("unknown".to_string())),
         },
     ));
 
-    // Give the orchestrator time to process the RunComplete event.
-    // We do NOT await drain here — caller is responsible for shutting down infra.
-    let _ = runs;
-    Ok(())
+    let loop_result = async {
+        for (i, pipeline_step) in pipeline.steps.iter().enumerate() {
+            let step_ctx = SingleStepCtx {
+                bus,
+                run_id,
+                ws_id,
+                ws_root,
+                ticket_text,
+                model_override: model_override.clone(),
+                paths,
+                steps: &steps,
+            };
+            execute_single_step(step_ctx, pipeline_step, i, &backend_factory).await?;
+        }
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+
+    let elapsed_ms = run_start.elapsed().as_millis() as u64;
+    match loop_result {
+        Ok(()) => {
+            // All steps completed; publish final RunComplete.
+            bus.publish(EventEnvelope::now(
+                run_id.to_string(),
+                None,
+                Event::RunComplete {
+                    status: RunStatus::Completed,
+                    duration_ms: elapsed_ms,
+                    summary: "ticket run complete".to_string(),
+                },
+            ));
+            let _ = runs;
+            Ok(())
+        }
+        Err(e) => {
+            // GH #37: ensure the run row is never left at Running on error
+            // paths that did not already publish RunComplete(Failed).
+            bus.publish(EventEnvelope::now(
+                run_id.to_string(),
+                None,
+                Event::RunComplete {
+                    status: RunStatus::Failed,
+                    duration_ms: elapsed_ms,
+                    summary: e.to_string(),
+                },
+            ));
+            Err(e)
+        }
+    }
 }
 
 /// Execute a single pipeline step: insert DB row, spawn observer, call backend,
@@ -136,7 +173,6 @@ async fn execute_single_step<'a>(
         model_override,
         paths,
         steps,
-        run_start,
     } = ctx;
 
     let step_id = ulid::Ulid::new().to_string();
@@ -243,19 +279,6 @@ async fn execute_single_step<'a>(
         .map_err(|e| anyhow::anyhow!("backend error for agent '{}': {}", pipeline_step.agent, e))?;
 
     if outcome.status == StepStatus::Failed && pipeline_step.stop_on_failure {
-        let elapsed_ms = run_start.elapsed().as_millis() as u64;
-        bus.publish(EventEnvelope::now(
-            run_id.to_string(),
-            None,
-            Event::RunComplete {
-                status: RunStatus::Failed,
-                duration_ms: elapsed_ms,
-                summary: format!(
-                    "step '{}' failed and stop_on_failure is set",
-                    pipeline_step.agent
-                ),
-            },
-        ));
         return Err(anyhow::anyhow!(
             "step '{}' failed: {}",
             pipeline_step.agent,
@@ -436,7 +459,7 @@ mod tests {
 
         // Assert the persister actually wrote events to stream_events.
         // Each step's ScriptedBackend emits: StepStarted + TextDelta + StepComplete = 3 events.
-        // execute_pipeline publishes 1 RunComplete. Total: 4 steps × 3 + 1 = 13.
+        // execute_pipeline publishes 1 RunStarted + 1 RunComplete. Total: 4 steps × 3 + 2 = 14.
         let conn = db.conn().unwrap();
         let total: i64 = conn
             .query_row(
@@ -446,8 +469,8 @@ mod tests {
             )
             .unwrap();
         assert_eq!(
-            total, 13,
-            "expected 13 persisted events (4×3 step events + 1 RunComplete)"
+            total, 14,
+            "expected 14 persisted events (1 RunStarted + 4×3 step events + 1 RunComplete)"
         );
 
         let count_by_type = |event_type: &str| -> i64 {
@@ -458,6 +481,7 @@ mod tests {
             )
             .unwrap()
         };
+        assert_eq!(count_by_type("RunStarted"), 1);
         assert_eq!(count_by_type("StepStarted"), 4);
         assert_eq!(count_by_type("TextDelta"), 4);
         assert_eq!(count_by_type("StepComplete"), 4);
