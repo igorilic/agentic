@@ -94,8 +94,32 @@ impl ToolUseObserver {
     }
 }
 
-/// Process one bus envelope: capture the before-state if this is an
-/// `Edit`/`Write`/`MultiEdit` ToolUseStart for the observed `(run_id, step_id)` pair.
+/// If `tool_name` corresponds to a known file-editing tool across our
+/// supported backends, return the path it operates on. Used by the
+/// pipeline observer to know which paths to snapshot.
+///
+/// Coverage:
+/// - Claude Code: `Edit`, `Write`, `MultiEdit` with `input.file_path`.
+/// - Copilot CLI: `create`, `str_replace` with `input.path`.
+///
+/// `bash` with shell redirects (e.g., `tee > file`) is intentionally NOT
+/// covered; reliable shell-string parsing is too brittle. Files modified
+/// only via `bash` will not appear in `file_changes` events. Tracked
+/// separately if/when it matters.
+pub(crate) fn edited_path_from_tool_use<'a>(
+    tool_name: &str,
+    input: &'a serde_json::Value,
+) -> Option<&'a str> {
+    match tool_name {
+        "Edit" | "Write" | "MultiEdit" => input.get("file_path").and_then(|v| v.as_str()),
+        "create" | "str_replace" => input.get("path").and_then(|v| v.as_str()),
+        _ => None,
+    }
+}
+
+/// Process one bus envelope: capture the before-state if this is a
+/// known editing-tool ToolUseStart (Claude: Edit/Write/MultiEdit;
+/// Copilot: create/str_replace) for the observed `(run_id, step_id)` pair.
 fn handle_envelope(
     snapshotter: &mut FileSnapshotter,
     envelope: &EventEnvelope,
@@ -122,21 +146,11 @@ fn handle_envelope(
         _ => return,
     };
 
-    if tool_name != "Edit" && tool_name != "Write" && tool_name != "MultiEdit" {
-        return;
-    }
-
-    // Extract file_path from the tool input JSON.
-    let file_path_str = match input.get("file_path").and_then(|v| v.as_str()) {
+    // Extract path via the cross-backend helper. Returns None for non-editing
+    // tools (read-only or shell), which we silently skip.
+    let file_path_str = match edited_path_from_tool_use(tool_name, input) {
         Some(s) => s,
-        None => {
-            tracing::warn!(
-                step_id = %step_id,
-                tool_name = %tool_name,
-                "ToolUseObserver: tool input missing 'file_path' key — skipping capture"
-            );
-            return;
-        }
+        None => return,
     };
 
     // Resolve path: absolute paths are used as-is; relative paths are joined
@@ -156,5 +170,48 @@ fn handle_envelope(
             error = %e,
             "ToolUseObserver: capture failed — skipping"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn edited_path_from_tool_use_recognizes_claude_tools() {
+        let input = json!({"file_path": "/tmp/x"});
+        assert_eq!(edited_path_from_tool_use("Edit", &input), Some("/tmp/x"));
+        assert_eq!(edited_path_from_tool_use("Write", &input), Some("/tmp/x"));
+        assert_eq!(
+            edited_path_from_tool_use("MultiEdit", &input),
+            Some("/tmp/x")
+        );
+    }
+
+    #[test]
+    fn edited_path_from_tool_use_recognizes_copilot_tools() {
+        let input = json!({"path": "/tmp/y"});
+        assert_eq!(edited_path_from_tool_use("create", &input), Some("/tmp/y"));
+        assert_eq!(
+            edited_path_from_tool_use("str_replace", &input),
+            Some("/tmp/y")
+        );
+    }
+
+    #[test]
+    fn edited_path_from_tool_use_ignores_other_tools() {
+        let input = json!({"path": "/tmp/z", "file_path": "/tmp/z"});
+        assert!(edited_path_from_tool_use("view", &input).is_none());
+        assert!(edited_path_from_tool_use("bash", &input).is_none());
+        assert!(edited_path_from_tool_use("Read", &input).is_none());
+        assert!(edited_path_from_tool_use("future_tool_xyz", &input).is_none());
+    }
+
+    #[test]
+    fn edited_path_from_tool_use_returns_none_when_path_field_missing() {
+        let input = json!({});
+        assert!(edited_path_from_tool_use("Edit", &input).is_none());
+        assert!(edited_path_from_tool_use("create", &input).is_none());
     }
 }

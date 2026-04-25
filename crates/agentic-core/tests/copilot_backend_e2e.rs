@@ -28,8 +28,7 @@ mod unix_tests {
         binary: PathBuf,
         cancel: CancellationToken,
     ) -> (CopilotCliBackend, ExecuteRequest) {
-        let backend =
-            CopilotCliBackend::with_binary_and_grace(binary, Duration::from_millis(300));
+        let backend = CopilotCliBackend::with_binary_and_grace(binary, Duration::from_millis(300));
         let req = ExecuteRequest {
             workspace: WorkspaceRef {
                 id: "ws-test".to_string(),
