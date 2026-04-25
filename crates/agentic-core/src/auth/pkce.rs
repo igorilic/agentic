@@ -1,12 +1,21 @@
 use base64::Engine;
 
 /// PKCE method per RFC 7636. We only emit S256 (the recommended method).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PkceChallenge {
-    /// 43–128 chars, [A-Z][a-z][0-9]-._~
+    /// Secret. NEVER log or expose. Send only to the OAuth token-exchange endpoint.
     pub verifier: String,
-    /// base64url(sha256(verifier)) — 43 chars unpadded
+    /// Public. Send to the OAuth authorization endpoint.
     pub challenge: String,
+}
+
+impl std::fmt::Debug for PkceChallenge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PkceChallenge")
+            .field("verifier", &"[redacted]")
+            .field("challenge", &self.challenge)
+            .finish()
+    }
 }
 
 impl PkceChallenge {
@@ -40,7 +49,7 @@ fn generate_verifier(byte_count: usize) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&bytes)
 }
 
-pub(crate) fn derive_challenge(verifier: &str) -> String {
+fn derive_challenge(verifier: &str) -> String {
     use sha2::Digest;
     let hash = sha2::Sha256::digest(verifier.as_bytes());
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hash)

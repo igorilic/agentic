@@ -60,14 +60,34 @@ fn method_constant_is_s256() {
 }
 
 proptest::proptest! {
+    /// Drive PkceChallenge::generate across 1000 proptest iterations.
+    /// The seed is unused (generate uses OsRng); this just smoke-tests
+    /// that generation never panics and the challenge is always
+    /// the spec'd 43 chars. Distinctness is covered by the separate
+    /// `one_thousand_verifiers_yield_one_thousand_distinct_challenges` test.
     #[test]
-    fn many_generated_challenges_are_distinct(seed in 0u64..1000) {
-        // PkceChallenge::generate uses OsRng; seed is unused but satisfies proptest's
-        // requirement for at least one input.
-        let _ = seed;
+    fn challenge_is_always_43_chars_across_iterations(_seed in 0u64..1000) {
         let pkce = PkceChallenge::generate();
         proptest::prop_assert_eq!(pkce.challenge.len(), 43);
     }
+}
+
+#[test]
+fn debug_impl_redacts_verifier() {
+    let pkce = PkceChallenge::generate();
+    let dbg = format!("{pkce:?}");
+    assert!(
+        dbg.contains("[redacted]"),
+        "verifier should be redacted in Debug, got: {dbg}"
+    );
+    assert!(
+        !dbg.contains(&pkce.verifier),
+        "raw verifier leaked in Debug output: {dbg}"
+    );
+    assert!(
+        dbg.contains(&pkce.challenge),
+        "challenge should still appear in Debug output"
+    );
 }
 
 #[test]
