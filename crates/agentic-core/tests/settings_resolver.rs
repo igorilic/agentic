@@ -21,7 +21,10 @@ theme = "light"
 "#,
     );
     let r = Resolver::new(env, Some(workspace), None, defaults_with_theme("auto"));
-    let Setting { value, source } = r.resolve(Key::UiTheme).expect("no type error").expect("resolved");
+    let Setting { value, source } = r
+        .resolve(Key::UiTheme)
+        .expect("no type error")
+        .expect("resolved");
     assert_eq!(value, "dark");
     assert_eq!(
         source,
@@ -50,7 +53,10 @@ theme = "dark"
         Some(user),
         defaults_with_theme("auto"),
     );
-    let Setting { value, source } = r.resolve(Key::UiTheme).expect("no type error").expect("resolved");
+    let Setting { value, source } = r
+        .resolve(Key::UiTheme)
+        .expect("no type error")
+        .expect("resolved");
     assert_eq!(value, "light");
     assert_eq!(source, Source::Workspace);
 }
@@ -64,7 +70,10 @@ theme = "dark"
 "#,
     );
     let r = Resolver::new(env, None, Some(user), defaults_with_theme("auto"));
-    let Setting { value, source } = r.resolve(Key::UiTheme).expect("no type error").expect("resolved");
+    let Setting { value, source } = r
+        .resolve(Key::UiTheme)
+        .expect("no type error")
+        .expect("resolved");
     assert_eq!(value, "dark");
     assert_eq!(source, Source::User);
 }
@@ -73,7 +82,10 @@ theme = "dark"
 fn default_is_used_when_no_other_source_has_the_key() {
     let env = MockEnv::new();
     let r = Resolver::new(env, None, None, defaults_with_theme("auto"));
-    let Setting { value, source } = r.resolve(Key::UiTheme).expect("no type error").expect("resolved");
+    let Setting { value, source } = r
+        .resolve(Key::UiTheme)
+        .expect("no type error")
+        .expect("resolved");
     assert_eq!(value, "auto");
     assert_eq!(source, Source::Default);
 }
@@ -88,9 +100,11 @@ fn missing_key_without_default_returns_none() {
 #[test]
 fn resolver_errors_on_non_string_value_for_string_key() {
     // The workspace TOML has [ui] theme as an integer, not a string.
-    let workspace = parse_toml(r#"[ui]
+    let workspace = parse_toml(
+        r#"[ui]
 theme = 8080
-"#);
+"#,
+    );
     let r = Resolver::new(MockEnv::new(), Some(workspace), None, HashMap::new());
     let result = r.resolve(Key::UiTheme);
     assert!(

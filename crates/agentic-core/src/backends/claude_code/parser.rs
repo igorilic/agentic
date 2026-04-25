@@ -11,6 +11,15 @@
 //! - `rate_limit_event` — emitted when the CLI is rate-limited; translated to a recoverable Error.
 //! - Unknown types — logged at debug level, silently ignored.
 //! - Malformed JSON — one `Event::Error { code: "protocol_error" }` emitted, then parsing continues.
+//!
+//! # Truncated-stream safety (GH #23)
+//!
+//! Each line is an **atomic** JSON envelope. If the subprocess is killed mid-line
+//! (e.g. SIGTERM, OOM), `AsyncBufReadExt::lines` returns the partial bytes as a
+//! line, `serde_json::from_str` fails, and the `Err` branch already emits
+//! `Event::Error { code: "protocol_error" }`. There is no "block_start without
+//! block_stop" notion at this level — that was an artefact of the old SSE API.
+//! GH #23 is therefore obsolete after the Step-6.1 parser rewrite.
 
 use serde::Deserialize;
 use serde_json::Value;

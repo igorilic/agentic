@@ -151,28 +151,22 @@ impl<E: EnvProvider> Resolver<E> {
             }));
         }
         // 2. Workspace TOML
-        if let Some(ws) = &self.workspace {
-            match lookup_in_toml(ws, key)? {
-                Some(value) => {
-                    return Ok(Some(Setting {
-                        value,
-                        source: Source::Workspace,
-                    }));
-                }
-                None => {}
-            }
+        if let Some(ws) = &self.workspace
+            && let Some(value) = lookup_in_toml(ws, key)?
+        {
+            return Ok(Some(Setting {
+                value,
+                source: Source::Workspace,
+            }));
         }
         // 3. User TOML
-        if let Some(user) = &self.user {
-            match lookup_in_toml(user, key)? {
-                Some(value) => {
-                    return Ok(Some(Setting {
-                        value,
-                        source: Source::User,
-                    }));
-                }
-                None => {}
-            }
+        if let Some(user) = &self.user
+            && let Some(value) = lookup_in_toml(user, key)?
+        {
+            return Ok(Some(Setting {
+                value,
+                source: Source::User,
+            }));
         }
         // 4. Default
         if let Some(value) = self.defaults.get(&key) {
@@ -197,10 +191,7 @@ fn toml_type_name(v: &toml::Value) -> &'static str {
     }
 }
 
-fn lookup_in_toml(
-    table: &toml::Table,
-    key: Key,
-) -> Result<Option<String>, SettingsError> {
+fn lookup_in_toml(table: &toml::Table, key: Key) -> Result<Option<String>, SettingsError> {
     let (section, field) = key.toml_path();
     let Some(section_val) = table.get(section) else {
         return Ok(None);
