@@ -1077,7 +1077,7 @@ Legend:
 
 ## Phase 9 — Core: auth
 
-### Step 9.1: Keyring abstraction + in-memory test impl
+### Step 9.1: Keyring abstraction + in-memory test impl ✓
 
 **Goal**: `SecretStore` trait with `get/set/delete(key: &str)`, backed by `keyring` in prod, `MemSecretStore` in tests.
 
@@ -1100,7 +1100,7 @@ Legend:
 
 ---
 
-### Step 9.2: PKCE helpers
+### Step 9.2: PKCE helpers ✓
 
 **Goal**: Generate `code_verifier`, `code_challenge`, and `state`.
 
