@@ -26,7 +26,7 @@ r2d2 = "0.8"
 r2d2_sqlite = "0.33"
 blake3 = "1"
 toml = "0.9"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-util", "process", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-util", "process", "time", "net"] }
 rmp-serde = "1"
 proptest = "1"
 async-trait = "0.1"
@@ -43,3 +43,4 @@ sha2 = "0.10"
 rand = "0.8"
 keyring = "3"
 nix = { version = "0.30", default-features = false, features = ["signal"] }
+axum = "0.7"

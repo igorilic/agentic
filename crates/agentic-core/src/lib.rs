@@ -45,7 +45,7 @@ pub use ticket_sources::{
 pub mod auth;
 #[cfg(any(test, feature = "testing"))]
 pub use auth::MemSecretStore;
-pub use auth::{KeyringSecretStore, SecretStore, SecretStoreError};
+pub use auth::{CallbackQuery, KeyringSecretStore, LoopbackError, LoopbackListener, SecretStore, SecretStoreError};
 pub use auth::{PkceChallenge, generate_state};
 mod time;
 
