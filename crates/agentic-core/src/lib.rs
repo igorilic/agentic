@@ -47,7 +47,7 @@ pub mod auth;
 pub use auth::MemSecretStore;
 pub use auth::{
     CallbackQuery, KeyringSecretStore, LoopbackError, LoopbackListener, SecretStore,
-    SecretStoreError,
+    SecretStoreError, start_loopback,
 };
 pub use auth::{PkceChallenge, generate_state};
 mod time;
