@@ -11,7 +11,7 @@ use agentic_core::{
     Backend, BackendId, ClaudeCodeBackend, CopilotCliBackend, Db, Event, EventBus, EventEnvelope,
     EventPersister, ExecuteRequest, ModelId, Paths, PipelineConfig, PipelineOrchestrator,
     PipelineStep, ProfileId, Run, RunId, RunRepo, RunStatus, ScriptedBackend, Step, StepId,
-    StepRepo, StepStatus, TicketKind, TicketRef, WorkspaceRef,
+    StepRepo, StepStatus, TicketKind, TicketRef, Workspace, WorkspaceRef, WorkspaceRepo,
 };
 use anyhow::{Context, Result};
 use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
@@ -250,11 +250,10 @@ async fn cmd_run_ticket(
     model_override: Option<String>,
     backend_kind: BackendKind,
 ) -> Result<()> {
-    use rusqlite::params;
-
     let db = Db::open(paths).context("open sqlite database")?;
     let runs_repo = RunRepo::new(&db);
     let steps_repo = StepRepo::new(&db);
+    let ws_repo = WorkspaceRepo::new(&db);
     let bus = EventBus::new();
 
     // Use the process working directory as the workspace root so agent
@@ -266,16 +265,16 @@ async fn cmd_run_ticket(
     let ws_id = stable_workspace_id(&ws_root);
     let run_id = ulid::Ulid::new().to_string().to_lowercase();
 
-    // Seed workspace row.
-    {
-        let conn = db.conn().context("get conn for seeding workspace")?;
-        conn.execute(
-            "INSERT OR IGNORE INTO workspaces \
-             (id, name, root_path, profile, created_at, last_opened) \
-             VALUES (?1, 'ticket-ws', ?2, 'custom', 0, 0)",
-            params![ws_id, ws_root.to_string_lossy().to_string()],
-        )?;
-    }
+    // Seed workspace row (idempotent — INSERT OR IGNORE semantics).
+    ws_repo.insert_if_absent(Workspace {
+        id: ws_id.clone(),
+        name: "ticket-ws".to_string(),
+        root_path: ws_root.to_string_lossy().to_string(),
+        remote_url: None,
+        profile: "custom".to_string(),
+        created_at: 0,
+        last_opened: 0,
+    })?;
 
     // Seed run row directly as Running (workaround for GH #17:
     // Pending→Running transition is not fully wired in the orchestrator yet).
@@ -359,14 +358,17 @@ async fn cmd_migrate(paths: &Paths) -> Result<()> {
 }
 
 fn seed_minimal_run(db: &Db, runs: &RunRepo, steps: &StepRepo) -> Result<()> {
-    use rusqlite::params;
     // Workspace row (stream_events has no FK to workspaces, but runs.workspace_id does).
-    let conn = db.conn().context("get conn for seeding workspace")?;
-    conn.execute(
-        "INSERT OR IGNORE INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
-         VALUES ('smoke-ws', 'smoke', '/tmp/smoke', 'custom', 0, 0)",
-        params![],
-    )?;
+    let ws_repo = WorkspaceRepo::new(db);
+    ws_repo.insert_if_absent(Workspace {
+        id: "smoke-ws".to_string(),
+        name: "smoke".to_string(),
+        root_path: "/tmp/smoke".to_string(),
+        remote_url: None,
+        profile: "custom".to_string(),
+        created_at: 0,
+        last_opened: 0,
+    })?;
     // Run (ignore if already present from prior smoke run reusing the same DB path).
     let run_exists = runs.get("smoke-run")?.is_some();
     if !run_exists {

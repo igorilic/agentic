@@ -297,7 +297,8 @@ mod tests {
 
     use agentic_core::{
         Db, Event, EventBus, EventPersister, ModelId, Paths, PipelineConfig, PipelineStep, Run,
-        RunRepo, RunStatus, ScriptedBackend, StepRepo, StepStatus, TokenUsage,
+        RunRepo, RunStatus, ScriptedBackend, StepRepo, StepStatus, TokenUsage, Workspace,
+        WorkspaceRepo,
     };
     use rusqlite::params;
     use tempfile::TempDir;
@@ -328,13 +329,18 @@ mod tests {
         // Seed workspace row.
         let ws_id = "test-ws-01".to_string();
         {
-            let conn = db.conn().unwrap();
-            conn.execute(
-                "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
-                 VALUES (?1, 'test', ?2, 'custom', 0, 0)",
-                params![ws_id, base.to_string_lossy().to_string()],
-            )
-            .unwrap();
+            let ws_repo = WorkspaceRepo::new(&db);
+            ws_repo
+                .insert(Workspace {
+                    id: ws_id.clone(),
+                    name: "test".to_string(),
+                    root_path: base.to_string_lossy().to_string(),
+                    remote_url: None,
+                    profile: "custom".to_string(),
+                    created_at: 0,
+                    last_opened: 0,
+                })
+                .unwrap();
         }
 
         let bus = EventBus::new();

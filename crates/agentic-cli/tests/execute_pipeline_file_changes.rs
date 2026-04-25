@@ -9,7 +9,7 @@ use agentic_core::backends::EventSink;
 use agentic_core::{
     Backend, BackendId, Db, Event, EventBus, EventEnvelope, EventPersister, ExecuteOutcome,
     ExecuteRequest, HealthStatus, ModelId, Paths, Pipeline, PipelineStep, Run, RunRepo, RunStatus,
-    StepStatus, TokenUsage,
+    StepStatus, TokenUsage, Workspace, WorkspaceRepo,
 };
 use async_trait::async_trait;
 use rusqlite::params;
@@ -164,13 +164,18 @@ fn setup_workspace(tmp: &TempDir, agent_names: &[&str]) -> (Db, EventBus, String
 
     let ws_id = "test-ws-fc-01".to_string();
     {
-        let conn = db.conn().unwrap();
-        conn.execute(
-            "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
-             VALUES (?1, 'test', ?2, 'custom', 0, 0)",
-            params![ws_id, base.to_string_lossy().to_string()],
-        )
-        .unwrap();
+        let ws_repo = WorkspaceRepo::new(&db);
+        ws_repo
+            .insert(Workspace {
+                id: ws_id.clone(),
+                name: "test".to_string(),
+                root_path: base.to_string_lossy().to_string(),
+                remote_url: None,
+                profile: "custom".to_string(),
+                created_at: 0,
+                last_opened: 0,
+            })
+            .unwrap();
     }
 
     let bus = EventBus::new();
