@@ -39,15 +39,25 @@ impl MemSecretStore {
 
 impl SecretStore for MemSecretStore {
     fn get(&self, key: &str) -> Result<String, SecretStoreError> {
-        todo!()
+        let map = self.inner.lock().map_err(|_| SecretStoreError::Lock)?;
+        map.get(key)
+            .cloned()
+            .ok_or_else(|| SecretStoreError::NotFound {
+                service: "mem".to_string(),
+                key: key.to_string(),
+            })
     }
 
     fn set(&self, key: &str, value: &str) -> Result<(), SecretStoreError> {
-        todo!()
+        let mut map = self.inner.lock().map_err(|_| SecretStoreError::Lock)?;
+        map.insert(key.to_string(), value.to_string());
+        Ok(())
     }
 
     fn delete(&self, key: &str) -> Result<(), SecretStoreError> {
-        todo!()
+        let mut map = self.inner.lock().map_err(|_| SecretStoreError::Lock)?;
+        map.remove(key);
+        Ok(())
     }
 }
 
@@ -67,14 +77,33 @@ impl KeyringSecretStore {
 
 impl SecretStore for KeyringSecretStore {
     fn get(&self, key: &str) -> Result<String, SecretStoreError> {
-        todo!()
+        let entry = keyring::Entry::new(&self.service, key)
+            .map_err(|e| SecretStoreError::Backend(e.to_string()))?;
+        match entry.get_password() {
+            Ok(s) => Ok(s),
+            Err(keyring::Error::NoEntry) => Err(SecretStoreError::NotFound {
+                service: self.service.clone(),
+                key: key.to_string(),
+            }),
+            Err(e) => Err(SecretStoreError::Backend(e.to_string())),
+        }
     }
 
     fn set(&self, key: &str, value: &str) -> Result<(), SecretStoreError> {
-        todo!()
+        let entry = keyring::Entry::new(&self.service, key)
+            .map_err(|e| SecretStoreError::Backend(e.to_string()))?;
+        entry
+            .set_password(value)
+            .map_err(|e| SecretStoreError::Backend(e.to_string()))
     }
 
     fn delete(&self, key: &str) -> Result<(), SecretStoreError> {
-        todo!()
+        let entry = keyring::Entry::new(&self.service, key)
+            .map_err(|e| SecretStoreError::Backend(e.to_string()))?;
+        match entry.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(keyring::Error::NoEntry) => Ok(()), // idempotent: silent no-op
+            Err(e) => Err(SecretStoreError::Backend(e.to_string())),
+        }
     }
 }

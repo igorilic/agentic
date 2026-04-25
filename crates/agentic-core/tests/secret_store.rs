@@ -27,7 +27,10 @@ fn mem_delete_removes_entry() {
     let store = MemSecretStore::new();
     store.set("k", "v").unwrap();
     store.delete("k").unwrap();
-    assert!(matches!(store.get("k"), Err(SecretStoreError::NotFound { .. })));
+    assert!(matches!(
+        store.get("k"),
+        Err(SecretStoreError::NotFound { .. })
+    ));
 }
 
 #[test]
