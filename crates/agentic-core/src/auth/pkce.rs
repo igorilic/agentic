@@ -15,14 +15,22 @@ impl PkceChallenge {
 
     /// Generate a fresh verifier + derived challenge using OsRng.
     pub fn generate() -> Self {
-        todo!("pkce: not yet implemented")
+        let verifier = generate_verifier(96); // 96 bytes → 128 base64url chars
+        let challenge = derive_challenge(&verifier);
+        Self {
+            verifier,
+            challenge,
+        }
     }
 }
 
 /// Generate a cryptographically random `state` parameter (128+ bits of entropy).
 /// Returned as a base64url-encoded string with no padding.
 pub fn generate_state() -> String {
-    todo!("pkce: not yet implemented")
+    use rand::RngCore;
+    let mut bytes = [0u8; 32]; // 256 bits — well above the 128-bit floor
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
 fn generate_verifier(byte_count: usize) -> String {
