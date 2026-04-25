@@ -5,6 +5,11 @@ use crate::events::TicketRef;
 mod free_text;
 pub use free_text::FreeTextTicketSource;
 
+pub(crate) mod http;
+
+mod github;
+pub use github::GithubTicketSource;
+
 /// A fully-fetched ticket with body, comments, optional AC field, and URL.
 /// `TicketRef` (in events) is the lightweight pointer; `Ticket` is the
 /// content the pipeline consumes.
