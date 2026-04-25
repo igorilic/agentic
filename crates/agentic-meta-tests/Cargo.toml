@@ -5,4 +5,4 @@ edition.workspace = true
 publish = false
 
 [dev-dependencies]
-serde_yaml = { workspace = true }
+serde_yml = { workspace = true }

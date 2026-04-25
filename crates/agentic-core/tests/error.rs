@@ -35,6 +35,14 @@ fn result_alias_works() {
     assert_eq!(ok().unwrap(), 42);
 }
 
+#[test]
+fn result_alias_works_at_crate_root() {
+    fn returns_ok() -> agentic_core::Result<()> {
+        Ok(())
+    }
+    assert!(returns_ok().is_ok());
+}
+
 // #4 — CoreError::Other(anyhow) exposes .source() when the anyhow error wraps
 // a typed source via context(). A bare anyhow!("msg") has no inner source.
 #[test]

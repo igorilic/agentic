@@ -54,7 +54,7 @@ impl Db {
     /// Clone the underlying r2d2 pool. Cheap (Arc increment). Used by
     /// repository types that want to hold their own pool handle for the
     /// lifetime of the repo.
-    pub fn pool(&self) -> r2d2::Pool<r2d2_sqlite::SqliteConnectionManager> {
+    pub(crate) fn pool(&self) -> r2d2::Pool<r2d2_sqlite::SqliteConnectionManager> {
         self.pool.clone()
     }
 }

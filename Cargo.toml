@@ -19,7 +19,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 thiserror = "2"
 anyhow = "1"
-serde_yaml = "0.9"
+serde_yml = "0.0.12"
 directories = "6"
 rusqlite = { version = "0.39", features = ["bundled"] }
 r2d2 = "0.8"
@@ -39,3 +39,4 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 wiremock = "0.6"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 base64 = "0.22"
+nix = { version = "0.30", default-features = false, features = ["signal"] }
