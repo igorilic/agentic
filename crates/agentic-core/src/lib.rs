@@ -46,6 +46,7 @@ pub mod auth;
 #[cfg(any(test, feature = "testing"))]
 pub use auth::MemSecretStore;
 pub use auth::{KeyringSecretStore, SecretStore, SecretStoreError};
+pub use auth::{PkceChallenge, generate_state};
 mod time;
 
 /// The semver version string of the `agentic-core` crate.
