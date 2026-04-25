@@ -1,5 +1,17 @@
 use std::collections::HashMap;
 
+/// Errors that can occur during settings resolution.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum SettingsError {
+    /// A TOML key exists but holds a value of the wrong type.
+    #[error("settings key '{key}' has wrong type: expected {expected}, got {actual}")]
+    WrongType {
+        key: String,
+        expected: &'static str,
+        actual: &'static str,
+    },
+}
+
 /// The set of supported configuration keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Key {
@@ -126,50 +138,82 @@ impl<E: EnvProvider> Resolver<E> {
 
     /// Resolve `key` through: env var → workspace TOML → user TOML → default.
     ///
-    /// Returns `None` if no source yields a value.
-    pub fn resolve(&self, key: Key) -> Option<Setting<String>> {
+    /// Returns `Ok(None)` if no source yields a value. Returns
+    /// `Err(SettingsError::WrongType)` if a TOML source contains the key but
+    /// with a non-string value — callers can distinguish "missing" from
+    /// "misconfigured".
+    pub fn resolve(&self, key: Key) -> Result<Option<Setting<String>>, SettingsError> {
         // 1. Env
         if let Some(value) = self.env.get(key.env_var()) {
-            return Some(Setting {
+            return Ok(Some(Setting {
                 value,
                 source: Source::Env { var: key.env_var() },
-            });
+            }));
         }
         // 2. Workspace TOML
-        if let Some(ws) = &self.workspace
-            && let Some(value) = lookup_in_toml(ws, key)
-        {
-            return Some(Setting {
-                value,
-                source: Source::Workspace,
-            });
+        if let Some(ws) = &self.workspace {
+            match lookup_in_toml(ws, key)? {
+                Some(value) => {
+                    return Ok(Some(Setting {
+                        value,
+                        source: Source::Workspace,
+                    }));
+                }
+                None => {}
+            }
         }
         // 3. User TOML
-        if let Some(user) = &self.user
-            && let Some(value) = lookup_in_toml(user, key)
-        {
-            return Some(Setting {
-                value,
-                source: Source::User,
-            });
+        if let Some(user) = &self.user {
+            match lookup_in_toml(user, key)? {
+                Some(value) => {
+                    return Ok(Some(Setting {
+                        value,
+                        source: Source::User,
+                    }));
+                }
+                None => {}
+            }
         }
         // 4. Default
         if let Some(value) = self.defaults.get(&key) {
-            return Some(Setting {
+            return Ok(Some(Setting {
                 value: value.clone(),
                 source: Source::Default,
-            });
+            }));
         }
-        None
+        Ok(None)
     }
 }
 
-fn lookup_in_toml(table: &toml::Table, key: Key) -> Option<String> {
+fn toml_type_name(v: &toml::Value) -> &'static str {
+    match v {
+        toml::Value::String(_) => "string",
+        toml::Value::Integer(_) => "integer",
+        toml::Value::Float(_) => "float",
+        toml::Value::Boolean(_) => "boolean",
+        toml::Value::Datetime(_) => "datetime",
+        toml::Value::Array(_) => "array",
+        toml::Value::Table(_) => "table",
+    }
+}
+
+fn lookup_in_toml(
+    table: &toml::Table,
+    key: Key,
+) -> Result<Option<String>, SettingsError> {
     let (section, field) = key.toml_path();
-    table
-        .get(section)?
-        .as_table()?
-        .get(field)?
-        .as_str()
-        .map(String::from)
+    let Some(section_val) = table.get(section) else {
+        return Ok(None);
+    };
+    let Some(field_val) = section_val.as_table().and_then(|t| t.get(field)) else {
+        return Ok(None);
+    };
+    match field_val {
+        toml::Value::String(s) => Ok(Some(s.clone())),
+        other => Err(SettingsError::WrongType {
+            key: format!("{section}.{field}"),
+            expected: "string",
+            actual: toml_type_name(other),
+        }),
+    }
 }

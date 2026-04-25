@@ -36,7 +36,7 @@ pub use db::runs::{Run, RunRepo};
 pub use db::steps::{Step, StepRepo};
 pub use db::workspaces::{Workspace, WorkspaceRepo};
 pub mod settings;
-pub use settings::{EnvProvider, Key, MockEnv, RealEnv, Resolver, Setting, Source};
+pub use settings::{EnvProvider, Key, MockEnv, RealEnv, Resolver, Setting, SettingsError, Source};
 mod time;
 
 /// The semver version string of the `agentic-core` crate.
