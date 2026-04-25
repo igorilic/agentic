@@ -26,6 +26,9 @@ pub struct WaitOutcome {
     pub exit_code: Option<i32>,
     /// `true` when the run was terminated via the [`CancellationToken`].
     pub was_cancelled: bool,
+    /// Last ≤64KB of text written by the subprocess to stderr.
+    /// Empty when no stderr was produced.
+    pub stderr_tail: String,
 }
 
 /// A live subprocess with an exposed stdout reader.
@@ -46,6 +49,36 @@ pub struct RunOutcome {
     pub exit_code: Option<i32>,
     /// `true` when the run was terminated via the [`CancellationToken`].
     pub was_cancelled: bool,
+    /// Last ≤64KB of text written by the subprocess to stderr.
+    /// Empty when no stderr was produced.
+    pub stderr_tail: String,
+}
+
+// ---------------------------------------------------------------------------
+// Internal: bounded stderr drain task
+// ---------------------------------------------------------------------------
+
+/// Spawn a task that drains `stderr`, logs each line via `tracing::warn!`,
+/// and returns the captured bytes bounded at `MAX_BYTES` (64 KB).
+fn spawn_stderr_drainer(stderr: tokio::process::ChildStderr) -> tokio::task::JoinHandle<String> {
+    tokio::spawn(async move {
+        use tokio::io::{AsyncBufReadExt, BufReader};
+
+        const MAX_BYTES: usize = 64 * 1024;
+        let mut buf: Vec<u8> = Vec::with_capacity(4 * 1024);
+        let mut lines = BufReader::new(stderr).lines();
+
+        while let Ok(Some(line)) = lines.next_line().await {
+            tracing::warn!(stderr_line = %line, "subprocess stderr");
+            if buf.len() < MAX_BYTES {
+                buf.extend_from_slice(line.as_bytes());
+                buf.push(b'\n');
+            }
+            // Else silently drop — bound the buffer.
+        }
+
+        String::from_utf8_lossy(&buf).into_owned()
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -54,9 +87,10 @@ pub struct RunOutcome {
 
 /// Spawn a subprocess and return a live stdout reader plus a wait handle.
 ///
-/// Sets up process group (Unix), writes `stdin_bytes`, drains stderr, and
-/// starts a background task that handles cancellation with SIGTERM → SIGKILL
-/// escalation.
+/// Sets up process group (Unix), writes `stdin_bytes` via a concurrent task,
+/// drains stderr into a 64KB-bounded buffer (each line forwarded to
+/// `tracing::warn!`), and starts a background task that handles cancellation
+/// with SIGTERM → SIGKILL escalation.
 ///
 /// # Errors
 /// Returns `Err` if the subprocess cannot be spawned.
@@ -91,22 +125,20 @@ pub fn spawn_streaming(
         .take()
         .ok_or_else(|| CoreError::Backend("no stdout handle".to_string()))?;
 
-    // Spawn task: write stdin bytes then drop the pipe so subprocess sees EOF.
+    // Spawn task: write stdin bytes concurrently with stdout/stderr reads.
+    // This prevents deadlock when stdin is large and stdout pipe buffer fills up.
     if let Some(mut stdin_pipe) = child.stdin.take() {
         tokio::spawn(async move {
-            let _ = stdin_pipe.write_all(&stdin_bytes).await;
-            // Drop closes the pipe.
+            if !stdin_bytes.is_empty() && stdin_pipe.write_all(&stdin_bytes).await.is_err() {
+                tracing::warn!("subprocess stdin write failed");
+            }
+            // Drop closes the pipe — subprocess sees EOF.
+            drop(stdin_pipe);
         });
     }
 
-    // Spawn task: drain stderr so the subprocess never blocks on a full pipe.
-    if let Some(stderr) = child.stderr.take() {
-        tokio::spawn(async move {
-            use tokio::io::{AsyncBufReadExt, BufReader};
-            let mut lines = BufReader::new(stderr).lines();
-            while let Ok(Some(_)) = lines.next_line().await {}
-        });
-    }
+    // Spawn task: drain stderr into a bounded buffer, log each line.
+    let stderr_handle = child.stderr.take().map(spawn_stderr_drainer);
 
     // Spawn wait task: handles cancellation + signal escalation.
     let wait_handle = tokio::spawn(async move {
@@ -120,9 +152,14 @@ pub fn spawn_streaming(
                 (None, true)
             },
         };
+        let stderr_tail = match stderr_handle {
+            Some(handle) => handle.await.unwrap_or_default(),
+            None => String::new(),
+        };
         Ok(WaitOutcome {
             exit_code,
             was_cancelled,
+            stderr_tail,
         })
     });
 
@@ -133,6 +170,9 @@ pub fn spawn_streaming(
 }
 
 /// Spawn a subprocess, pipe `stdin_bytes`, and buffer all stdout lines.
+///
+/// Stdin is written via a concurrent task so that large stdin + large stdout
+/// cannot deadlock on the kernel pipe buffer.
 ///
 /// Returns once the subprocess exits (or is cancelled).
 pub async fn spawn_buffered(
@@ -149,7 +189,7 @@ pub async fn spawn_buffered(
         .current_dir(cwd)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null());
+        .stderr(std::process::Stdio::piped());
 
     for (k, v) in env {
         cmd.env(k, v);
@@ -162,14 +202,17 @@ pub async fn spawn_buffered(
 
     let mut child = cmd.spawn().map_err(|e| CoreError::Backend(e.to_string()))?;
 
-    // Write stdin and close the pipe so the subprocess sees EOF.
-    if let Some(mut stdin_pipe) = child.stdin.take() {
-        stdin_pipe
-            .write_all(&stdin_bytes)
-            .await
-            .map_err(|e| CoreError::Backend(e.to_string()))?;
-        // Dropping closes the pipe → subprocess sees EOF
-    }
+    // Spawn task: write stdin concurrently with stdout/stderr reads.
+    // Prevents deadlock when stdin is large and stdout pipe buffer fills up.
+    let stdin_handle = child.stdin.take().map(|mut stdin_pipe| {
+        tokio::spawn(async move {
+            if !stdin_bytes.is_empty() && stdin_pipe.write_all(&stdin_bytes).await.is_err() {
+                tracing::warn!("subprocess stdin write failed");
+            }
+            // Drop closes the pipe — subprocess sees EOF.
+            drop(stdin_pipe);
+        })
+    });
 
     // Collect stdout asynchronously in a background task.
     let stdout_handle = {
@@ -190,6 +233,9 @@ pub async fn spawn_buffered(
         })
     };
 
+    // Drain stderr into a bounded buffer concurrently.
+    let stderr_handle = child.stderr.take().map(spawn_stderr_drainer);
+
     // Wait for either child exit or cancellation.
     let (exit_code, was_cancelled) = tokio::select! {
         status = child.wait() => {
@@ -202,13 +248,24 @@ pub async fn spawn_buffered(
         },
     };
 
-    // Collect whatever stdout was produced before termination.
+    // Collect whatever stdout and stderr were produced before termination.
     let stdout_lines = stdout_handle.await.unwrap_or_default();
+    let stderr_tail = match stderr_handle {
+        Some(handle) => handle.await.unwrap_or_default(),
+        None => String::new(),
+    };
+
+    // Ensure stdin writer is done (it will be if stdin fit in the pipe, which
+    // it already must since the subprocess has exited at this point).
+    if let Some(handle) = stdin_handle {
+        let _ = handle.await;
+    }
 
     Ok(RunOutcome {
         stdout_lines,
         exit_code,
         was_cancelled,
+        stderr_tail,
     })
 }
 

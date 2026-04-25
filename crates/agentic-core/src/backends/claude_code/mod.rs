@@ -211,7 +211,22 @@ impl Backend for ClaudeCodeBackend {
                 .exit_code
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| "unknown".to_string());
-            (StepStatus::Failed, format!("subprocess exited {code}"))
+            let summary = if run_outcome.stderr_tail.is_empty() {
+                format!("subprocess exited {code}")
+            } else {
+                let tail = run_outcome.stderr_tail.trim();
+                // Take last 200 chars to keep the summary tractable.
+                let preview: String = tail
+                    .chars()
+                    .rev()
+                    .take(200)
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect();
+                format!("subprocess exited {code}: {}", preview.trim())
+            };
+            (StepStatus::Failed, summary)
         } else {
             (StepStatus::Passed, "ok".to_string())
         };
