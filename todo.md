@@ -1302,7 +1302,7 @@ Legend:
 
 ---
 
-### Step 10.3: Tauri IPC — `subscribe_events`
+### [x] Step 10.3: Tauri IPC — `subscribe_events`
 
 **Goal**: Tauri command that subscribes to core `EventBus` and emits events to the frontend via `window.emit`.
 
