@@ -4,8 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agentic_core::events::{Event, EventBus, EventEnvelope};
-use agentic_tauri::commands::events::{EventBusState, EVENT_CHANNEL};
-use agentic_tauri::commands::subscribe_events;
+use agentic_tauri::commands::events::{EVENT_CHANNEL, EventBusState, subscribe_events};
 use tauri::test::{mock_builder, mock_context, noop_assets};
 use tauri::{Listener, Manager, WebviewWindowBuilder};
 
@@ -26,7 +25,9 @@ async fn subscribe_events_forwards_envelope_to_webview() {
 
     // Build mock app with managed state.
     let app = mock_builder()
-        .invoke_handler(tauri::generate_handler![subscribe_events])
+        .invoke_handler(tauri::generate_handler![
+            agentic_tauri::commands::events::subscribe_events
+        ])
         .manage(EventBusState(bus.clone()))
         .build(mock_context(noop_assets()))
         .expect("build mock app");
@@ -84,7 +85,9 @@ async fn subscribe_events_handles_no_subscribers_gracefully() {
     let bus = Arc::new(EventBus::new());
 
     let app = mock_builder()
-        .invoke_handler(tauri::generate_handler![subscribe_events])
+        .invoke_handler(tauri::generate_handler![
+            agentic_tauri::commands::events::subscribe_events
+        ])
         .manage(EventBusState(bus.clone()))
         .build(mock_context(noop_assets()))
         .expect("build mock app");
