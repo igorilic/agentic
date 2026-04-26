@@ -1322,7 +1322,7 @@ Legend:
 
 ---
 
-### Step 10.4: Event viewer panel (React)
+### ~~Step 10.4: Event viewer panel (React)~~ [x]
 
 **Goal**: A scrollable list that renders every event received. Primitive; no styling beyond Tailwind.
 
