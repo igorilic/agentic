@@ -16,8 +16,11 @@ export default function EventList({ events }: EventListProps) {
     );
   }
 
+  // stable test selector on data-testid — do not rename without updating EventList.test.tsx
   return (
     <ul
+      aria-live="polite"
+      aria-relevant="additions"
       className="divide-y divide-gray-200 overflow-y-auto max-h-[80vh]"
       data-testid="event-list"
     >
