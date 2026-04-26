@@ -36,6 +36,22 @@ describe("EventList", () => {
     expect(rows[2]).toHaveTextContent("StepComplete");
   });
 
+  it("marks the list as aria-live polite", () => {
+    const events: EventEnvelope[] = [
+      {
+        schema_version: 1,
+        event_id: "e1",
+        run_id: "run-1",
+        step_id: "step-1",
+        timestamp_ms: 1700000000000,
+        event: { type: "TextDelta", data: { content: "hi" } },
+      },
+    ];
+    render(<EventList events={events} />);
+    const list = screen.getByTestId("event-list");
+    expect(list).toHaveAttribute("aria-live", "polite");
+  });
+
   it("falls back to short run_id when step_id is null", () => {
     const events: EventEnvelope[] = [
       {
