@@ -28,7 +28,7 @@ async fn subscribe_events_forwards_envelope_to_webview() {
         .invoke_handler(tauri::generate_handler![
             agentic_tauri::commands::events::subscribe_events
         ])
-        .manage(EventBusState(bus.clone()))
+        .manage(EventBusState::new(bus.clone()))
         .build(mock_context(noop_assets()))
         .expect("build mock app");
 
@@ -88,7 +88,7 @@ async fn subscribe_events_handles_no_subscribers_gracefully() {
         .invoke_handler(tauri::generate_handler![
             agentic_tauri::commands::events::subscribe_events
         ])
-        .manage(EventBusState(bus.clone()))
+        .manage(EventBusState::new(bus.clone()))
         .build(mock_context(noop_assets()))
         .expect("build mock app");
 
@@ -113,7 +113,9 @@ async fn subscribe_events_re_invocation_replaces_forwarder() {
     let bus_for_publish = bus.clone();
 
     let app = mock_builder()
-        .invoke_handler(tauri::generate_handler![subscribe_events])
+        .invoke_handler(tauri::generate_handler![
+            agentic_tauri::commands::events::subscribe_events
+        ])
         .manage(EventBusState::new(bus.clone()))
         .build(mock_context(noop_assets()))
         .expect("build mock app");

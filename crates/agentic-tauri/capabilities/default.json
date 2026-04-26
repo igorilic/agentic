@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability set for the Agentic Tauri shell. Grants the main window access to core commands.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "allow-subscribe-events"
+  ]
+}

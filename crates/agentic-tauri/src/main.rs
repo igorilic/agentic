@@ -13,7 +13,7 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             let bus = Arc::new(EventBus::new());
-            app.manage(EventBusState(bus));
+            app.manage(EventBusState::new(bus));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![commands::events::subscribe_events])
