@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "allow-subscribe-events",
-    "allow-start-scripted-run"
+    "allow-start-scripted-run",
+    "allow-cancel-run"
   ]
 }

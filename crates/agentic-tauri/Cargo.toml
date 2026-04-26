@@ -20,6 +20,7 @@ agentic-core = { path = "../agentic-core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 ulid = { workspace = true }

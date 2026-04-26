@@ -314,7 +314,10 @@ async fn cancel_run_aborts_in_flight_run() {
     let cancel_result = cancel_run(app.state::<EventBusState>(), run_id.clone())
         .await
         .expect("cancel_run");
-    assert!(cancel_result, "cancel_run should return true for known run_id");
+    assert!(
+        cancel_result,
+        "cancel_run should return true for known run_id"
+    );
 
     // Wait for the RunComplete(Failed) envelope.
     tokio::time::sleep(Duration::from_millis(400)).await;
@@ -345,13 +348,13 @@ async fn cancel_run_aborts_in_flight_run() {
         run_complete.is_some(),
         "expected RunComplete(Failed) after cancel"
     );
-    if let Some(env) = run_complete {
-        if let Event::RunComplete { summary, .. } = &env.event {
-            assert!(
-                summary.contains("cancel"),
-                "summary should mention cancellation: {summary}"
-            );
-        }
+    if let Some(env) = run_complete
+        && let Event::RunComplete { summary, .. } = &env.event
+    {
+        assert!(
+            summary.contains("cancel"),
+            "summary should mention cancellation: {summary}"
+        );
     }
 }
 

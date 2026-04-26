@@ -21,7 +21,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::events::subscribe_events,
-            commands::scripted::start_scripted_run
+            commands::scripted::start_scripted_run,
+            commands::scripted::cancel_run
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

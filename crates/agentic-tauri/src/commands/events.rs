@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use agentic_core::events::EventBus;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 /// Per-app shared state holding the EventBus. Created at app setup time and
 /// stored in Tauri's managed state.
@@ -20,6 +22,8 @@ pub struct EventBusState {
     /// so the webview receives exactly one stream of envelopes regardless
     /// of how many times the frontend re-attaches (e.g., during Vite HMR).
     forwarder: Mutex<Option<JoinHandle<()>>>,
+    /// Active run cancellation tokens, keyed by run_id.
+    cancellations: Mutex<HashMap<String, CancellationToken>>,
 }
 
 impl EventBusState {
@@ -27,6 +31,24 @@ impl EventBusState {
         Self {
             bus,
             forwarder: Mutex::new(None),
+            cancellations: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Register a cancellation token for `run_id`.
+    pub async fn register_cancellation(&self, run_id: String, token: CancellationToken) {
+        self.cancellations.lock().await.insert(run_id, token);
+    }
+
+    /// Cancel the run identified by `run_id`. Returns `true` if a token was
+    /// found and cancelled, `false` if no such run is registered (idempotent).
+    pub async fn cancel(&self, run_id: &str) -> bool {
+        let mut map = self.cancellations.lock().await;
+        if let Some(token) = map.remove(run_id) {
+            token.cancel();
+            true
+        } else {
+            false
         }
     }
 }
