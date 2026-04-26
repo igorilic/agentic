@@ -1355,6 +1355,18 @@ Legend:
 
 ---
 
+### [x] Step 10.6: `StartRunForm` UI component (closes CP-8 demo loop)
+
+**Goal**: React form in `App.tsx` for entering a script path, triggering `start_scripted_run`, and cancelling an active run — wires the UI to the Tauri commands from Step 10.5.
+
+**Depends on**: Step 10.5.
+
+**Commits**: `test(web): add failing tests for start scripted run form`, `feat(web): start/cancel scripted run form (closes CP-8 demo loop)`
+
+**Verification**: `pnpm --filter @agentic/web-ui test` — 13 pass.
+
+---
+
 ### CP-8: Milestone 3 — Tauri app renders a scripted run's events
 
 **Checkpoint**: Stop.
