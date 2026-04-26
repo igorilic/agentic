@@ -54,11 +54,11 @@ impl EventBusState {
 }
 
 /// The frontend channel name for forwarded envelopes. Frontend listens via
-/// `window.listen("agentic://event", handler)`.
-pub const EVENT_CHANNEL: &str = "agentic://event";
+/// `window.listen("agentic.event", handler)`.
+pub const EVENT_CHANNEL: &str = "agentic.event";
 
 /// Tauri command. Subscribes to the EventBus and forwards every envelope as
-/// a `tauri::Event` named `agentic://event`. Spawns a background tokio task.
+/// a `tauri::Event` named `agentic.event`. Spawns a background tokio task.
 ///
 /// Re-invoking this command aborts any previously spawned forwarder and
 /// replaces it with a fresh one. This prevents Vite HMR from accumulating

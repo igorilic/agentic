@@ -8,7 +8,7 @@
   },
   "app": {
     "windows": [{"title": "Agentic", "width": 1200, "height": 800}],
-    "security": {"csp": null}
+    "security": {"csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data:;"}
   },
   "bundle": {"active": false, "targets": "all"}
 }

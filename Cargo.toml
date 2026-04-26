@@ -42,7 +42,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 base64 = "0.22"
 sha2 = "0.10"
 rand = "0.8"
-keyring = "3"
+keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "linux-native"] }
 nix = { version = "0.30", default-features = false, features = ["signal"] }
 axum = "0.7"
 zeroize = { version = "1", features = ["derive"] }
