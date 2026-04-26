@@ -1,5 +1,5 @@
-use agentic_core::auth::oauth_gitlab::{GitlabOauthClient, GitlabOauthError};
 use agentic_core::auth::AccessToken;
+use agentic_core::auth::oauth_gitlab::{GitlabOauthClient, GitlabOauthError};
 use wiremock::matchers::{body_string_contains, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -25,7 +25,11 @@ async fn exchange_code_returns_access_token_on_valid_response() {
 
     let client = GitlabOauthClient::new(server.uri(), "test-client-id", Some("secret".into()));
     let token = client
-        .exchange_code("auth_code_xyz", "verifier_abc", "http://127.0.0.1:8080/callback")
+        .exchange_code(
+            "auth_code_xyz",
+            "verifier_abc",
+            "http://127.0.0.1:8080/callback",
+        )
         .await
         .unwrap();
 

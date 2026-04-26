@@ -1125,7 +1125,7 @@ Legend:
 
 ---
 
-### Step 9.3: Loopback listener
+### [x] Step 9.3: Loopback listener
 
 **Goal**: Start an ephemeral `axum` server on a random localhost port; return `(port, Future<Result<CallbackQuery>>)`; valid callback resolves; invalid path returns 404; timeout cancels.
 
@@ -1150,7 +1150,7 @@ Legend:
 
 ---
 
-### Step 9.4: Token exchange (GitHub)
+### [x] Step 9.4: Token exchange (GitHub)
 
 **Goal**: Exchange `code + verifier` for a token at GitHub; wiremock-tested.
 
@@ -1173,7 +1173,7 @@ Legend:
 
 ---
 
-### Step 9.5: Token exchange (GitLab)
+### [x] Step 9.5: Token exchange (GitLab)
 
 **Goal**: Analogous to 9.4 for GitLab.
 
@@ -1191,7 +1191,7 @@ Legend:
 
 ---
 
-### Step 9.6: Device code flow fallback
+### Step 9.6: Device code flow fallback [x]
 
 **Goal**: Implement the OAuth device code flow for headless/SSH environments (spec §15.5).
 
