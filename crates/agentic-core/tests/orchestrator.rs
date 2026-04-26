@@ -1,6 +1,7 @@
 use agentic_core::{
-    CURRENT_SCHEMA_VERSION, Db, Event, EventBus, EventEnvelope, ModelId, Paths,
-    PipelineOrchestrator, Run, RunRepo, RunStatus, Step, StepRepo, StepStatus, TokenUsage,
+    BackendId, CURRENT_SCHEMA_VERSION, Db, Event, EventBus, EventEnvelope, ModelId, Paths,
+    PipelineOrchestrator, ProfileId, Run, RunRepo, RunStatus, Step, StepRepo, StepStatus,
+    TicketKind, TicketRef, TokenUsage,
 };
 use rusqlite::params;
 
@@ -163,4 +164,36 @@ async fn run_complete_transitions_run_row_and_delivers_to_subscribers() {
             ..
         }
     ));
+}
+
+#[tokio::test]
+async fn run_started_event_transitions_run_row_to_running() {
+    let (_tmp, _db, runs, steps, bus) = setup();
+
+    // Seed run as Pending (the natural default).
+    let mut run = seed_run_running("run-rs", 100);
+    run.status = RunStatus::Pending;
+    runs.insert(run).unwrap();
+
+    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
+    bus.publish(EventEnvelope::now(
+        "run-rs".to_string(),
+        None,
+        Event::RunStarted {
+            ticket: TicketRef {
+                kind: TicketKind::GithubIssue,
+                reference: "#1".into(),
+                title: None,
+            },
+            profile: ProfileId("github".into()),
+            backend: BackendId("claude-code".into()),
+            model: ModelId("claude-opus-4-7".into()),
+        },
+    ));
+
+    drop(bus);
+    handle.await.expect("orchestrator joins");
+
+    let run = runs.get("run-rs").unwrap().unwrap();
+    assert_eq!(run.status, RunStatus::Running);
 }
