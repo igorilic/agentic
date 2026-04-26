@@ -4,6 +4,7 @@ members = [
     "crates/agentic-meta-tests",
     "crates/agentic-core",
     "crates/agentic-cli",
+    "crates/agentic-tauri",
 ]
 
 [workspace.package]

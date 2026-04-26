@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Agentic",
+  "version": "0.1.0",
+  "identifier": "io.agentic.app",
+  "build": {
+    "frontendDist": "frontend"
+  },
+  "app": {
+    "windows": [{"title": "Agentic", "width": 1200, "height": 800}],
+    "security": {"csp": null}
+  },
+  "bundle": {"active": false, "targets": "all"}
+}

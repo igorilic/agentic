@@ -12,8 +12,7 @@ fn conf_path() -> PathBuf {
 #[test]
 fn tauri_conf_identifier_is_io_agentic_app() {
     let path = conf_path();
-    let raw = fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let raw = fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
     assert_eq!(
         v.get("identifier").and_then(|x| x.as_str()),
@@ -25,8 +24,7 @@ fn tauri_conf_identifier_is_io_agentic_app() {
 #[test]
 fn tauri_conf_product_name_is_agentic() {
     let path = conf_path();
-    let raw = fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let raw = fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
     assert_eq!(
         v.get("productName").and_then(|x| x.as_str()),

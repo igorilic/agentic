@@ -1,0 +1,19 @@
+[package]
+name = "agentic-tauri"
+version = "0.1.0"
+edition.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+agentic-core = { path = "../agentic-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[features]
+# Required by Tauri 2.x for production builds
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
