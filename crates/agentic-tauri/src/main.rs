@@ -16,7 +16,10 @@ fn main() {
             app.manage(EventBusState::new(bus));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![commands::events::subscribe_events])
+        .invoke_handler(tauri::generate_handler![
+            commands::events::subscribe_events,
+            commands::scripted::start_scripted_run
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

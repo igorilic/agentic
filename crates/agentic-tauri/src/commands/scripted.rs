@@ -32,6 +32,29 @@ pub async fn start_scripted_run<R: Runtime>(
     script_path: String,
     delay_ms: Option<u64>,
 ) -> Result<String, String> {
-    let _ = (state, script_path, delay_ms);
-    todo!("start_scripted_run not yet implemented")
+    let path = PathBuf::from(&script_path);
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| ScriptedRunError::Io(format!("{}: {e}", path.display())).to_string())?;
+    let events: Vec<Event> = serde_json::from_str(&raw)
+        .map_err(|e| ScriptedRunError::Parse(e.to_string()).to_string())?;
+
+    let run_id = Ulid::new().to_string().to_lowercase();
+    let bus = state.bus.clone();
+    let delay = Duration::from_millis(delay_ms.unwrap_or(DEFAULT_DELAY_MS));
+    let returned_run_id = run_id.clone();
+
+    // Spawn so the command returns immediately; the publishing happens
+    // in the background. The frontend gets envelopes via the
+    // `agentic://event` channel that subscribe_events already forwards.
+    tokio::spawn(async move {
+        for event in events {
+            let envelope = EventEnvelope::now(run_id.clone(), None, event);
+            bus.publish(envelope);
+            if !delay.is_zero() {
+                tokio::time::sleep(delay).await;
+            }
+        }
+    });
+
+    Ok(returned_run_id)
 }

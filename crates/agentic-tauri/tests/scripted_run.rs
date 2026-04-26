@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use agentic_core::events::{Event, EventBus, EventEnvelope, StepStatus};
 use agentic_core::ModelId;
+use agentic_core::events::{Event, EventBus, EventEnvelope, StepStatus};
 use agentic_tauri::commands::events::{EVENT_CHANNEL, EventBusState, subscribe_events};
 use agentic_tauri::commands::scripted::start_scripted_run;
 use tauri::test::{mock_builder, mock_context, noop_assets};
@@ -47,7 +47,9 @@ async fn start_scripted_run_publishes_events_in_order() {
     // Subscribe BEFORE start.
     let app_handle = app.handle().clone();
     let state = app.state::<EventBusState>();
-    subscribe_events(app_handle.clone(), state).await.expect("subscribe");
+    subscribe_events(app_handle.clone(), state)
+        .await
+        .expect("subscribe");
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // Build a 3-event script.
@@ -56,7 +58,9 @@ async fn start_scripted_run_publishes_events_in_order() {
             agent: "scripted".to_string(),
             model: ModelId("fake".to_string()),
         },
-        Event::TextDelta { content: "hello".to_string() },
+        Event::TextDelta {
+            content: "hello".to_string(),
+        },
         Event::StepComplete {
             status: StepStatus::Passed,
             summary: "ok".to_string(),
@@ -85,7 +89,12 @@ async fn start_scripted_run_publishes_events_in_order() {
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     let received = captured.lock().unwrap();
-    assert_eq!(received.len(), 3, "expected 3 envelopes, got {}", received.len());
+    assert_eq!(
+        received.len(),
+        3,
+        "expected 3 envelopes, got {}",
+        received.len()
+    );
 
     // Order check
     assert!(matches!(received[0].event, Event::StepStarted { .. }));
