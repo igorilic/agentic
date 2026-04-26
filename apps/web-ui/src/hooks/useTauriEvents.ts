@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type { EventEnvelope } from "../types/event";
 
-export const EVENT_CHANNEL = "agentic.event";
+export const EVENT_CHANNEL = "agentic://event";
 
 /**
  * Maximum number of envelopes kept in the sliding-window buffer.
