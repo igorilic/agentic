@@ -50,6 +50,7 @@ pub use auth::{
     CallbackQuery, KeyringSecretStore, LoopbackError, LoopbackListener, SecretStore,
     SecretStoreError, start_loopback,
 };
+pub use auth::{DeviceAuthorization, DeviceCodeClient, DeviceCodeError};
 pub use auth::{GitlabOauthClient, GitlabOauthError};
 pub use auth::{PkceChallenge, generate_state};
 mod time;
