@@ -1209,7 +1209,7 @@ Legend:
 
 ---
 
-### Step 9.7: CLI session delegate (`gh auth token`)
+### [x] Step 9.7: CLI session delegate (`gh auth token`)
 
 **Goal**: If `gh auth status` reports a valid session, optionally import the token via `gh auth token`.
 
@@ -1229,7 +1229,7 @@ Legend:
 
 ---
 
-### Step 9.8: Token refresh background task
+### Step 9.8: Token refresh background task ✓
 
 **Goal**: A task that wakes within 5 min of `token_expires_at` and refreshes via the provider's refresh endpoint.
 
