@@ -63,7 +63,13 @@ impl<S: RefreshStrategy> RefreshScheduler<S> {
     ///
     /// Tokens without an expiry never need refreshing.
     pub fn should_refresh(&self, token: &AccessToken, now_ms: i64) -> bool {
-        todo!()
+        match token.expires_at {
+            None => false,
+            Some(expires_at) => {
+                let lead_ms = self.lead_time.as_millis() as i64;
+                now_ms + lead_ms >= expires_at
+            }
+        }
     }
 
     /// Attempt one refresh via the strategy.
@@ -71,17 +77,38 @@ impl<S: RefreshStrategy> RefreshScheduler<S> {
     /// Returns the new [`AccessToken`] on success, or
     /// [`AccountStatus::NeedsReauth`] on any failure. The caller is
     /// responsible for persisting the returned status.
-    pub async fn refresh_once(
-        &self,
-        token: &AccessToken,
-    ) -> Result<AccessToken, AccountStatus> {
-        todo!()
+    pub async fn refresh_once(&self, token: &AccessToken) -> Result<AccessToken, AccountStatus> {
+        let refresh_token = match &token.refresh_token {
+            Some(rt) => rt.as_str(),
+            None => {
+                return Err(AccountStatus::NeedsReauth {
+                    reason: "no refresh_token available".to_string(),
+                });
+            }
+        };
+
+        match self.strategy.refresh(refresh_token).await {
+            Ok(new_token) => Ok(new_token),
+            Err(RefreshError::Rejected { error, description }) => Err(AccountStatus::NeedsReauth {
+                reason: format!("provider rejected: {error} — {description}"),
+            }),
+            Err(RefreshError::Transport(msg)) | Err(RefreshError::Parse(msg)) => {
+                // Transport/parse errors are usually transient — for MVP we
+                // surface them as needs_reauth. A future retry policy would
+                // distinguish transient from permanent failures.
+                Err(AccountStatus::NeedsReauth { reason: msg })
+            }
+        }
     }
 }
 
 // ── GitHub refresh strategy ──────────────────────────────────────────────────
 
 /// Refresh strategy for GitHub OAuth apps with token expiration enabled.
+///
+/// NOTE: `GithubRefreshStrategy::refresh` duplicates some body-parsing logic
+/// from `oauth_github::GithubOauthClient::exchange_code`. This is acceptable
+/// for now — factoring it into a shared helper is tracked as issue #51.
 pub struct GithubRefreshStrategy {
     pub base_url: String,
     pub client_id: String,
@@ -112,6 +139,83 @@ impl GithubRefreshStrategy {
 #[async_trait::async_trait]
 impl RefreshStrategy for GithubRefreshStrategy {
     async fn refresh(&self, refresh_token: &str) -> Result<AccessToken, RefreshError> {
-        todo!()
+        let url = format!("{}/login/oauth/access_token", self.base_url);
+
+        let mut form = vec![
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_token),
+            ("client_id", self.client_id.as_str()),
+        ];
+        if let Some(secret) = &self.client_secret {
+            form.push(("client_secret", secret.as_str()));
+        }
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("Accept", "application/json")
+            .form(&form)
+            .send()
+            .await
+            .map_err(|e| RefreshError::Transport(e.to_string()))?;
+
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| RefreshError::Parse(format!("response body json: {e}")))?;
+
+        // GitHub returns OAuth errors with HTTP 200 + `error` field.
+        if let Some(err) = body.get("error").and_then(|v| v.as_str()) {
+            let description = body
+                .get("error_description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            return Err(RefreshError::Rejected {
+                error: err.to_string(),
+                description,
+            });
+        }
+
+        let token = body
+            .get("access_token")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| RefreshError::Parse("missing access_token".into()))?
+            .to_string();
+
+        let token_type = body
+            .get("token_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("bearer")
+            .to_string();
+
+        let scopes_raw = body.get("scope").and_then(|v| v.as_str()).unwrap_or("");
+        let scopes: Vec<String> = scopes_raw
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect();
+
+        let new_refresh_token = body
+            .get("refresh_token")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
+        let expires_in_secs = body.get("expires_in").and_then(|v| v.as_i64());
+        let expires_at = expires_in_secs.map(|secs| {
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            now_ms + (secs * 1000)
+        });
+
+        Ok(AccessToken {
+            token,
+            refresh_token: new_refresh_token,
+            expires_at,
+            token_type,
+            scopes,
+        })
     }
 }

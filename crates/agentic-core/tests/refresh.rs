@@ -1,8 +1,8 @@
-use std::time::Duration;
 use agentic_core::auth::{
     AccessToken, AccountStatus, GithubRefreshStrategy, RefreshError, RefreshScheduler,
     RefreshStrategy,
 };
+use std::time::Duration;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -125,7 +125,9 @@ async fn refresh_once_returns_needs_reauth_when_provider_rejects() {
 #[tokio::test]
 async fn refresh_once_returns_needs_reauth_on_transport_error() {
     let mock = MockStrategy::default();
-    mock.set(Err(RefreshError::Transport("connection refused".to_string())));
+    mock.set(Err(RefreshError::Transport(
+        "connection refused".to_string(),
+    )));
     let scheduler = RefreshScheduler::new(mock);
     let token = token_with_expiry(1_000_000_000);
     let result = scheduler.refresh_once(&token).await;
@@ -136,11 +138,11 @@ async fn refresh_once_returns_needs_reauth_on_transport_error() {
 
 #[test]
 fn with_lead_time_overrides_default() {
-    let scheduler = RefreshScheduler::new(MockStrategy::default())
-        .with_lead_time(Duration::from_secs(60)); // 1 minute lead
+    let scheduler =
+        RefreshScheduler::new(MockStrategy::default()).with_lead_time(Duration::from_secs(60)); // 1 minute lead
     let now_ms: i64 = 1_000_000_000;
-    // expires in 90 seconds — within 1 min lead time, so should refresh
-    let token = token_with_expiry(now_ms + 90 * 1000);
+    // expires in 30 seconds — within 1 min lead time, so should refresh
+    let token = token_with_expiry(now_ms + 30 * 1000);
     assert!(scheduler.should_refresh(&token, now_ms));
     // expires in 5 minutes — outside 1 min lead time, so should NOT refresh
     let far_token = token_with_expiry(now_ms + 5 * 60 * 1000);
