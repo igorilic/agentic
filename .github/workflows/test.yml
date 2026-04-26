@@ -72,5 +72,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+      - name: web-ui tests (vitest)
+        run: pnpm --filter @agentic/web-ui test
       - name: cargo test
         run: cargo test --workspace --all-targets
