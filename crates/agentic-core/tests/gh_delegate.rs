@@ -61,3 +61,16 @@ async fn check_session_returns_err_for_no_session() {
     let result = delegate.check_session().await;
     assert!(matches!(result, Err(GhDelegateError::NoExistingSession)));
 }
+
+// ── #55 — subprocess timeout ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn check_session_returns_subprocess_error_when_binary_hangs() {
+    let delegate = GhDelegate::with_binary(fixture_bin("fake-gh-slow.sh"));
+    let result = delegate.check_session().await;
+    // Should fail with Subprocess (timeout) — NOT hang for 30 seconds.
+    assert!(
+        matches!(result, Err(GhDelegateError::Subprocess(_))),
+        "expected Subprocess timeout error, got: {result:?}"
+    );
+}

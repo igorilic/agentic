@@ -1,5 +1,5 @@
 use agentic_core::auth::{
-    AccessToken, AccountStatus, GithubRefreshStrategy, RefreshError, RefreshScheduler,
+    AccessToken, GithubRefreshStrategy, RefreshError, RefreshOutcome, RefreshScheduler,
     RefreshStrategy,
 };
 use std::time::Duration;
@@ -88,9 +88,14 @@ async fn refresh_once_returns_new_token_on_success() {
     }));
     let scheduler = RefreshScheduler::new(mock);
     let old = token_with_expiry(1_000_000_000);
-    let new_token = scheduler.refresh_once(&old, 1_000_000_000).await.unwrap();
-    assert_eq!(new_token.token, "new_token");
-    assert_eq!(new_token.refresh_token.as_deref(), Some("new_refresh"));
+    let outcome = scheduler.refresh_once(&old, 1_000_000_000).await;
+    match outcome {
+        RefreshOutcome::Refreshed(new_token) => {
+            assert_eq!(new_token.token, "new_token");
+            assert_eq!(new_token.refresh_token.as_deref(), Some("new_refresh"));
+        }
+        other => panic!("expected Refreshed, got: {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -103,8 +108,11 @@ async fn refresh_once_returns_needs_reauth_when_no_refresh_token() {
         token_type: "bearer".to_string(),
         scopes: vec![],
     };
-    let result = scheduler.refresh_once(&token, 1_000_000_000).await;
-    assert!(matches!(result, Err(AccountStatus::NeedsReauth { .. })));
+    let outcome = scheduler.refresh_once(&token, 1_000_000_000).await;
+    assert!(
+        matches!(outcome, RefreshOutcome::NeedsReauth { .. }),
+        "expected NeedsReauth, got: {outcome:?}"
+    );
 }
 
 #[tokio::test]
@@ -116,13 +124,12 @@ async fn refresh_once_returns_needs_reauth_when_provider_rejects() {
     }));
     let scheduler = RefreshScheduler::new(mock);
     let token = token_with_expiry(1_000_000_000);
-    let result = scheduler.refresh_once(&token, 1_000_000_000).await;
-    let status = result.expect_err("expected NeedsReauth");
-    match status {
-        AccountStatus::NeedsReauth { reason } => {
+    let outcome = scheduler.refresh_once(&token, 1_000_000_000).await;
+    match outcome {
+        RefreshOutcome::NeedsReauth { reason } => {
             assert!(reason.contains("bad_refresh_token"), "reason: {reason}");
         }
-        AccountStatus::Active => panic!("expected NeedsReauth, got Active"),
+        other => panic!("expected NeedsReauth, got: {other:?}"),
     }
 }
 
@@ -134,8 +141,13 @@ async fn refresh_once_returns_needs_reauth_on_transport_error() {
     )));
     let scheduler = RefreshScheduler::new(mock);
     let token = token_with_expiry(1_000_000_000);
-    let result = scheduler.refresh_once(&token, 1_000_000_000).await;
-    assert!(matches!(result, Err(AccountStatus::NeedsReauth { .. })));
+    let outcome = scheduler.refresh_once(&token, 1_000_000_000).await;
+    // Old behavior mapped Transport to NeedsReauth — but now we have Transient.
+    // This test is updated to assert Transient (the new explicit variant).
+    assert!(
+        matches!(outcome, RefreshOutcome::Transient { .. }),
+        "expected Transient, got: {outcome:?}"
+    );
 }
 
 // ── with_lead_time ────────────────────────────────────────────────────────────
@@ -271,4 +283,36 @@ async fn github_refresh_strategy_handles_expires_in_zero() {
         Some(now_ms),
         "expires_at should equal now_ms when expires_in is 0"
     );
+}
+
+// ── #56 — new Transient variant tests ─────────────────────────────────────────
+
+#[tokio::test]
+async fn refresh_once_returns_transient_on_transport_error() {
+    let mock = MockStrategy::default();
+    mock.set(Err(RefreshError::Transport("network down".to_string())));
+    let scheduler = RefreshScheduler::new(mock);
+    let token = token_with_expiry(1_000_000_000);
+    let outcome = scheduler.refresh_once(&token, 1_000_000_000).await;
+    match outcome {
+        RefreshOutcome::Transient { reason } => {
+            assert!(reason.contains("network down"), "reason: {reason}");
+        }
+        other => panic!("expected Transient, got: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn refresh_once_returns_transient_on_parse_error() {
+    let mock = MockStrategy::default();
+    mock.set(Err(RefreshError::Parse("unexpected field".to_string())));
+    let scheduler = RefreshScheduler::new(mock);
+    let token = token_with_expiry(1_000_000_000);
+    let outcome = scheduler.refresh_once(&token, 1_000_000_000).await;
+    match outcome {
+        RefreshOutcome::Transient { reason } => {
+            assert!(reason.contains("unexpected field"), "reason: {reason}");
+        }
+        other => panic!("expected Transient, got: {other:?}"),
+    }
 }

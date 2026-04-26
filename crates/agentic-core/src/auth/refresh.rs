@@ -34,15 +34,27 @@ pub enum RefreshError {
 pub enum AccountStatus {
     /// Token is current and valid.
     ///
-    /// **Note**: this variant is NOT returned by `RefreshScheduler::refresh_once`,
-    /// which returns `Ok(AccessToken)` on success. `Active` is for callers that
-    /// persist account state and need to express the "no refresh needed" status
-    /// alongside the failure cases. The successful refresh path is signaled by
-    /// the `Ok` arm of `refresh_once`'s return.
+    /// **Note**: this variant is NOT returned by `RefreshScheduler::refresh_once`.
+    /// It is available for callers that persist account state and need to express
+    /// the "no refresh needed" status alongside the failure cases.
     Active,
-    /// Refresh failed (provider rejected refresh_token, network errored
-    /// past retry budget, etc.). User must re-authenticate.
+    /// Refresh failed permanently. User must re-authenticate.
     NeedsReauth { reason: String },
+}
+
+/// Outcome of a single `refresh_once` call.
+///
+/// Distinguishes permanent failures (re-auth required) from transient ones
+/// (network/parse errors that may succeed on retry).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RefreshOutcome {
+    /// A new token was obtained successfully.
+    Refreshed(AccessToken),
+    /// Provider rejected the refresh token or no refresh token is available.
+    /// User must re-authenticate.
+    NeedsReauth { reason: String },
+    /// A transient error occurred (network, parse). Retry may succeed.
+    Transient { reason: String },
 }
 
 /// Synchronous building blocks for token refresh scheduling.
@@ -83,34 +95,27 @@ impl<S: RefreshStrategy> RefreshScheduler<S> {
 
     /// Attempt one refresh via the strategy.
     ///
-    /// Returns the new [`AccessToken`] on success, or
-    /// [`AccountStatus::NeedsReauth`] on any failure. The caller is
-    /// responsible for persisting the returned status.
-    pub async fn refresh_once(
-        &self,
-        token: &AccessToken,
-        now_ms: i64,
-    ) -> Result<AccessToken, AccountStatus> {
+    /// Returns a [`RefreshOutcome`]:
+    /// - `Refreshed(token)` on success.
+    /// - `NeedsReauth { reason }` when the provider permanently rejected (or no refresh token).
+    /// - `Transient { reason }` for network/parse errors — caller may retry.
+    pub async fn refresh_once(&self, token: &AccessToken, now_ms: i64) -> RefreshOutcome {
         let refresh_token = match &token.refresh_token {
             Some(rt) => rt.as_str(),
             None => {
-                return Err(AccountStatus::NeedsReauth {
+                return RefreshOutcome::NeedsReauth {
                     reason: "no refresh_token available".to_string(),
-                });
+                };
             }
         };
 
         match self.strategy.refresh(refresh_token, now_ms).await {
-            Ok(new_token) => Ok(new_token),
-            Err(RefreshError::Rejected { error, description }) => Err(AccountStatus::NeedsReauth {
+            Ok(new_token) => RefreshOutcome::Refreshed(new_token),
+            Err(RefreshError::Rejected { error, description }) => RefreshOutcome::NeedsReauth {
                 reason: format!("provider rejected: {error} — {description}"),
-            }),
-            Err(RefreshError::Transport(msg)) | Err(RefreshError::Parse(msg)) => {
-                // Transport/parse errors are usually transient — for MVP we
-                // surface them as needs_reauth. A future retry policy would
-                // distinguish transient from permanent failures.
-                Err(AccountStatus::NeedsReauth { reason: msg })
-            }
+            },
+            Err(RefreshError::Transport(msg)) => RefreshOutcome::Transient { reason: msg },
+            Err(RefreshError::Parse(msg)) => RefreshOutcome::Transient { reason: msg },
         }
     }
 }

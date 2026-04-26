@@ -2,7 +2,7 @@
 // real network sockets — reqwest's hyper layer uses real OS I/O which stalls when tokio
 // time is paused. Polling tests therefore use real time with small base intervals (10ms).
 // Follow-up: consider abstracting the sleep behind a trait to enable time injection.
-use agentic_core::auth::device_code::{DeviceCodeClient, DeviceCodeError};
+use agentic_core::auth::device_code::{DeviceCodeClient, DeviceCodeError, ScopeSeparator};
 use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -27,6 +27,7 @@ async fn request_device_code_returns_device_authorization_on_success() {
         format!("{}/device", server.uri()),
         format!("{}/token", server.uri()),
         "client123",
+        ScopeSeparator::Comma,
     );
     let auth = client.request_device_code(&["repo"]).await.unwrap();
     assert_eq!(auth.device_code, "abc123");
@@ -56,6 +57,7 @@ async fn request_device_code_returns_oauth_error_on_400() {
         format!("{}/device", server.uri()),
         format!("{}/token", server.uri()),
         "bad",
+        ScopeSeparator::Comma,
     );
     let result = client.request_device_code(&[]).await;
     assert!(
@@ -115,13 +117,18 @@ async fn poll_for_token_handles_slow_down_then_pending_then_success() {
         format!("{}/device", server.uri()),
         format!("{}/token", server.uri()),
         "id",
+        ScopeSeparator::Comma,
     );
 
     // Use 10ms base interval. The +5s RFC slow_down bump makes poll 2 and 3 sleep ~5s
     // each in real time, so this test takes ~10s wall clock. Correctness is verified
     // by the 3-mock sequence completing successfully.
     let token = client
-        .poll_for_token("dev_code_xyz", Duration::from_millis(10))
+        .poll_for_token(
+            "dev_code_xyz",
+            Duration::from_millis(10),
+            Duration::from_secs(60),
+        )
         .await
         .unwrap();
     assert_eq!(token.token, "gho_xxx");
@@ -143,9 +150,14 @@ async fn poll_for_token_returns_access_denied_when_user_denies() {
         format!("{}/device", server.uri()),
         format!("{}/token", server.uri()),
         "id",
+        ScopeSeparator::Comma,
     );
     let result = client
-        .poll_for_token("dev_code", Duration::from_millis(10))
+        .poll_for_token(
+            "dev_code",
+            Duration::from_millis(10),
+            Duration::from_secs(60),
+        )
         .await;
     assert!(matches!(result, Err(DeviceCodeError::AccessDenied)));
 }
@@ -165,9 +177,117 @@ async fn poll_for_token_returns_expired_when_device_code_expired() {
         format!("{}/device", server.uri()),
         format!("{}/token", server.uri()),
         "id",
+        ScopeSeparator::Comma,
     );
     let result = client
-        .poll_for_token("dev_code", Duration::from_millis(10))
+        .poll_for_token(
+            "dev_code",
+            Duration::from_millis(10),
+            Duration::from_secs(60),
+        )
         .await;
     assert!(matches!(result, Err(DeviceCodeError::Expired)));
+}
+
+// ── #52 — max_total_duration cap ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn poll_for_token_returns_poll_duration_exceeded_after_max_duration() {
+    let server = MockServer::start().await;
+    // Always respond with authorization_pending — would loop forever without cap.
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"error": "authorization_pending"})),
+        )
+        .mount(&server)
+        .await;
+
+    let client = DeviceCodeClient::new(
+        format!("{}/device", server.uri()),
+        format!("{}/token", server.uri()),
+        "id",
+        ScopeSeparator::Comma,
+    );
+    // Very short max_total_duration so the test finishes quickly.
+    let result = client
+        .poll_for_token(
+            "dev_code",
+            Duration::from_millis(10),
+            Duration::from_millis(50),
+        )
+        .await;
+    assert!(
+        matches!(result, Err(DeviceCodeError::PollDurationExceeded)),
+        "expected PollDurationExceeded, got: {result:?}"
+    );
+}
+
+// ── #53 — ScopeSeparator: space separator for GitLab ─────────────────────────
+
+#[tokio::test]
+async fn poll_for_token_splits_scopes_with_space_separator() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "access_token": "glpat_xxx",
+            "token_type": "bearer",
+            "scope": "read_user api"
+        })))
+        .mount(&server)
+        .await;
+
+    let client = DeviceCodeClient::new(
+        format!("{}/device", server.uri()),
+        format!("{}/token", server.uri()),
+        "id",
+        ScopeSeparator::Space,
+    );
+    let token = client
+        .poll_for_token(
+            "dev_code",
+            Duration::from_millis(10),
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        token.scopes,
+        vec!["read_user".to_string(), "api".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn poll_for_token_splits_scopes_with_comma_separator() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "access_token": "gho_xxx",
+            "token_type": "bearer",
+            "scope": "repo,read:user"
+        })))
+        .mount(&server)
+        .await;
+
+    let client = DeviceCodeClient::new(
+        format!("{}/device", server.uri()),
+        format!("{}/token", server.uri()),
+        "id",
+        ScopeSeparator::Comma,
+    );
+    let token = client
+        .poll_for_token(
+            "dev_code",
+            Duration::from_millis(10),
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        token.scopes,
+        vec!["repo".to_string(), "read:user".to_string()]
+    );
 }

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use axum::{Router, extract::Query, routing::get};
+use axum::{Router, extract::Query, http::StatusCode, response::IntoResponse, routing::get};
 use serde::Deserialize;
 use tokio::sync::oneshot;
 
@@ -125,10 +125,17 @@ pub async fn start(timeout: Duration) -> Result<LoopbackListener, LoopbackError>
                         code: params.code,
                         state: params.state,
                     };
-                    if let Some(tx) = cb_tx.lock().unwrap().take() {
+                    let took = if let Some(tx) = cb_tx.lock().unwrap().take() {
                         let _ = tx.send(query);
+                        true
+                    } else {
+                        false
+                    };
+                    if took {
+                        (StatusCode::OK, "OK — you may close this tab.").into_response()
+                    } else {
+                        (StatusCode::CONFLICT, "Authorization already received.").into_response()
                     }
-                    "OK — you may close this tab."
                 }
             }
         }),

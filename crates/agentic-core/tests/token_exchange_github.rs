@@ -1,6 +1,7 @@
 use agentic_core::auth::oauth_github::{
     AccessToken, GithubOauthClient, GithubOauthError, validate_state,
 };
+
 use wiremock::matchers::{body_string_contains, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -140,4 +141,35 @@ async fn debug_impl_redacts_token_and_refresh_token() {
     assert!(!dbg.contains("ghr_alsosecret"));
     assert!(dbg.contains("[redacted]"));
     assert!(dbg.contains("repo"));
+}
+
+// ── #50 — transport-error and GHES base-URL paths ────────────────────────────
+
+#[tokio::test]
+async fn exchange_code_returns_transport_error_when_server_unreachable() {
+    // 127.0.0.1:1 is typically refused immediately on macOS/Linux.
+    let client = GithubOauthClient::new("http://127.0.0.1:1", "client_id", None);
+    let result = client.exchange_code("c", "v", "http://x/cb").await;
+    assert!(
+        matches!(result, Err(GithubOauthError::Transport(_))),
+        "expected Transport error, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn exchange_code_works_with_ghes_base_url() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/login/oauth/access_token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "access_token": "ghs_xxx",
+            "token_type": "bearer",
+            "scope": "repo"
+        })))
+        .mount(&server)
+        .await;
+
+    let client = GithubOauthClient::new(server.uri(), "id", None);
+    let token = client.exchange_code("c", "v", "http://cb").await.unwrap();
+    assert_eq!(token.token, "ghs_xxx");
 }

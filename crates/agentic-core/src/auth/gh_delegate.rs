@@ -1,9 +1,12 @@
 use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::process::Command;
+use tokio::time::{Duration, timeout};
 
 use crate::auth::SecretStore;
 use crate::auth::SecretStoreError;
+
+const GH_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, thiserror::Error)]
 pub enum GhDelegateError {
@@ -50,23 +53,29 @@ impl GhDelegate {
 
     /// Check that `gh` exists and reports a valid session via `gh auth status`.
     pub async fn check_session(&self) -> Result<(), GhDelegateError> {
-        let output = Command::new(&self.binary)
-            .args(["auth", "status"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    GhDelegateError::GhNotAvailable(format!(
-                        "binary not found: {}",
-                        self.binary.display()
-                    ))
-                } else {
-                    GhDelegateError::Subprocess(e.to_string())
-                }
-            })?;
+        let output = timeout(
+            GH_TIMEOUT,
+            Command::new(&self.binary)
+                .args(["auth", "status"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output(),
+        )
+        .await
+        .map_err(|_| {
+            GhDelegateError::Subprocess(format!("gh auth status timed out after {GH_TIMEOUT:?}"))
+        })?
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                GhDelegateError::GhNotAvailable(format!(
+                    "binary not found: {}",
+                    self.binary.display()
+                ))
+            } else {
+                GhDelegateError::Subprocess(e.to_string())
+            }
+        })?;
 
         if !output.status.success() {
             return Err(GhDelegateError::NoExistingSession);
@@ -83,14 +92,20 @@ impl GhDelegate {
     ) -> Result<(), GhDelegateError> {
         self.check_session().await?;
 
-        let output = Command::new(&self.binary)
-            .args(["auth", "token"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .map_err(|e| GhDelegateError::Subprocess(e.to_string()))?;
+        let output = timeout(
+            GH_TIMEOUT,
+            Command::new(&self.binary)
+                .args(["auth", "token"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output(),
+        )
+        .await
+        .map_err(|_| {
+            GhDelegateError::Subprocess(format!("gh auth token timed out after {GH_TIMEOUT:?}"))
+        })?
+        .map_err(|e| GhDelegateError::Subprocess(e.to_string()))?;
 
         if !output.status.success() {
             return Err(GhDelegateError::Subprocess(format!(

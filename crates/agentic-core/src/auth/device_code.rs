@@ -29,10 +29,24 @@ pub enum DeviceCodeError {
     AccessDenied,
     #[error("device_code expired before user completed authorization")]
     Expired,
+    #[error("device code polling exceeded max duration")]
+    PollDurationExceeded,
     #[error("transport: {0}")]
     Transport(String),
     #[error("parse: {0}")]
     Parse(String),
+}
+
+/// Controls how the token endpoint's `scope` field is split into individual scopes.
+///
+/// - GitHub uses comma-separated scopes: `"repo,read:user"`
+/// - GitLab and the RFC standard use space-separated: `"read_user api"`
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScopeSeparator {
+    /// GitHub-style: split on `,`
+    Comma,
+    /// GitLab/RFC-style: split on ` `
+    Space,
 }
 
 /// Provider-agnostic OAuth device code flow client (RFC 8628).
@@ -43,39 +57,45 @@ pub struct DeviceCodeClient {
     pub token_url: String,
     /// OAuth client_id.
     pub client_id: String,
+    /// How to split scopes in the token response.
+    pub scope_separator: ScopeSeparator,
     client: reqwest::Client,
 }
 
 impl DeviceCodeClient {
-    /// Create a new client with explicit endpoint URLs.
+    /// Create a new client with explicit endpoint URLs and scope separator.
     pub fn new(
         device_authorization_url: impl Into<String>,
         token_url: impl Into<String>,
         client_id: impl Into<String>,
+        scope_separator: ScopeSeparator,
     ) -> Self {
         Self {
             device_authorization_url: device_authorization_url.into(),
             token_url: token_url.into(),
             client_id: client_id.into(),
+            scope_separator,
             client: shared_client(),
         }
     }
 
-    /// Convenience: GitHub.com device flow endpoints.
+    /// Convenience: GitHub.com device flow endpoints (comma-separated scopes).
     pub fn github_com(client_id: impl Into<String>) -> Self {
         Self::new(
             "https://github.com/login/device/code",
             "https://github.com/login/oauth/access_token",
             client_id,
+            ScopeSeparator::Comma,
         )
     }
 
-    /// Convenience: GitLab.com device flow endpoints.
+    /// Convenience: GitLab.com device flow endpoints (space-separated scopes).
     pub fn gitlab_com(client_id: impl Into<String>) -> Self {
         Self::new(
             "https://gitlab.com/oauth/authorize_device",
             "https://gitlab.com/oauth/token",
             client_id,
+            ScopeSeparator::Space,
         )
     }
 
@@ -153,19 +173,27 @@ impl DeviceCodeClient {
     }
 
     /// Step 2: Poll the token endpoint at `initial_interval` (with `slow_down` backoff)
-    /// until success, denial, or expiration.
+    /// until success, denial, expiration, or `max_total_duration` elapsed.
     ///
     /// Per RFC 8628 §3.5, `slow_down` bumps the interval by +5 seconds. The `initial_interval`
     /// parameter takes a `Duration` (rather than integer seconds) to allow tests to use
     /// sub-second intervals without paused time.
+    ///
+    /// If the total elapsed time since polling started reaches `max_total_duration`, returns
+    /// `Err(DeviceCodeError::PollDurationExceeded)`. Recommended value: 15 minutes.
     pub async fn poll_for_token(
         &self,
         device_code: &str,
         initial_interval: Duration,
+        max_total_duration: Duration,
     ) -> Result<AccessToken, DeviceCodeError> {
         let mut interval = initial_interval;
+        let deadline = std::time::Instant::now() + max_total_duration;
 
         loop {
+            if std::time::Instant::now() >= deadline {
+                return Err(DeviceCodeError::PollDurationExceeded);
+            }
             // Wait BEFORE polling (RFC 8628 §3.4 — first poll is also after `interval`).
             tokio::time::sleep(interval).await;
 
@@ -232,19 +260,15 @@ impl DeviceCodeClient {
                 .to_string();
 
             let scopes_raw = body.get("scope").and_then(|v| v.as_str()).unwrap_or("");
-            let scopes: Vec<String> = if scopes_raw.contains(',') {
-                scopes_raw
-                    .split(',')
-                    .filter(|s| !s.is_empty())
-                    .map(String::from)
-                    .collect()
-            } else {
-                scopes_raw
-                    .split(' ')
-                    .filter(|s| !s.is_empty())
-                    .map(String::from)
-                    .collect()
+            let sep = match self.scope_separator {
+                ScopeSeparator::Comma => ',',
+                ScopeSeparator::Space => ' ',
             };
+            let scopes: Vec<String> = scopes_raw
+                .split(sep)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect();
 
             let refresh_token = body
                 .get("refresh_token")

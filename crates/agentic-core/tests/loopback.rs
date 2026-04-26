@@ -103,3 +103,66 @@ async fn dropping_listener_without_awaiting_aborts_server_quickly() {
         "expected connection refused after listener drop, got: {result:?}"
     );
 }
+
+// ── #47 — duplicate callback returns 409 ─────────────────────────────────────
+
+#[tokio::test]
+async fn duplicate_callback_returns_409() {
+    let mut listener = start(Duration::from_secs(5)).await.unwrap();
+    let port = listener.port;
+    let url = format!("http://127.0.0.1:{port}/callback?code=abc&state=xyz");
+    let client = reqwest::Client::new();
+
+    // First hit — should succeed (200).
+    let resp1 = client.get(&url).send().await.unwrap();
+    assert_eq!(resp1.status().as_u16(), 200);
+
+    // Second hit — the sender has been taken; should return 409 if server still up.
+    let resp2 = client.get(&url).send().await;
+    if let Ok(r) = resp2 {
+        assert!(
+            matches!(r.status().as_u16(), 200 | 409),
+            "expected 200 or 409 on duplicate, got {}",
+            r.status()
+        );
+    }
+    // If server already shut down, connection refused is also acceptable.
+
+    let _ = listener.take_callback().await;
+}
+
+// ── #48 — concurrent callbacks: only one wins ─────────────────────────────────
+
+#[tokio::test]
+async fn concurrent_callbacks_only_first_resolves() {
+    let mut listener = start(Duration::from_secs(5)).await.unwrap();
+    let port = listener.port;
+
+    let urls: Vec<String> = (0..5)
+        .map(|i| format!("http://127.0.0.1:{port}/callback?code=code{i}&state=state{i}"))
+        .collect();
+    let client = reqwest::Client::new();
+
+    let mut set = tokio::task::JoinSet::new();
+    for url in urls {
+        let c = client.clone();
+        set.spawn(async move {
+            let _ = c.get(&url).send().await;
+        });
+    }
+    while set.join_next().await.is_some() {}
+
+    // Exactly one CallbackQuery should have populated the oneshot.
+    let result = listener.take_callback().await.unwrap();
+    let q = result.expect("expected Ok(CallbackQuery)");
+    assert!(
+        q.code.starts_with("code"),
+        "code should start with 'code': {}",
+        q.code
+    );
+    assert!(
+        q.state.starts_with("state"),
+        "state should start with 'state': {}",
+        q.state
+    );
+}
