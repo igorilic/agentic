@@ -1343,6 +1343,18 @@ Legend:
 
 ---
 
+### [x] Step 10.5: `start_scripted_run` Tauri command
+
+**Goal**: Tauri command `start_scripted_run(script_path)` that reads a JSON `Vec<Event>` file and publishes each event as an `EventEnvelope` to the `EventBus`. Closes CP-8's demo loop.
+
+**Depends on**: Step 10.3.
+
+**Commit**: `feat(tauri): start_scripted_run command publishes events to bus`
+
+**Verification**: `cargo test -p agentic-tauri` — 6 pass.
+
+---
+
 ### CP-8: Milestone 3 — Tauri app renders a scripted run's events
 
 **Checkpoint**: Stop.
