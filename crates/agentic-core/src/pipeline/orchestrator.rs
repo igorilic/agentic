@@ -4,7 +4,7 @@ use tokio::task::JoinHandle;
 use crate::Result;
 use crate::db::runs::RunRepo;
 use crate::db::steps::StepRepo;
-use crate::events::{Event, EventBus, EventEnvelope, StepStatus};
+use crate::events::{Event, EventBus, EventEnvelope, RunStatus, StepStatus};
 
 /// Background orchestrator consuming events from the bus and applying
 /// them to `runs`/`run_steps` rows. One per bus per DB.
@@ -55,6 +55,9 @@ impl PipelineOrchestrator {
 
 fn apply_event(envelope: &EventEnvelope, runs: &RunRepo, steps: &StepRepo) -> Result<()> {
     match &envelope.event {
+        Event::RunStarted { .. } => {
+            runs.transition(&envelope.run_id, RunStatus::Running)?;
+        }
         Event::StepStarted { .. } => {
             if let Some(step_id) = &envelope.step_id {
                 steps.transition(step_id, StepStatus::Running)?;

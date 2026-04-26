@@ -276,13 +276,13 @@ async fn cmd_run_ticket(
         last_opened: 0,
     })?;
 
-    // Seed run row directly as Running (workaround for GH #17:
-    // Pending→Running transition is not fully wired in the orchestrator yet).
+    // Seed run row as Pending; the orchestrator transitions to Running when
+    // execute_pipeline publishes RunStarted (closes GH #17).
     runs_repo.insert(Run {
         id: run_id.clone(),
         workspace_id: ws_id.clone(),
         pipeline_name: "default".to_string(),
-        status: RunStatus::Running,
+        status: RunStatus::Pending,
         ticket_type: Some("free-text".to_string()),
         ticket_ref: None,
         ticket_title: None,
@@ -370,13 +370,15 @@ fn seed_minimal_run(db: &Db, runs: &RunRepo, steps: &StepRepo) -> Result<()> {
         last_opened: 0,
     })?;
     // Run (ignore if already present from prior smoke run reusing the same DB path).
+    // Seed as Pending; RunStarted event (published after spawn_infra) drives
+    // the Pending → Running transition via the orchestrator (closes GH #17).
     let run_exists = runs.get("smoke-run")?.is_some();
     if !run_exists {
         runs.insert(Run {
             id: "smoke-run".to_string(),
             workspace_id: "smoke-ws".to_string(),
             pipeline_name: "default".to_string(),
-            status: RunStatus::Running,
+            status: RunStatus::Pending,
             ticket_type: None,
             ticket_ref: None,
             ticket_title: None,

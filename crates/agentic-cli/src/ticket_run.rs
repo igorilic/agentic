@@ -347,14 +347,15 @@ mod tests {
         (tmp, paths, db, bus, ws_id)
     }
 
-    /// Seed a run row in Running status (workaround for GH #17).
+    /// Seed a run row in Pending status; execute_pipeline publishes RunStarted
+    /// which drives the Pending → Running transition via the orchestrator (closes GH #17).
     fn seed_run(db: &Db, run_id: &str, ws_id: &str) {
         let runs = RunRepo::new(db);
         runs.insert(Run {
             id: run_id.to_string(),
             workspace_id: ws_id.to_string(),
             pipeline_name: "default".to_string(),
-            status: RunStatus::Running,
+            status: RunStatus::Pending,
             ticket_type: None,
             ticket_ref: None,
             ticket_title: None,

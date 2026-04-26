@@ -85,11 +85,9 @@ async fn happy_path_run_drives_sm_events_through_orchestrator_to_completed_state
     let pipeline = config.default_pipeline().clone();
     let agent_to_step_id = seed_run_and_steps(&runs, &steps, &pipeline, "run1");
 
-    // 3. Transition run Pending → Running (orchestrator doesn't handle RunStarted; real
-    //    caller in Phase 4+ would perform this transition when spawning the backend).
-    runs.transition("run1", RunStatus::Running).unwrap();
-
-    // 4. Spawn orchestrator
+    // 3. Spawn orchestrator (subscribes before RunStarted is published).
+    //    The SM's Start input emits RunStarted first; the orchestrator handles
+    //    it and transitions the run Pending → Running automatically.
     let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
 
     // 5. Construct SM with the same pipeline
