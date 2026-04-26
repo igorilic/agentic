@@ -1,4 +1,4 @@
-use agentic_core::auth::{MemSecretStore, SecretStore, SecretStoreError};
+use agentic_core::auth::{KeyringSecretStore, MemSecretStore, SecretStore, SecretStoreError};
 
 #[test]
 fn mem_set_then_get_returns_value() {
@@ -44,4 +44,25 @@ fn mem_delete_missing_key_is_silent_no_op() {
 fn mem_store_is_send_and_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<MemSecretStore>();
+}
+
+// #41 — MemSecretStore::with_service propagates custom service name to NotFound
+#[test]
+fn mem_with_service_sets_service_label_in_not_found() {
+    let store = MemSecretStore::with_service("test-svc");
+    let err = store.get("missing-key").unwrap_err();
+    match err {
+        SecretStoreError::NotFound { service, key } => {
+            assert_eq!(service, "test-svc");
+            assert_eq!(key, "missing-key");
+        }
+        other => panic!("expected NotFound, got {other:?}"),
+    }
+}
+
+// #43 — KeyringSecretStore implements Send + Sync
+#[test]
+fn keyring_store_is_send_and_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<KeyringSecretStore>();
 }

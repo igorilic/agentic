@@ -102,3 +102,10 @@ fn one_thousand_verifiers_yield_one_thousand_distinct_challenges() {
         "duplicate challenges detected — RNG broken or output truncated"
     );
 }
+
+// #46 — PkceChallenge implements ZeroizeOnDrop (compile-time check)
+#[test]
+fn pkce_challenge_zeroizes_on_drop() {
+    fn assert_zeroize_on_drop<T: zeroize::ZeroizeOnDrop>() {}
+    assert_zeroize_on_drop::<PkceChallenge>();
+}

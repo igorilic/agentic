@@ -45,3 +45,4 @@ rand = "0.8"
 keyring = "3"
 nix = { version = "0.30", default-features = false, features = ["signal"] }
 axum = "0.7"
+zeroize = { version = "1", features = ["derive"] }
