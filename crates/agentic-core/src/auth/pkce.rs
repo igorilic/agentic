@@ -1,12 +1,18 @@
 use base64::Engine;
+use zeroize::ZeroizeOnDrop;
 
 /// PKCE method per RFC 7636. We only emit S256 (the recommended method).
-#[derive(Clone, PartialEq, Eq)]
+// #46 — verifier is zeroized on drop; challenge is public hash so skipped
+#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop)]
 pub struct PkceChallenge {
-    /// Secret. NEVER log or expose. Send only to the OAuth token-exchange endpoint.
-    pub verifier: String,
     /// Public. Send to the OAuth authorization endpoint.
+    /// Derived hash — not secret. Skip zeroize.
+    #[zeroize(skip)]
     pub challenge: String,
+
+    /// Secret. NEVER log or expose. Send only to the OAuth token-exchange endpoint.
+    /// Zeroed on drop.
+    pub verifier: String,
 }
 
 impl std::fmt::Debug for PkceChallenge {
@@ -24,7 +30,7 @@ impl PkceChallenge {
 
     /// Generate a fresh verifier + derived challenge using OsRng.
     pub fn generate() -> Self {
-        let verifier = generate_verifier(96); // 96 bytes → 128 base64url chars
+        let verifier = generate_verifier(); // 96 bytes → 128 base64url chars
         let challenge = derive_challenge(&verifier);
         Self {
             verifier,
@@ -42,11 +48,13 @@ pub fn generate_state() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn generate_verifier(byte_count: usize) -> String {
+// #45 — byte_count was an unused knob; inlined as a named constant
+fn generate_verifier() -> String {
     use rand::RngCore;
-    let mut bytes = vec![0u8; byte_count];
+    const VERIFIER_BYTE_COUNT: usize = 96;
+    let mut bytes = [0u8; VERIFIER_BYTE_COUNT];
     rand::rngs::OsRng.fill_bytes(&mut bytes);
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&bytes)
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
 fn derive_challenge(verifier: &str) -> String {

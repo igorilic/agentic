@@ -7,8 +7,12 @@ use std::sync::Mutex;
 pub enum SecretStoreError {
     #[error("secret not found: {service}/{key}")]
     NotFound { service: String, key: String },
-    #[error("keyring backend error: {0}")]
-    Backend(String),
+    // #40 — preserve keyring::Error cause chain via #[source]
+    #[error("keyring backend error")]
+    Backend {
+        #[source]
+        source: keyring::Error,
+    },
     /// Wraps a poisoned mutex from MemSecretStore — shouldn't happen in practice.
     #[error("internal lock poisoned")]
     Lock,
@@ -28,16 +32,32 @@ pub trait SecretStore: Send + Sync {
 }
 
 /// In-memory secret store for tests and fixtures. Thread-safe via Mutex.
+// #41 — carries a `service` field so NotFound reports the real service name
 #[cfg(any(test, feature = "testing"))]
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MemSecretStore {
+    service: String,
     inner: Mutex<HashMap<String, String>>,
 }
 
 #[cfg(any(test, feature = "testing"))]
 impl MemSecretStore {
     pub fn new() -> Self {
-        Self::default()
+        Self::with_service("mem".to_string())
+    }
+
+    pub fn with_service(service: impl Into<String>) -> Self {
+        Self {
+            service: service.into(),
+            inner: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl Default for MemSecretStore {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -48,7 +68,7 @@ impl SecretStore for MemSecretStore {
         map.get(key)
             .cloned()
             .ok_or_else(|| SecretStoreError::NotFound {
-                service: "mem".to_string(),
+                service: self.service.clone(),
                 key: key.to_string(),
             })
     }
@@ -83,32 +103,32 @@ impl KeyringSecretStore {
 impl SecretStore for KeyringSecretStore {
     fn get(&self, key: &str) -> Result<String, SecretStoreError> {
         let entry = keyring::Entry::new(&self.service, key)
-            .map_err(|e| SecretStoreError::Backend(e.to_string()))?;
+            .map_err(|source| SecretStoreError::Backend { source })?;
         match entry.get_password() {
             Ok(s) => Ok(s),
             Err(keyring::Error::NoEntry) => Err(SecretStoreError::NotFound {
                 service: self.service.clone(),
                 key: key.to_string(),
             }),
-            Err(e) => Err(SecretStoreError::Backend(e.to_string())),
+            Err(source) => Err(SecretStoreError::Backend { source }),
         }
     }
 
     fn set(&self, key: &str, value: &str) -> Result<(), SecretStoreError> {
         let entry = keyring::Entry::new(&self.service, key)
-            .map_err(|e| SecretStoreError::Backend(e.to_string()))?;
+            .map_err(|source| SecretStoreError::Backend { source })?;
         entry
             .set_password(value)
-            .map_err(|e| SecretStoreError::Backend(e.to_string()))
+            .map_err(|source| SecretStoreError::Backend { source })
     }
 
     fn delete(&self, key: &str) -> Result<(), SecretStoreError> {
         let entry = keyring::Entry::new(&self.service, key)
-            .map_err(|e| SecretStoreError::Backend(e.to_string()))?;
+            .map_err(|source| SecretStoreError::Backend { source })?;
         match entry.delete_credential() {
             Ok(()) => Ok(()),
             Err(keyring::Error::NoEntry) => Ok(()), // idempotent: silent no-op
-            Err(e) => Err(SecretStoreError::Backend(e.to_string())),
+            Err(source) => Err(SecretStoreError::Backend { source }),
         }
     }
 }

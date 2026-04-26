@@ -94,7 +94,7 @@ fn debug_impl_redacts_verifier() {
 fn one_thousand_verifiers_yield_one_thousand_distinct_challenges() {
     use std::collections::HashSet;
     let challenges: HashSet<String> = (0..1000)
-        .map(|_| PkceChallenge::generate().challenge)
+        .map(|_| PkceChallenge::generate().challenge.clone())
         .collect();
     assert_eq!(
         challenges.len(),
