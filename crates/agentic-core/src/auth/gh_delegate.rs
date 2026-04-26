@@ -20,6 +20,11 @@ pub enum GhDelegateError {
     #[error("secret store: {0}")]
     SecretStore(#[from] SecretStoreError),
     /// Subprocess spawn or wait failed.
+    ///
+    /// The String payload contains stderr text from the failed `gh` invocation
+    /// — NEVER stdout, which would contain the token. Do not modify this
+    /// variant to include stdout content; that would leak credentials via
+    /// `tracing::debug!("{err:?}")` and similar.
     #[error("subprocess: {0}")]
     Subprocess(String),
 }
