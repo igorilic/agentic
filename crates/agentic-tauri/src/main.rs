@@ -1,7 +1,10 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod commands;
+// Import the commands module from our own library crate. Avoid `mod commands;`
+// here, which would compile a second copy of the module into the binary crate
+// and trip rustc's dead-code analyzer for items not used directly by main.rs.
+use agentic_tauri::commands;
 
 use std::sync::Arc;
 
