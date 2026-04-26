@@ -1257,7 +1257,7 @@ Legend:
 
 ## Phase 10 — Tauri shell (MVP scaffolding)
 
-### Step 10.1: `agentic-tauri` crate + `agentic-core` dependency
+### [x] Step 10.1: `agentic-tauri` crate + `agentic-core` dependency
 
 **Goal**: Empty Tauri 2.x binary crate that `cargo build -p agentic-tauri` succeeds on.
 
@@ -1278,7 +1278,7 @@ Legend:
 
 ---
 
-### Step 10.2: Web UI scaffold (Vite + React + TypeScript)
+### [x] Step 10.2: Web UI scaffold (Vite + React + TypeScript)
 
 **Goal**: `apps/web-ui` builds an empty SPA that Tauri can serve.
 
