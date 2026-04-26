@@ -21,4 +21,9 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByText(/no events yet/i)).toBeInTheDocument();
   });
+
+  it("renders the StartRunForm above the EventList", () => {
+    render(<App />);
+    expect(screen.getByTestId("start-run-form")).toBeInTheDocument();
+  });
 });
