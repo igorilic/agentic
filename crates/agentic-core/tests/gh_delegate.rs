@@ -1,7 +1,7 @@
 #![cfg(unix)]
 
-use std::path::PathBuf;
 use agentic_core::auth::{GhDelegate, GhDelegateError, MemSecretStore, SecretStore};
+use std::path::PathBuf;
 
 fn fixture_bin(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -13,8 +13,14 @@ fn fixture_bin(name: &str) -> PathBuf {
 async fn import_token_stores_token_when_session_valid() {
     let delegate = GhDelegate::with_binary(fixture_bin("fake-gh-with-session.sh"));
     let secrets = MemSecretStore::new();
-    delegate.import_token(&secrets, "github.access_token").await.unwrap();
-    assert_eq!(secrets.get("github.access_token").unwrap(), "ghp_faketoken_for_test_xyz");
+    delegate
+        .import_token(&secrets, "github.access_token")
+        .await
+        .unwrap();
+    assert_eq!(
+        secrets.get("github.access_token").unwrap(),
+        "ghp_faketoken_for_test_xyz"
+    );
 }
 
 #[tokio::test]

@@ -51,6 +51,7 @@ pub use auth::{
     SecretStoreError, start_loopback,
 };
 pub use auth::{DeviceAuthorization, DeviceCodeClient, DeviceCodeError};
+pub use auth::{GhDelegate, GhDelegateError};
 pub use auth::{GitlabOauthClient, GitlabOauthError};
 pub use auth::{PkceChallenge, generate_state};
 mod time;
