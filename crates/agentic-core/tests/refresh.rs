@@ -29,7 +29,11 @@ impl MockStrategy {
 
 #[async_trait::async_trait]
 impl RefreshStrategy for MockStrategy {
-    async fn refresh(&self, _refresh_token: &str) -> Result<AccessToken, RefreshError> {
+    async fn refresh(
+        &self,
+        _refresh_token: &str,
+        _now_ms: i64,
+    ) -> Result<AccessToken, RefreshError> {
         self.response
             .lock()
             .unwrap()
@@ -84,7 +88,7 @@ async fn refresh_once_returns_new_token_on_success() {
     }));
     let scheduler = RefreshScheduler::new(mock);
     let old = token_with_expiry(1_000_000_000);
-    let new_token = scheduler.refresh_once(&old).await.unwrap();
+    let new_token = scheduler.refresh_once(&old, 1_000_000_000).await.unwrap();
     assert_eq!(new_token.token, "new_token");
     assert_eq!(new_token.refresh_token.as_deref(), Some("new_refresh"));
 }
@@ -99,7 +103,7 @@ async fn refresh_once_returns_needs_reauth_when_no_refresh_token() {
         token_type: "bearer".to_string(),
         scopes: vec![],
     };
-    let result = scheduler.refresh_once(&token).await;
+    let result = scheduler.refresh_once(&token, 1_000_000_000).await;
     assert!(matches!(result, Err(AccountStatus::NeedsReauth { .. })));
 }
 
@@ -112,7 +116,7 @@ async fn refresh_once_returns_needs_reauth_when_provider_rejects() {
     }));
     let scheduler = RefreshScheduler::new(mock);
     let token = token_with_expiry(1_000_000_000);
-    let result = scheduler.refresh_once(&token).await;
+    let result = scheduler.refresh_once(&token, 1_000_000_000).await;
     let status = result.expect_err("expected NeedsReauth");
     match status {
         AccountStatus::NeedsReauth { reason } => {
@@ -130,7 +134,7 @@ async fn refresh_once_returns_needs_reauth_on_transport_error() {
     )));
     let scheduler = RefreshScheduler::new(mock);
     let token = token_with_expiry(1_000_000_000);
-    let result = scheduler.refresh_once(&token).await;
+    let result = scheduler.refresh_once(&token, 1_000_000_000).await;
     assert!(matches!(result, Err(AccountStatus::NeedsReauth { .. })));
 }
 
@@ -168,15 +172,20 @@ async fn github_refresh_strategy_returns_new_access_token() {
         .mount(&server)
         .await;
 
+    let now_ms = 1_700_000_000_000_i64;
     let strat = GithubRefreshStrategy::new(server.uri(), "client_id", Some("secret".into()));
-    let new_token = strat.refresh("ghr_old").await.unwrap();
+    let new_token = strat.refresh("ghr_old", now_ms).await.unwrap();
     assert_eq!(new_token.token, "ghp_new");
     assert_eq!(new_token.refresh_token.as_deref(), Some("ghr_new"));
     assert_eq!(
         new_token.scopes,
         vec!["repo".to_string(), "read:user".to_string()]
     );
-    assert!(new_token.expires_at.is_some());
+    assert_eq!(
+        new_token.expires_at,
+        Some(now_ms + 28800 * 1000),
+        "expires_at should be deterministic with injected clock"
+    );
 }
 
 #[tokio::test]
@@ -192,9 +201,74 @@ async fn github_refresh_strategy_returns_rejected_on_oauth_error() {
         .await;
 
     let strat = GithubRefreshStrategy::new(server.uri(), "id", None);
-    let result = strat.refresh("ghr_revoked").await;
+    let result = strat.refresh("ghr_revoked", 1_700_000_000_000).await;
     assert!(matches!(
         result,
         Err(RefreshError::Rejected { ref error, .. }) if error == "bad_refresh_token"
     ));
+}
+
+// ── F7: new edge-case tests ───────────────────────────────────────────────────
+
+#[test]
+fn should_refresh_returns_true_at_exact_boundary() {
+    let scheduler =
+        RefreshScheduler::new(MockStrategy::default()).with_lead_time(Duration::from_secs(60));
+    let now_ms: i64 = 1_000_000_000;
+    let lead_ms: i64 = 60_000;
+    let expires_at = now_ms + lead_ms; // exactly at boundary
+    let token = token_with_expiry(expires_at);
+    assert!(
+        scheduler.should_refresh(&token, now_ms),
+        "should refresh at exact boundary: now_ms + lead_ms == expires_at"
+    );
+}
+
+#[tokio::test]
+async fn github_refresh_strategy_returns_none_refresh_token_when_response_omits_it() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/login/oauth/access_token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "access_token": "ghp_new",
+            "token_type": "bearer",
+            "scope": "repo",
+            "expires_in": 28800
+            // NOTE: no refresh_token field
+        })))
+        .mount(&server)
+        .await;
+
+    let strat = GithubRefreshStrategy::new(server.uri(), "id", None);
+    let new_token = strat.refresh("ghr_old", 1_700_000_000_000).await.unwrap();
+    assert_eq!(new_token.token, "ghp_new");
+    assert!(
+        new_token.refresh_token.is_none(),
+        "refresh_token should be None when response omits it"
+    );
+}
+
+#[tokio::test]
+async fn github_refresh_strategy_handles_expires_in_zero() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/login/oauth/access_token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "access_token": "ghp_x",
+            "token_type": "bearer",
+            "scope": "",
+            "expires_in": 0,
+            "refresh_token": "ghr_x"
+        })))
+        .mount(&server)
+        .await;
+
+    let now_ms: i64 = 1_700_000_000_000;
+    let strat = GithubRefreshStrategy::new(server.uri(), "id", None);
+    let new_token = strat.refresh("ghr_old", now_ms).await.unwrap();
+    assert_eq!(
+        new_token.expires_at,
+        Some(now_ms),
+        "expires_at should equal now_ms when expires_in is 0"
+    );
 }

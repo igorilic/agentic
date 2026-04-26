@@ -10,7 +10,9 @@ use crate::auth::AccessToken;
 /// handles transport.
 #[async_trait::async_trait]
 pub trait RefreshStrategy: Send + Sync {
-    async fn refresh(&self, refresh_token: &str) -> Result<AccessToken, RefreshError>;
+    /// `now_ms` is the current Unix epoch ms — injected for testability.
+    /// Implementations use it to compute `expires_at` from `expires_in`.
+    async fn refresh(&self, refresh_token: &str, now_ms: i64) -> Result<AccessToken, RefreshError>;
 }
 
 /// Errors produced by a [`RefreshStrategy`].
@@ -31,8 +33,15 @@ pub enum RefreshError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccountStatus {
     /// Token is current and valid.
+    ///
+    /// **Note**: this variant is NOT returned by `RefreshScheduler::refresh_once`,
+    /// which returns `Ok(AccessToken)` on success. `Active` is for callers that
+    /// persist account state and need to express the "no refresh needed" status
+    /// alongside the failure cases. The successful refresh path is signaled by
+    /// the `Ok` arm of `refresh_once`'s return.
     Active,
-    /// Refresh failed. User must re-authenticate.
+    /// Refresh failed (provider rejected refresh_token, network errored
+    /// past retry budget, etc.). User must re-authenticate.
     NeedsReauth { reason: String },
 }
 
@@ -77,7 +86,11 @@ impl<S: RefreshStrategy> RefreshScheduler<S> {
     /// Returns the new [`AccessToken`] on success, or
     /// [`AccountStatus::NeedsReauth`] on any failure. The caller is
     /// responsible for persisting the returned status.
-    pub async fn refresh_once(&self, token: &AccessToken) -> Result<AccessToken, AccountStatus> {
+    pub async fn refresh_once(
+        &self,
+        token: &AccessToken,
+        now_ms: i64,
+    ) -> Result<AccessToken, AccountStatus> {
         let refresh_token = match &token.refresh_token {
             Some(rt) => rt.as_str(),
             None => {
@@ -87,7 +100,7 @@ impl<S: RefreshStrategy> RefreshScheduler<S> {
             }
         };
 
-        match self.strategy.refresh(refresh_token).await {
+        match self.strategy.refresh(refresh_token, now_ms).await {
             Ok(new_token) => Ok(new_token),
             Err(RefreshError::Rejected { error, description }) => Err(AccountStatus::NeedsReauth {
                 reason: format!("provider rejected: {error} — {description}"),
@@ -138,7 +151,7 @@ impl GithubRefreshStrategy {
 
 #[async_trait::async_trait]
 impl RefreshStrategy for GithubRefreshStrategy {
-    async fn refresh(&self, refresh_token: &str) -> Result<AccessToken, RefreshError> {
+    async fn refresh(&self, refresh_token: &str, now_ms: i64) -> Result<AccessToken, RefreshError> {
         let url = format!("{}/login/oauth/access_token", self.base_url);
 
         let mut form = vec![
@@ -202,13 +215,7 @@ impl RefreshStrategy for GithubRefreshStrategy {
             .map(String::from);
 
         let expires_in_secs = body.get("expires_in").and_then(|v| v.as_i64());
-        let expires_at = expires_in_secs.map(|secs| {
-            let now_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0);
-            now_ms + (secs * 1000)
-        });
+        let expires_at = expires_in_secs.map(|secs| now_ms + (secs * 1000));
 
         Ok(AccessToken {
             token,
