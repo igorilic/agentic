@@ -6,3 +6,4 @@ publish = false
 
 [dev-dependencies]
 serde_yml = { workspace = true }
+serde_json = { workspace = true }
