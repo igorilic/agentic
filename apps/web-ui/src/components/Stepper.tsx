@@ -9,8 +9,8 @@ const ICONS: Record<StepStatus, string> = {
   running: "◐",
   passed: "✓",
   failed: "✗",
+  needs_triage: "⚠",
   skipped: "⊘",
-  cancelled: "⊗",
 };
 
 const COLORS: Record<StepStatus, string> = {
@@ -18,8 +18,8 @@ const COLORS: Record<StepStatus, string> = {
   running: "text-blue-600",
   passed: "text-green-600",
   failed: "text-red-600",
+  needs_triage: "text-orange-600",
   skipped: "text-yellow-600",
-  cancelled: "text-gray-500",
 };
 
 export default function Stepper({ state }: StepperProps) {
@@ -29,7 +29,7 @@ export default function Stepper({ state }: StepperProps) {
       data-testid="cockpit-stepper"
       aria-label="Pipeline progress"
     >
-      <ol className="flex items-center gap-4" role="list">
+      <ol className="flex items-center gap-4">
         {state.steps.map((step, idx) => (
           <li
             key={step.agent}

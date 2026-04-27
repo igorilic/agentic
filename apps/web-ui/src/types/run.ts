@@ -5,8 +5,8 @@ export type StepStatus =
   | "running"
   | "passed"
   | "failed"
-  | "skipped"
-  | "cancelled";
+  | "needs_triage"
+  | "skipped";
 
 export type StepInfo = {
   agent: string;
@@ -101,7 +101,10 @@ export function deriveRunState(
             | undefined;
           if (usage) {
             step.tokens =
-              (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
+              (usage.input_tokens ?? 0) +
+              (usage.output_tokens ?? 0) +
+              (usage.cache_read_input_tokens ?? 0) +
+              (usage.cache_creation_input_tokens ?? 0);
           }
           step.costUsd =
             (data.cost_usd as number | null | undefined) ?? null;
