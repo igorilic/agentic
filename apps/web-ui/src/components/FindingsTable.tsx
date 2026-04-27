@@ -68,7 +68,7 @@ export default function FindingsTable({ findings }: FindingsTableProps) {
                   className={`text-xs font-semibold uppercase shrink-0 ${
                     f.severity === "error"
                       ? "text-red-600"
-                      : f.severity === "warn"
+                      : f.severity === "warning"
                         ? "text-yellow-700"
                         : "text-gray-500"
                   }`}

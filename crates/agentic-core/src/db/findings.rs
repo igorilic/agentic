@@ -26,10 +26,15 @@ pub struct FindingRow {
     pub created_at: i64,
 }
 
-/// Allowed `triage` values. Mirrors the comment in migration 0003. Validating
-/// in code keeps the contract explicit and shields callers from a CHECK
-/// constraint we may add later.
+/// Allowed `triage` values. Mirrors the comment in migration 0003 and the
+/// trigger added in migration 0007.
 pub const ALLOWED_TRIAGE: &[&str] = &["fix", "tech-debt", "ignore"];
+
+/// Allowed `severity` values. Mirrors `events::Severity` as serialised
+/// (`error | warning | info`). Note: a stray `"warn"` would deserialise into
+/// the wrong colour in the UI, so we reject anything outside the canonical
+/// set at write time.
+pub const ALLOWED_SEVERITY: &[&str] = &["error", "warning", "info"];
 
 pub struct FindingsRepo {
     pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
@@ -42,7 +47,14 @@ impl FindingsRepo {
 
     /// Insert a finding row. Caller supplies the id (typically the
     /// `finding_id` from the corresponding `Event::Finding` envelope).
+    /// Returns `Err` if `severity` is not in [`ALLOWED_SEVERITY`].
     pub fn insert(&self, row: &FindingRow) -> Result<()> {
+        if !ALLOWED_SEVERITY.contains(&row.severity.as_str()) {
+            return Err(CoreError::Parse(format!(
+                "invalid severity value: {:?} (allowed: {ALLOWED_SEVERITY:?})",
+                row.severity
+            )));
+        }
         let conn = self.pool.get()?;
         conn.execute(
             "INSERT INTO findings \
@@ -98,8 +110,14 @@ impl FindingsRepo {
 
     /// Update the triage state for a finding. Returns `Ok(true)` if a row was
     /// updated, `Ok(false)` if no finding with the given id exists.
-    /// Returns `Err` if `triage` is not one of [`ALLOWED_TRIAGE`].
+    /// Returns `Err` if `triage` (after trimming) is not one of
+    /// [`ALLOWED_TRIAGE`].
+    ///
+    /// `triage` is trimmed before validation so the server contract mirrors
+    /// the frontend's whitespace tolerance — the same symmetry rule we apply
+    /// to mention bodies.
     pub fn update_triage(&self, finding_id: &str, triage: &str, triaged_at: i64) -> Result<bool> {
+        let triage = triage.trim();
         if !ALLOWED_TRIAGE.contains(&triage) {
             return Err(CoreError::Parse(format!(
                 "invalid triage value: {triage:?} (allowed: {ALLOWED_TRIAGE:?})"

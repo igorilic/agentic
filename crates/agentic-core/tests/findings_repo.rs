@@ -50,7 +50,7 @@ fn sample_finding(id: &str, message: &str, severity: &str) -> FindingRow {
 fn insert_finding_persists_and_lists_by_run() {
     let (_db, repo) = setup_in_memory();
 
-    repo.insert(&sample_finding("f1", "missing-error-handling", "warn"))
+    repo.insert(&sample_finding("f1", "missing-error-handling", "warning"))
         .expect("insert f1");
     repo.insert(&sample_finding("f2", "unused-import", "info"))
         .expect("insert f2");
@@ -64,7 +64,8 @@ fn insert_finding_persists_and_lists_by_run() {
 #[test]
 fn update_triage_sets_triage_value_and_returns_true() {
     let (_db, repo) = setup_in_memory();
-    repo.insert(&sample_finding("f1", "msg", "warn")).unwrap();
+    repo.insert(&sample_finding("f1", "msg", "warning"))
+        .unwrap();
 
     let updated = repo.update_triage("f1", "tech-debt", 300).expect("update");
     assert!(
@@ -94,10 +95,71 @@ fn update_triage_returns_false_for_unknown_finding() {
 #[test]
 fn update_triage_rejects_invalid_triage_value() {
     let (_db, repo) = setup_in_memory();
-    repo.insert(&sample_finding("f1", "msg", "warn")).unwrap();
+    repo.insert(&sample_finding("f1", "msg", "warning"))
+        .unwrap();
 
     let result = repo.update_triage("f1", "lol-not-a-real-triage", 300);
     assert!(result.is_err(), "expected error for invalid triage value");
+}
+
+#[test]
+fn update_triage_trims_whitespace_around_value() {
+    let (_db, repo) = setup_in_memory();
+    repo.insert(&sample_finding("f1", "msg", "warning"))
+        .unwrap();
+
+    let updated = repo
+        .update_triage("f1", "  tech-debt  ", 300)
+        .expect("update");
+    assert!(updated, "trimmed triage should match ALLOWED_TRIAGE");
+
+    let list = repo.list_by_run("run1").unwrap();
+    let row = list.iter().find(|f| f.id == "f1").unwrap();
+    assert_eq!(row.triage.as_deref(), Some("tech-debt"));
+}
+
+#[test]
+fn insert_rejects_unknown_severity() {
+    let (_db, repo) = setup_in_memory();
+
+    let row = sample_finding("f1", "msg", "warn"); // wrong: should be 'warning'
+    let result = repo.insert(&row);
+    assert!(result.is_err(), "expected severity rejection for 'warn'");
+}
+
+#[test]
+fn trigger_rejects_invalid_triage_inserted_via_raw_sql() {
+    // Defense-in-depth: even if a future repo bypasses ALLOWED_TRIAGE, the
+    // BEFORE INSERT trigger from migration 0007 must abort the write.
+    let (db, repo) = setup_in_memory();
+    repo.insert(&sample_finding("f1", "msg", "warning"))
+        .unwrap();
+
+    let conn = db.conn().unwrap();
+    let result = conn.execute(
+        "INSERT INTO findings \
+         (id, run_id, step_id, severity, message, triage, created_at) \
+         VALUES ('f2', 'run1', 'step1', 'warning', 'msg', 'not-a-real-triage', 200)",
+        [],
+    );
+    assert!(result.is_err(), "trigger should reject invalid triage");
+}
+
+#[test]
+fn trigger_rejects_invalid_triage_updated_via_raw_sql() {
+    let (db, repo) = setup_in_memory();
+    repo.insert(&sample_finding("f1", "msg", "warning"))
+        .unwrap();
+
+    let conn = db.conn().unwrap();
+    let result = conn.execute(
+        "UPDATE findings SET triage = 'not-a-real-triage' WHERE id = 'f1'",
+        [],
+    );
+    assert!(
+        result.is_err(),
+        "trigger should reject invalid triage on update"
+    );
 }
 
 #[test]

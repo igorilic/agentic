@@ -35,7 +35,7 @@ fn seed_run_step_and_finding(db: &Db) {
         id: "f1".to_string(),
         run_id: "run1".to_string(),
         step_id: "step1".to_string(),
-        severity: "warn".to_string(),
+        severity: "warning".to_string(),
         file_path: None,
         line: None,
         message: "stub".to_string(),

@@ -14,7 +14,7 @@ function makeFinding(overrides: Partial<Finding> = {}): Finding {
     id: "f1",
     run_id: "run1",
     step_id: "step1",
-    severity: "warn",
+    severity: "warning",
     file_path: "src/main.rs",
     line: 42,
     message: "missing-error-handling",
@@ -42,7 +42,7 @@ describe("FindingsTable", () => {
     render(
       <FindingsTable
         findings={[
-          makeFinding({ id: "f1", severity: "warn", message: "alpha", line: 10 }),
+          makeFinding({ id: "f1", severity: "warning", message: "alpha", line: 10 }),
           makeFinding({
             id: "f2",
             severity: "error",
@@ -57,7 +57,7 @@ describe("FindingsTable", () => {
     const rows = screen.getAllByTestId(/finding-row-/);
     expect(rows).toHaveLength(2);
     expect(screen.getByTestId("finding-row-f1")).toHaveTextContent("alpha");
-    expect(screen.getByTestId("finding-row-f1")).toHaveTextContent("warn");
+    expect(screen.getByTestId("finding-row-f1")).toHaveTextContent("warning");
     expect(screen.getByTestId("finding-row-f2")).toHaveTextContent("beta");
     expect(screen.getByTestId("finding-row-f2")).toHaveTextContent("src/lib.rs:20");
   });
@@ -113,6 +113,24 @@ describe("FindingsTable", () => {
     await waitFor(() => {
       expect(screen.getByTestId("finding-row-f1")).toHaveTextContent(/fix/i);
     });
+  });
+
+  it("renders triage-error and re-enables buttons when invoke rejects", async () => {
+    invokeMock.mockRejectedValueOnce("finding not found: f1");
+
+    const user = userEvent.setup();
+    render(<FindingsTable findings={[makeFinding({ id: "f1" })]} />);
+
+    await user.click(screen.getByTestId("triage-fix-f1"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("triage-error-f1")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("triage-error-f1")).toHaveTextContent(/finding not found/i);
+    // After failure the buttons must be enabled again so the user can retry.
+    expect(screen.getByTestId("triage-fix-f1")).not.toBeDisabled();
+    // No optimistic override should have been applied for the failed call.
+    expect(screen.queryByTestId("triage-badge-f1")).toBeNull();
   });
 
   it("disables triage buttons while invoke is in flight", async () => {
