@@ -4,9 +4,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use agentic_core::events::{Event, EventBus, EventEnvelope};
+use agentic_core::events::{EventBus, EventEnvelope};
 use agentic_tauri::commands::events::EventBusState;
-use agentic_tauri::commands::mention::{mention_agent, MENTION_EVENT_CHANNEL};
+use agentic_tauri::commands::mention::mention_agent;
 use tauri::test::{mock_builder, mock_context, noop_assets};
 use tauri::{Listener, Manager, WebviewWindowBuilder};
 
@@ -95,10 +95,7 @@ async fn mention_agent_rejects_empty_agent() {
 
     assert!(result.is_err(), "expected Err for empty agent");
     let err = result.unwrap_err();
-    assert!(
-        err.contains("agent"),
-        "error should mention agent: {err}"
-    );
+    assert!(err.contains("agent"), "error should mention agent: {err}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -122,8 +119,5 @@ async fn mention_agent_rejects_empty_body() {
 
     assert!(result.is_err(), "expected Err for empty body");
     let err = result.unwrap_err();
-    assert!(
-        err.contains("body"),
-        "error should mention body: {err}"
-    );
+    assert!(err.contains("body"), "error should mention body: {err}");
 }

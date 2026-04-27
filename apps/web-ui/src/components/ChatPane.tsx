@@ -1,7 +1,15 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useChat } from "../hooks/useChat";
 import { parseSlashCommand, formatSlashParseError } from "../slash/parser";
 import { dispatchSlashCommand, type SlashServices } from "../slash/dispatcher";
+import { parseMention, formatMentionParseError } from "../mention/parser";
+
+type MentionResult = {
+  run_id: string;
+  agent: string;
+  dispatched: boolean;
+};
 
 const slashServices: SlashServices = {
   plan: async (_ticket) => {
@@ -37,6 +45,27 @@ export default function ChatPane() {
         setSystemMessages((prev) => [...prev, result.message]);
       } catch (err) {
         setSystemMessages((prev) => [...prev, `Command failed: ${err}`]);
+      }
+      return;
+    }
+
+    if (text.trim().startsWith("@")) {
+      const parsed = parseMention(text);
+      if (!parsed.ok) {
+        setSystemMessages((prev) => [...prev, formatMentionParseError(parsed.error)]);
+        return;
+      }
+      try {
+        const result = (await invoke("mention_agent", {
+          agent: parsed.command.agent,
+          body: parsed.command.body,
+        })) as MentionResult;
+        setSystemMessages((prev) => [
+          ...prev,
+          `Mention dispatched to @${parsed.command.agent} (run ${result.run_id})${result.dispatched ? "" : " [STUB]"}`,
+        ]);
+      } catch (e) {
+        setSystemMessages((prev) => [...prev, `Mention failed: ${e}`]);
       }
       return;
     }

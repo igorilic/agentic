@@ -10,6 +10,7 @@
     "allow-start-scripted-run",
     "allow-cancel-run",
     "allow-chat-send-message",
-    "allow-chat-list-messages"
+    "allow-chat-list-messages",
+    "allow-mention-agent"
   ]
 }

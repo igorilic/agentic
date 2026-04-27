@@ -54,6 +54,7 @@ fn main() {
             commands::scripted::cancel_run,
             commands::chat::chat_send_message,
             commands::chat::chat_list_messages,
+            commands::mention::mention_agent,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
