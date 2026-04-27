@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useTauriEvents, MAX_EVENTS } from "../hooks/useTauriEvents";
+import type { EventEnvelope } from "../types/event";
 
 let capturedHandler: ((event: { payload: unknown }) => void) | null = null;
 const invokeMock = vi.fn();
@@ -46,10 +47,10 @@ describe("useTauriEvents", () => {
       }
     });
 
-    expect(result.current.length).toBe(MAX_EVENTS);
+    expect(result.current.events.length).toBe(MAX_EVENTS);
     // Sliding window keeps the most recent — first event_id should be e100.
-    expect(result.current[0].event_id).toBe(`e${overflow - MAX_EVENTS}`);
-    expect(result.current[MAX_EVENTS - 1].event_id).toBe(`e${overflow - 1}`);
+    expect(result.current.events[0].event_id).toBe(`e${overflow - MAX_EVENTS}`);
+    expect(result.current.events[MAX_EVENTS - 1].event_id).toBe(`e${overflow - 1}`);
   });
 
   it("fetches history when runId is provided and dedupes by event_id", async () => {
@@ -83,7 +84,7 @@ describe("useTauriEvents", () => {
 
     const { result } = renderHook(() => useTauriEvents("r1"));
     await waitFor(() => {
-      expect(result.current.length).toBe(2);
+      expect(result.current.events.length).toBe(2);
     });
 
     // Simulate a live event with the same event_id as one already in history.
@@ -100,7 +101,7 @@ describe("useTauriEvents", () => {
       });
     });
     // Still 2 — duplicate suppressed.
-    expect(result.current.length).toBe(2);
+    expect(result.current.events.length).toBe(2);
 
     // New event with fresh event_id is appended.
     act(() => {
@@ -115,7 +116,7 @@ describe("useTauriEvents", () => {
         },
       });
     });
-    expect(result.current.length).toBe(3);
+    expect(result.current.events.length).toBe(3);
   });
 
   it("clears state when runId changes to a new run", async () => {
@@ -155,16 +156,92 @@ describe("useTauriEvents", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.length).toBe(1);
+      expect(result.current.events.length).toBe(1);
     });
-    expect(result.current[0].event_id).toBe("a1");
+    expect(result.current.events[0].event_id).toBe("a1");
 
     // Switch to run-b — state should be cleared and run-b history loaded.
     rerender("run-b");
 
     await waitFor(() => {
-      expect(result.current.length).toBe(1);
+      expect(result.current.events.length).toBe(1);
     });
-    expect(result.current[0].event_id).toBe("b1");
+    expect(result.current.events[0].event_id).toBe("b1");
+  });
+
+  it("cancels in-flight history fetch when runId changes mid-fetch", async () => {
+    let resolveR1History: ((value: EventEnvelope[]) => void) | undefined;
+    const r1Pending = new Promise<EventEnvelope[]>((resolve) => {
+      resolveR1History = resolve;
+    });
+
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "get_event_history") {
+        const argRunId = (args as { runId: string }).runId;
+        if (argRunId === "r1") return r1Pending;
+        if (argRunId === "r2") {
+          return [
+            {
+              schema_version: 1, event_id: "b1", run_id: "r2",
+              step_id: null, timestamp_ms: 1,
+              event: { type: "TextDelta", data: { content: "r2-event" } },
+            },
+          ];
+        }
+        throw new Error(`unexpected runId: ${argRunId}`);
+      }
+      if (cmd === "subscribe_events") return undefined;
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
+
+    const { result, rerender } = renderHook(
+      ({ runId }) => useTauriEvents(runId),
+      { initialProps: { runId: "r1" as string | undefined } },
+    );
+
+    // Switch to r2 while r1's history is still pending.
+    rerender({ runId: "r2" });
+
+    // Wait for r2 history to land.
+    await waitFor(() => {
+      expect(result.current.events.length).toBe(1);
+      expect(result.current.events[0].event_id).toBe("b1");
+    });
+
+    // Now resolve r1's pending history. It should NOT reach state.
+    resolveR1History!([
+      {
+        schema_version: 1, event_id: "a1", run_id: "r1",
+        step_id: null, timestamp_ms: 0,
+        event: { type: "TextDelta", data: { content: "stale" } },
+      },
+    ]);
+
+    // Give React a tick to process if it were going to.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Still only the r2 envelope.
+    expect(result.current.events.length).toBe(1);
+    expect(result.current.events[0].event_id).toBe("b1");
+  });
+
+  it("does not call get_event_history when runId is undefined", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "subscribe_events") return undefined;
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
+
+    const { result } = renderHook(() => useTauriEvents(undefined));
+
+    await waitFor(() => {
+      // The listener and subscribe_events should be wired up.
+      expect(invokeMock).toHaveBeenCalledWith("subscribe_events");
+    });
+
+    // get_event_history should NEVER have been called.
+    const historyCalls = invokeMock.mock.calls.filter(([cmd]) => cmd === "get_event_history");
+    expect(historyCalls).toHaveLength(0);
+    expect(result.current.events).toEqual([]);
+    expect(result.current.historyError).toBeNull();
   });
 });

@@ -13,6 +13,13 @@ export const EVENT_CHANNEL = "agentic://event";
  */
 export const MAX_EVENTS = 500;
 
+export type UseTauriEventsResult = {
+  events: EventEnvelope[];
+  /** `null` while history is loading or has succeeded; otherwise the error
+   * from the failed `get_event_history` invoke (stringified). */
+  historyError: string | null;
+};
+
 /**
  * Subscribe to backend events emitted by the Tauri `subscribe_events` command.
  *
@@ -27,11 +34,13 @@ export const MAX_EVENTS = 500;
  * When `runId` changes, state is cleared so only the new run's events are
  * shown — users navigating between runs expect to see only the current run.
  *
- * Returns the running list of envelopes received since mount, capped at
- * MAX_EVENTS (most-recent-N sliding window).
+ * Returns `{ events, historyError }` where `events` is the running list of
+ * envelopes capped at MAX_EVENTS (most-recent-N sliding window), and
+ * `historyError` is `null` on success or the stringified error on failure.
  */
-export function useTauriEvents(runId?: string): EventEnvelope[] {
+export function useTauriEvents(runId?: string): UseTauriEventsResult {
   const [events, setEvents] = useState<EventEnvelope[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -39,6 +48,7 @@ export function useTauriEvents(runId?: string): EventEnvelope[] {
 
     // Clear state when runId changes so only the new run's events are shown.
     setEvents([]);
+    setHistoryError(null);
 
     (async () => {
       // Fetch history first if a runId is known.
@@ -54,7 +64,9 @@ export function useTauriEvents(runId?: string): EventEnvelope[] {
             });
           }
         } catch (e) {
-          console.warn("get_event_history failed:", e);
+          if (!cancelled) {
+            setHistoryError(String(e));
+          }
         }
       }
 
@@ -83,5 +95,5 @@ export function useTauriEvents(runId?: string): EventEnvelope[] {
     };
   }, [runId]);
 
-  return events;
+  return { events, historyError };
 }
