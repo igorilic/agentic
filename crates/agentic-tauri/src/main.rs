@@ -46,6 +46,9 @@ fn main() {
             app.manage(EventBusState::new(bus));
             app.manage(ChatState::new(&db));
             app.manage(FindingsState::new(&db));
+            // Manage the Db itself so commands that need to seed multiple
+            // tables in one call (scripted_run) can do their own writes.
+            app.manage(db);
 
             Ok(())
         })
@@ -58,6 +61,7 @@ fn main() {
             commands::chat::chat_list_messages,
             commands::mention::mention_agent,
             commands::findings::triage_finding,
+            commands::findings::list_findings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

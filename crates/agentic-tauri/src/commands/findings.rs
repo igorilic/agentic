@@ -1,5 +1,5 @@
 use agentic_core::Db;
-use agentic_core::db::findings::FindingsRepo;
+use agentic_core::db::findings::{FindingRow, FindingsRepo};
 use tauri::State;
 
 /// State holding the DB-backed findings repo. Distinct from `EventBusState`
@@ -42,4 +42,17 @@ pub async fn triage_finding(
     }
 
     Ok(())
+}
+
+/// Tauri command: list findings for a run.
+///
+/// Used by the cockpit's `useFindings(runId)` hook. Returns an empty vec for
+/// unknown run ids — `list_findings` is not authoritative on whether a run
+/// exists, only on which findings have been persisted for it so far.
+#[tauri::command]
+pub async fn list_findings(
+    state: State<'_, FindingsState>,
+    run_id: String,
+) -> Result<Vec<FindingRow>, String> {
+    state.repo.list_by_run(&run_id).map_err(|e| e.to_string())
 }

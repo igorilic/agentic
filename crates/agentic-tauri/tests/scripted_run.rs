@@ -105,9 +105,11 @@ async fn start_scripted_run_publishes_events_in_order() {
 
     let app_handle2 = app.handle().clone();
     let state2 = app.state::<EventBusState>();
+    let db_state2 = app.state::<Db>();
     let run_id = start_scripted_run(
         app_handle2,
         state2,
+        db_state2,
         script.path().to_string_lossy().into_owned(),
         Some(0),
     )
@@ -140,21 +142,16 @@ async fn start_scripted_run_publishes_events_in_order() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn start_scripted_run_returns_io_error_on_missing_file() {
-    let bus = Arc::new(EventBus::new());
-    let app = mock_builder()
-        .invoke_handler(tauri::generate_handler![
-            agentic_tauri::commands::scripted::start_scripted_run
-        ])
-        .manage(EventBusState::new(bus))
-        .build(mock_context(noop_assets()))
-        .expect("build mock app");
+    let (app, _db) = build_app_with_db();
 
     let app_handle = app.handle().clone();
     let state = app.state::<EventBusState>();
+    let db_state = app.state::<Db>();
     // Path doesn't exist — canonicalize will fail.
     let result = start_scripted_run(
         app_handle,
         state,
+        db_state,
         "/nonexistent/script.json".to_string(),
         Some(0),
     )
@@ -165,14 +162,7 @@ async fn start_scripted_run_returns_io_error_on_missing_file() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn start_scripted_run_returns_parse_error_on_bad_json() {
-    let bus = Arc::new(EventBus::new());
-    let app = mock_builder()
-        .invoke_handler(tauri::generate_handler![
-            agentic_tauri::commands::scripted::start_scripted_run
-        ])
-        .manage(EventBusState::new(bus))
-        .build(mock_context(noop_assets()))
-        .expect("build mock app");
+    let (app, _db) = build_app_with_db();
 
     // Write bad JSON under cwd so path validator accepts it.
     let cwd = std::env::current_dir().unwrap();
@@ -185,9 +175,11 @@ async fn start_scripted_run_returns_parse_error_on_bad_json() {
 
     let app_handle = app.handle().clone();
     let state = app.state::<EventBusState>();
+    let db_state = app.state::<Db>();
     let result = start_scripted_run(
         app_handle,
         state,
+        db_state,
         file.path().to_string_lossy().into_owned(),
         Some(0),
     )
@@ -204,19 +196,20 @@ async fn start_scripted_run_returns_parse_error_on_bad_json() {
 // ─── NEW TEST 1 — F1: path outside scope is rejected ─────────────────────────
 #[tokio::test(flavor = "multi_thread")]
 async fn start_scripted_run_rejects_path_outside_scope() {
-    let bus = Arc::new(EventBus::new());
-    let app = mock_builder()
-        .invoke_handler(tauri::generate_handler![
-            agentic_tauri::commands::scripted::start_scripted_run
-        ])
-        .manage(EventBusState::new(bus))
-        .build(mock_context(noop_assets()))
-        .expect("build mock app");
+    let (app, _db) = build_app_with_db();
 
     // /etc/passwd exists on macOS/Linux and is outside cwd and app_data_dir.
     let app_handle = app.handle().clone();
     let state = app.state::<EventBusState>();
-    let result = start_scripted_run(app_handle, state, "/etc/passwd".to_string(), Some(0)).await;
+    let db_state = app.state::<Db>();
+    let result = start_scripted_run(
+        app_handle,
+        state,
+        db_state,
+        "/etc/passwd".to_string(),
+        Some(0),
+    )
+    .await;
 
     assert!(result.is_err(), "expected Err for path outside scope");
     let err = result.unwrap_err();
@@ -261,6 +254,7 @@ async fn start_scripted_run_publishes_run_complete_after_events() {
     let run_id = start_scripted_run(
         app.handle().clone(),
         app.state::<EventBusState>(),
+        app.state::<Db>(),
         script.path().to_string_lossy().into_owned(),
         Some(0),
     )
@@ -323,6 +317,7 @@ async fn cancel_run_aborts_in_flight_run() {
     let run_id = start_scripted_run(
         app.handle().clone(),
         app.state::<EventBusState>(),
+        app.state::<Db>(),
         script.path().to_string_lossy().into_owned(),
         Some(200), // 200ms per event
     )
@@ -410,6 +405,7 @@ async fn start_scripted_run_persists_findings_to_db() {
     let run_id = start_scripted_run(
         app.handle().clone(),
         app.state::<EventBusState>(),
+        app.state::<Db>(),
         script.path().to_string_lossy().into_owned(),
         Some(0),
     )
@@ -421,7 +417,12 @@ async fn start_scripted_run_persists_findings_to_db() {
 
     let state = app.state::<FindingsState>();
     let list = state.repo.list_by_run(&run_id).expect("list_by_run");
-    assert_eq!(list.len(), 1, "expected one persisted finding, got {}", list.len());
+    assert_eq!(
+        list.len(),
+        1,
+        "expected one persisted finding, got {}",
+        list.len()
+    );
     assert_eq!(list[0].id, "f1");
     assert_eq!(list[0].run_id, run_id);
     assert_eq!(list[0].severity, "warning");

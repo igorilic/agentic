@@ -12,6 +12,7 @@
     "allow-chat-send-message",
     "allow-chat-list-messages",
     "allow-mention-agent",
-    "allow-triage-finding"
+    "allow-triage-finding",
+    "allow-list-findings"
   ]
 }
