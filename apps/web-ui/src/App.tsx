@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import EventList from "./components/EventList";
 import StartRunForm from "./components/StartRunForm";
+import Stepper from "./components/Stepper";
 import { useTauriEvents } from "./hooks/useTauriEvents";
+import { deriveRunState } from "./types/run";
 
 export default function App() {
   const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
   const { events, historyError } = useTauriEvents(activeRunId);
+
+  const runState = useMemo(() => deriveRunState(events), [events]);
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -26,6 +30,7 @@ export default function App() {
         activeRunId={activeRunId}
         onActiveRunIdChange={setActiveRunId}
       />
+      <Stepper state={runState} />
       <section className="p-6">
         <EventList events={events} />
       </section>
