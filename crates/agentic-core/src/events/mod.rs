@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 mod bus;
 pub use bus::{DEFAULT_CAPACITY, EventBus};
+pub mod history;
+pub use history::{DEFAULT_HISTORY_CAP, EventHistoryBuffer};
 mod persist;
 pub use persist::EventPersister;
 

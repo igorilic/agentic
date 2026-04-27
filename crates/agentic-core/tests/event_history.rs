@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use agentic_core::events::{Event, EventBus, EventEnvelope, EventHistoryBuffer, DEFAULT_HISTORY_CAP};
+use agentic_core::events::{
+    DEFAULT_HISTORY_CAP, Event, EventBus, EventEnvelope, EventHistoryBuffer,
+};
 
 fn make_envelope(run_id: &str, event_id: &str, content: &str) -> EventEnvelope {
     EventEnvelope {

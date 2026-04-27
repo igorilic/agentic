@@ -4,6 +4,8 @@ import type { EventEnvelope } from "../types/event";
 
 type StartRunFormProps = {
   events: EventEnvelope[];
+  activeRunId?: string | undefined;
+  onActiveRunIdChange?: (id: string | undefined) => void;
 };
 
 // data-testid attributes below are stable test contracts — do not rename without
@@ -11,10 +13,9 @@ type StartRunFormProps = {
 //   start-run-form, script-path-input, delay-ms-input,
 //   start-button, cancel-button, active-run-id, error-message
 
-export default function StartRunForm({ events }: StartRunFormProps) {
+export default function StartRunForm({ events, activeRunId, onActiveRunIdChange }: StartRunFormProps) {
   const [scriptPath, setScriptPath] = useState("");
   const [delayMsRaw, setDelayMsRaw] = useState("100");
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
 
@@ -23,9 +24,9 @@ export default function StartRunForm({ events }: StartRunFormProps) {
     if (!activeRunId) return;
     const last = events[events.length - 1];
     if (last && last.event.type === "RunComplete" && last.run_id === activeRunId) {
-      setActiveRunId(null);
+      onActiveRunIdChange?.(undefined);
     }
-  }, [events, activeRunId]);
+  }, [events, activeRunId, onActiveRunIdChange]);
 
   const onStart = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -45,7 +46,7 @@ export default function StartRunForm({ events }: StartRunFormProps) {
         setError(`Unexpected return from start_scripted_run: ${typeof result}`);
         return;
       }
-      setActiveRunId(result);
+      onActiveRunIdChange?.(result);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -57,7 +58,7 @@ export default function StartRunForm({ events }: StartRunFormProps) {
     if (!activeRunId) return;
     try {
       await invoke("cancel_run", { runId: activeRunId });
-      setActiveRunId(null);
+      onActiveRunIdChange?.(undefined);
     } catch (e) {
       setError(String(e));
     }

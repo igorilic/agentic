@@ -16,8 +16,9 @@ pub use backends::{
     StepId, TokenUsage, ToolName, WorkspaceRef,
 };
 pub use events::{
-    ActionRequired, CURRENT_SCHEMA_VERSION, DEFAULT_CAPACITY, Event, EventBus, EventEnvelope,
-    EventPersister, ProfileId, RunStatus, Severity, StepStatus, TicketKind, TicketRef, ToolStream,
+    ActionRequired, CURRENT_SCHEMA_VERSION, DEFAULT_CAPACITY, DEFAULT_HISTORY_CAP, Event, EventBus,
+    EventEnvelope, EventHistoryBuffer, EventPersister, ProfileId, RunStatus, Severity, StepStatus,
+    TicketKind, TicketRef, ToolStream,
 };
 pub mod error;
 pub use error::{CoreError, Result};

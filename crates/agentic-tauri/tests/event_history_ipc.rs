@@ -4,9 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agentic_core::events::{Event, EventBus, EventEnvelope};
-use agentic_tauri::commands::events::{EventBusState, get_event_history};
-use tauri::test::{mock_builder, mock_context, noop_assets};
+use agentic_tauri::commands::events::EventBusState;
 use tauri::Manager;
+use tauri::test::{mock_builder, mock_context, noop_assets};
 
 fn make_envelope(run_id: &str, event_id: &str) -> EventEnvelope {
     EventEnvelope {
@@ -27,7 +27,9 @@ async fn get_event_history_returns_buffered_envelopes() {
     let bus_for_publish = bus.clone();
 
     let app = mock_builder()
-        .invoke_handler(tauri::generate_handler![get_event_history])
+        .invoke_handler(tauri::generate_handler![
+            agentic_tauri::commands::events::get_event_history
+        ])
         .manage(EventBusState::new(bus.clone()))
         .build(mock_context(noop_assets()))
         .expect("build mock app");
@@ -41,7 +43,7 @@ async fn get_event_history_returns_buffered_envelopes() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let state = app.state::<EventBusState>();
-    let history = get_event_history(state, "run1".to_string())
+    let history = agentic_tauri::commands::events::get_event_history(state, "run1".to_string())
         .await
         .unwrap();
 
@@ -56,15 +58,18 @@ async fn get_event_history_returns_empty_for_unknown_run() {
     let bus = Arc::new(EventBus::new());
 
     let app = mock_builder()
-        .invoke_handler(tauri::generate_handler![get_event_history])
+        .invoke_handler(tauri::generate_handler![
+            agentic_tauri::commands::events::get_event_history
+        ])
         .manage(EventBusState::new(bus.clone()))
         .build(mock_context(noop_assets()))
         .expect("build mock app");
 
     let state = app.state::<EventBusState>();
-    let history = get_event_history(state, "never-existed".to_string())
-        .await
-        .unwrap();
+    let history =
+        agentic_tauri::commands::events::get_event_history(state, "never-existed".to_string())
+            .await
+            .unwrap();
 
     assert!(history.is_empty());
 }

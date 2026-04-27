@@ -21,6 +21,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::events::subscribe_events,
+            commands::events::get_event_history,
             commands::scripted::start_scripted_run,
             commands::scripted::cancel_run
         ])

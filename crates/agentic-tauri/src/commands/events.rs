@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use agentic_core::events::EventBus;
+use agentic_core::events::{EventBus, EventEnvelope, EventHistoryBuffer};
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -24,14 +24,18 @@ pub struct EventBusState {
     forwarder: Mutex<Option<JoinHandle<()>>>,
     /// Active run cancellation tokens, keyed by run_id.
     cancellations: Mutex<HashMap<String, CancellationToken>>,
+    /// Per-run ring buffer of recent envelopes for mid-run webview reattach.
+    pub history: EventHistoryBuffer,
 }
 
 impl EventBusState {
     pub fn new(bus: Arc<EventBus>) -> Self {
+        let history = EventHistoryBuffer::spawn_default(&bus);
         Self {
             bus,
             forwarder: Mutex::new(None),
             cancellations: Mutex::new(HashMap::new()),
+            history,
         }
     }
 
@@ -104,4 +108,17 @@ pub async fn subscribe_events<R: Runtime>(
     *slot = Some(new_handle);
 
     Ok(())
+}
+
+/// Tauri command. Returns the buffered event envelopes for the given `run_id`.
+///
+/// Called by the frontend on mount (before or alongside `subscribe_events`) to
+/// pre-seed the event list with events published before the live listener
+/// attached — closing the silent data-loss gap on mid-run webview attach.
+#[tauri::command]
+pub async fn get_event_history(
+    state: State<'_, EventBusState>,
+    run_id: String,
+) -> Result<Vec<EventEnvelope>, String> {
+    Ok(state.history.get(&run_id).await)
 }
