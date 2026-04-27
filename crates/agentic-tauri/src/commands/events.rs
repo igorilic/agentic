@@ -29,8 +29,20 @@ pub struct EventBusState {
 }
 
 impl EventBusState {
+    /// Construct from a shared bus. Safe to call from either an active
+    /// tokio runtime context (e.g., `#[tokio::test]`) or a synchronous
+    /// entry point (e.g., Tauri 2's `setup` hook, which runs *outside* the
+    /// runtime). When no ambient runtime is detected, the constructor
+    /// transparently enters `tauri::async_runtime` to register the
+    /// history-buffer task — without this fallback, `tokio::spawn` inside
+    /// `EventHistoryBuffer::spawn_default` panics with "no reactor running".
     pub fn new(bus: Arc<EventBus>) -> Self {
-        let history = EventHistoryBuffer::spawn_default(&bus);
+        let history = match tokio::runtime::Handle::try_current() {
+            Ok(_) => EventHistoryBuffer::spawn_default(&bus),
+            Err(_) => {
+                tauri::async_runtime::block_on(async { EventHistoryBuffer::spawn_default(&bus) })
+            }
+        };
         Self {
             bus,
             forwarder: Mutex::new(None),

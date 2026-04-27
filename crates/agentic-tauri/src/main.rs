@@ -43,6 +43,8 @@ fn main() {
                 .expect("seed default workspace");
 
             let bus = Arc::new(EventBus::new());
+            // EventBusState::new internally handles the missing-runtime
+            // case (Tauri 2's setup hook runs outside a tokio context).
             app.manage(EventBusState::new(bus));
             app.manage(ChatState::new(&db));
             app.manage(FindingsState::new(&db));

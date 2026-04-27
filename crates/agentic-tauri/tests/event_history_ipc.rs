@@ -8,6 +8,21 @@ use agentic_tauri::commands::events::EventBusState;
 use tauri::Manager;
 use tauri::test::{mock_builder, mock_context, noop_assets};
 
+/// Regression: Tauri 2's `setup` hook runs synchronously, *outside* any
+/// tokio runtime. Before the fallback in `EventBusState::new`, constructing
+/// the state from this kind of context panicked at startup with "no reactor
+/// running" because `EventHistoryBuffer::spawn` calls `tokio::spawn`. Tests
+/// using `#[tokio::test]` masked the panic because they always provide a
+/// runtime. This `#[test]` (note: NOT `#[tokio::test]`) reproduces the real
+/// binary's setup conditions and would have caught the panic in CI.
+#[test]
+fn event_bus_state_new_does_not_panic_outside_tokio_runtime() {
+    let bus = Arc::new(EventBus::new());
+    // Construction must not panic. We don't otherwise exercise the state
+    // here — that's what the rest of this file (under tokio::test) does.
+    let _state = EventBusState::new(bus);
+}
+
 fn make_envelope(run_id: &str, event_id: &str) -> EventEnvelope {
     EventEnvelope {
         schema_version: 1,
