@@ -31,4 +31,9 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByTestId("cockpit-stepper")).toBeInTheDocument();
   });
+
+  it("renders the chat pane", () => {
+    render(<App />);
+    expect(screen.getByTestId("chat-pane")).toBeInTheDocument();
+  });
 });
