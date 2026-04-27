@@ -1,0 +1,61 @@
+[
+  {
+    "type": "StepStarted",
+    "data": { "agent": "architect", "model": "sonnet" }
+  },
+  { "type": "TextDelta", "data": { "content": "Designing spec…" } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "spec ready",
+      "token_usage": {
+        "input_tokens": 120,
+        "output_tokens": 340,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.01,
+      "duration_ms": 1200
+    }
+  },
+  { "type": "StepStarted", "data": { "agent": "reviewer", "model": "sonnet" } },
+  { "type": "TextDelta", "data": { "content": "Reviewing changes…" } },
+  {
+    "type": "Finding",
+    "data": {
+      "finding_id": "f1",
+      "severity": "warning",
+      "file": "src/main.rs",
+      "line": 42,
+      "message": "missing-error-handling",
+      "suggestion": null
+    }
+  },
+  {
+    "type": "Finding",
+    "data": {
+      "finding_id": "f2",
+      "severity": "error",
+      "file": "src/auth.rs",
+      "line": 17,
+      "message": "hardcoded-secret",
+      "suggestion": "move to settings"
+    }
+  },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "needs_triage",
+      "summary": "2 findings",
+      "token_usage": {
+        "input_tokens": 300,
+        "output_tokens": 500,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.02,
+      "duration_ms": 2400
+    }
+  }
+]

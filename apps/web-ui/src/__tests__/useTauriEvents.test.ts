@@ -225,6 +225,58 @@ describe("useTauriEvents", () => {
     expect(result.current.events[0].event_id).toBe("b1");
   });
 
+  it("preserves events when runId transitions from defined to undefined (post-RunComplete)", async () => {
+    invokeMock.mockImplementation(async (cmd: string, args?: { runId?: string }) => {
+      if (cmd === "get_event_history" && args?.runId === "run-a") {
+        return [
+          {
+            schema_version: 1,
+            event_id: "a1",
+            run_id: "run-a",
+            step_id: null,
+            timestamp_ms: 1,
+            event: { type: "TextDelta", data: { content: "hello" } },
+          },
+        ];
+      }
+      return undefined;
+    });
+
+    const { result, rerender } = renderHook((runId: string | undefined) => useTauriEvents(runId), {
+      initialProps: "run-a" as string | undefined,
+    });
+
+    await waitFor(() => {
+      expect(result.current.events.length).toBe(1);
+    });
+
+    // Push a live RunComplete envelope.
+    act(() => {
+      capturedHandler!({
+        payload: {
+          schema_version: 1,
+          event_id: "a-rc",
+          run_id: "run-a",
+          step_id: null,
+          timestamp_ms: 100,
+          event: { type: "RunComplete", data: { status: "completed", duration_ms: 99, summary: "ok" } },
+        },
+      });
+    });
+    expect(result.current.events.length).toBe(2);
+
+    // StartRunForm clears activeRunId on RunComplete — the hook should NOT
+    // wipe its buffer when the runId argument transitions to undefined,
+    // otherwise the EventList renders blank the instant a run finishes.
+    rerender(undefined);
+
+    // Allow effect cleanup + rerun to settle.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(result.current.events.length).toBe(2);
+    expect(result.current.events[1].event_id).toBe("a-rc");
+  });
+
   it("does not call get_event_history when runId is undefined", async () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "subscribe_events") return undefined;

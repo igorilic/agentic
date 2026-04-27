@@ -46,9 +46,16 @@ export function useTauriEvents(runId?: string): UseTauriEventsResult {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
 
-    // Clear state when runId changes so only the new run's events are shown.
-    setEvents([]);
-    setHistoryError(null);
+    // Only clear state when entering a new run (defined runId). Transitioning
+    // to `undefined` — what StartRunForm does on RunComplete — keeps the
+    // just-finished run's events visible so the user can review them. Without
+    // this guard, the EventList would go blank the instant a run finishes,
+    // and the FindingsTable refetch (which keys on the last event being
+    // RunComplete) would silently miss its trigger.
+    if (runId !== undefined) {
+      setEvents([]);
+      setHistoryError(null);
+    }
 
     (async () => {
       // Fetch history first if a runId is known.
