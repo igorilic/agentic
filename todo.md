@@ -1378,7 +1378,7 @@ Legend:
 
 ## Phase 11 — Tauri shell: cockpit + chat MVP
 
-### Step 11.1: Cockpit stepper component
+### [x] Step 11.1: Cockpit stepper component
 
 **Goal**: Render a four-step stepper (architect → tdd → qa → reviewer) with status icons per spec §7.1/§12.3.
 
