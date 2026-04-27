@@ -8,6 +8,7 @@ use agentic_tauri::commands;
 
 use std::sync::Arc;
 
+use agentic_core::db::workspaces::{Workspace, WorkspaceRepo};
 use agentic_core::events::EventBus;
 use agentic_core::{Db, Paths};
 use commands::chat::ChatState;
@@ -17,13 +18,32 @@ use tauri::Manager;
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
-            let bus = Arc::new(EventBus::new());
-            app.manage(EventBusState::new(bus));
-
             let paths = Paths::from_os().expect("resolve OS paths");
             paths.ensure_dirs().expect("ensure data dirs");
-            let db = Arc::new(Db::open(&paths).expect("open database"));
-            app.manage(ChatState::new(db));
+            let db = Db::open(&paths).expect("open database");
+
+            // Seed the "default" workspace row so the chat pane can create
+            // sessions on a fresh install without hitting an FK violation.
+            let ws_repo = WorkspaceRepo::new(&db);
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            ws_repo
+                .insert_if_absent(Workspace {
+                    id: "default".to_string(),
+                    name: "Default".to_string(),
+                    root_path: paths.data_dir().to_string_lossy().into_owned(),
+                    remote_url: None,
+                    profile: "custom".to_string(),
+                    created_at: now_ms,
+                    last_opened: now_ms,
+                })
+                .expect("seed default workspace");
+
+            let bus = Arc::new(EventBus::new());
+            app.manage(EventBusState::new(bus));
+            app.manage(ChatState::new(&db));
 
             Ok(())
         })

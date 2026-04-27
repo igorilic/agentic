@@ -2,6 +2,8 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ChatMessage, ChatSendResult } from "../types/chat";
 
+export const MAX_MESSAGES = 200;
+
 const DEFAULT_WORKSPACE_ID = "default";
 
 export type UseChatResult = {
@@ -31,7 +33,10 @@ export function useChat(): UseChatResult {
         content: content.trim(),
       })) as ChatSendResult;
       if (!sessionId) setSessionId(result.user_message.session_id);
-      setMessages((prev) => [...prev, result.user_message, result.reply]);
+      setMessages((prev) => {
+        const next = [...prev, result.user_message, result.reply];
+        return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
+      });
     } catch (e) {
       setError(String(e));
     } finally {

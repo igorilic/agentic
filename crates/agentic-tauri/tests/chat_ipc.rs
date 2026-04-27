@@ -1,7 +1,5 @@
 #![cfg(test)]
 
-use std::sync::Arc;
-
 use agentic_core::Db;
 use agentic_tauri::commands::chat::{ChatState, chat_list_messages, chat_send_message};
 use tauri::Manager;
@@ -18,14 +16,14 @@ fn seed_workspace(db: &Db, id: &str) {
 }
 
 fn build_app() -> tauri::App<tauri::test::MockRuntime> {
-    let db = Arc::new(Db::open_in_memory().expect("Db::open_in_memory"));
+    let db = Db::open_in_memory().expect("Db::open_in_memory");
     seed_workspace(&db, "default");
     mock_builder()
         .invoke_handler(tauri::generate_handler![
             agentic_tauri::commands::chat::chat_send_message,
             agentic_tauri::commands::chat::chat_list_messages,
         ])
-        .manage(ChatState::new(db))
+        .manage(ChatState::new(&db))
         .build(mock_context(noop_assets()))
         .expect("build mock app")
 }

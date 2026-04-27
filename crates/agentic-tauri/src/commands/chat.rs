@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use agentic_core::db::Db;
 use agentic_core::db::chat::{ChatMessage, ChatRepo};
 use serde::Serialize;
@@ -9,14 +7,14 @@ use ulid::Ulid;
 /// State holding the DB handle for chat commands. Distinct from EventBusState
 /// because chat ops don't need the bus.
 pub struct ChatState {
-    pub db: Arc<Db>,
     pub repo: ChatRepo,
 }
 
 impl ChatState {
-    pub fn new(db: Arc<Db>) -> Self {
-        let repo = ChatRepo::new(&db);
-        Self { db, repo }
+    pub fn new(db: &Db) -> Self {
+        Self {
+            repo: ChatRepo::new(db),
+        }
     }
 }
 
@@ -59,6 +57,13 @@ pub async fn chat_send_message(
         }
     };
 
+    tracing::info!(
+        session_id = ?session_id,
+        workspace_id = %workspace_id,
+        content_len = content.len(),
+        "chat_send_message"
+    );
+
     let user_msg = state
         .repo
         .insert_message(ChatMessage {
@@ -97,6 +102,7 @@ pub async fn chat_list_messages(
     state: State<'_, ChatState>,
     session_id: String,
 ) -> Result<Vec<ChatMessage>, String> {
+    tracing::info!(session_id = %session_id, "chat_list_messages");
     state
         .repo
         .list_by_session(&session_id)
