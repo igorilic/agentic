@@ -8,6 +8,8 @@
     "allow-subscribe-events",
     "allow-get-event-history",
     "allow-start-scripted-run",
-    "allow-cancel-run"
+    "allow-cancel-run",
+    "allow-chat-send-message",
+    "allow-chat-list-messages"
   ]
 }

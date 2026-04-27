@@ -5,6 +5,8 @@ fn main() {
             "get_event_history",
             "start_scripted_run",
             "cancel_run",
+            "chat_send_message",
+            "chat_list_messages",
         ]),
     ))
     .expect("failed to run tauri build");
