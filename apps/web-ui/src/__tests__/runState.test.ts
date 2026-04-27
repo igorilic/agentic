@@ -131,6 +131,65 @@ describe("deriveRunState", () => {
     expect(state.steps.every((s) => s.status === "pending")).toBe(true);
   });
 
+  it("captures needs_triage status from StepComplete", () => {
+    const state = deriveRunState([
+      envelope({
+        step_id: "s1",
+        event: {
+          type: "StepStarted",
+          data: { agent: "qa", model: { id: "m" } },
+        },
+      }),
+      envelope({
+        step_id: "s1",
+        event: {
+          type: "StepComplete",
+          data: {
+            status: "needs_triage",
+            summary: "Reviewer flagged 3 issues",
+            token_usage: { input_tokens: 0, output_tokens: 0 },
+            cost_usd: null,
+            duration_ms: 100,
+          },
+        },
+      }),
+    ]);
+    expect(state.steps[2].status).toBe("needs_triage");
+  });
+
+  it("includes cache tokens in the per-step total", () => {
+    const state = deriveRunState([
+      envelope({
+        step_id: "s1",
+        event: {
+          type: "StepStarted",
+          data: { agent: "architect", model: {} },
+        },
+      }),
+      envelope({
+        step_id: "s1",
+        event: {
+          type: "StepComplete",
+          data: {
+            status: "passed",
+            summary: "",
+            token_usage: {
+              input_tokens: 100,
+              output_tokens: 50,
+              cache_read_input_tokens: 200,
+              cache_creation_input_tokens: 300,
+            },
+            cost_usd: null,
+            duration_ms: 1,
+          },
+        },
+      }),
+    ]);
+    // 100 + 50 + 200 + 300 = 650
+    expect(state.steps[0].tokens).toBe(650);
+    expect(state.totalTokens).toBe(650);
+  });
+
   it("DEFAULT_AGENTS has the expected 4 agents in order", () => {
     expect(DEFAULT_AGENTS).toEqual([
       "architect",

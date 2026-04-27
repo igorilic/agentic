@@ -104,4 +104,32 @@ describe("Stepper", () => {
     const totals = screen.getByTestId("stepper-totals");
     expect(totals).toHaveTextContent("$0.0042");
   });
+
+  it("renders the warning icon for needs_triage status", () => {
+    const state = makeRunState([
+      { status: "passed" },
+      { status: "passed" },
+      { status: "needs_triage" },
+      { status: "pending" },
+    ]);
+    render(<Stepper state={state} />);
+    const qaStep = screen.getByTestId("stepper-step-qa");
+    expect(qaStep).toHaveAttribute("data-status", "needs_triage");
+    const qaIcon = screen.getByTestId("stepper-icon-qa");
+    expect(qaIcon).toHaveTextContent("⚠");
+  });
+
+  it("renders the skipped icon for skipped status", () => {
+    const state = makeRunState([
+      { status: "passed" },
+      { status: "skipped" },
+      { status: "passed" },
+      { status: "passed" },
+    ]);
+    render(<Stepper state={state} />);
+    const tddStep = screen.getByTestId("stepper-step-tdd-developer");
+    expect(tddStep).toHaveAttribute("data-status", "skipped");
+    const tddIcon = screen.getByTestId("stepper-icon-tdd-developer");
+    expect(tddIcon).toHaveTextContent("⊘");
+  });
 });
