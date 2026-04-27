@@ -67,7 +67,10 @@ fn update_triage_sets_triage_value_and_returns_true() {
     repo.insert(&sample_finding("f1", "msg", "warn")).unwrap();
 
     let updated = repo.update_triage("f1", "tech-debt", 300).expect("update");
-    assert!(updated, "expected update_triage to return true for existing row");
+    assert!(
+        updated,
+        "expected update_triage to return true for existing row"
+    );
 
     let list = repo.list_by_run("run1").unwrap();
     let row = list.iter().find(|f| f.id == "f1").unwrap();
@@ -82,7 +85,10 @@ fn update_triage_returns_false_for_unknown_finding() {
     let updated = repo
         .update_triage("nonexistent", "fix", 300)
         .expect("update_triage");
-    assert!(!updated, "expected update_triage to return false for missing row");
+    assert!(
+        !updated,
+        "expected update_triage to return false for missing row"
+    );
 }
 
 #[test]

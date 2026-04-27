@@ -8,6 +8,7 @@ fn main() {
             "chat_send_message",
             "chat_list_messages",
             "mention_agent",
+            "triage_finding",
         ]),
     ))
     .expect("failed to run tauri build");

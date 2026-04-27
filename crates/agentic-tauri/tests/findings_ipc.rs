@@ -7,25 +7,29 @@ use tauri::Manager;
 use tauri::test::{mock_builder, mock_context, noop_assets};
 
 fn seed_run_step_and_finding(db: &Db) {
-    let conn = db.conn().unwrap();
-    conn.execute(
-        "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
-         VALUES ('default', 'test', '/tmp/test', 'github', 100, 100)",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO runs (id, workspace_id, status, backend, model, started_at) \
-         VALUES ('run1', 'default', 'running', 'claude-code', 'sonnet', 100)",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO run_steps (id, run_id, seq, agent_name, status) \
-         VALUES ('step1', 'run1', 0, 'reviewer', 'passed')",
-        [],
-    )
-    .unwrap();
+    {
+        let conn = db.conn().unwrap();
+        conn.execute(
+            "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
+             VALUES ('default', 'test', '/tmp/test', 'github', 100, 100)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO runs (id, workspace_id, status, backend, model, started_at) \
+             VALUES ('run1', 'default', 'running', 'claude-code', 'sonnet', 100)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO run_steps (id, run_id, seq, agent_name, status) \
+             VALUES ('step1', 'run1', 0, 'reviewer', 'passed')",
+            [],
+        )
+        .unwrap();
+    }
+    // Conn dropped here so the in-memory pool (max_size=1) can hand it out
+    // again to the repo below.
     let repo = FindingsRepo::new(db);
     repo.insert(&FindingRow {
         id: "f1".to_string(),

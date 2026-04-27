@@ -13,6 +13,7 @@ use agentic_core::events::EventBus;
 use agentic_core::{Db, Paths};
 use commands::chat::ChatState;
 use commands::events::EventBusState;
+use commands::findings::FindingsState;
 use tauri::Manager;
 
 fn main() {
@@ -44,6 +45,7 @@ fn main() {
             let bus = Arc::new(EventBus::new());
             app.manage(EventBusState::new(bus));
             app.manage(ChatState::new(&db));
+            app.manage(FindingsState::new(&db));
 
             Ok(())
         })
@@ -55,6 +57,7 @@ fn main() {
             commands::chat::chat_send_message,
             commands::chat::chat_list_messages,
             commands::mention::mention_agent,
+            commands::findings::triage_finding,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
