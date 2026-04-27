@@ -83,6 +83,17 @@ enum Command {
     /// Ensure the database is initialized (runs pending migrations).
     /// Useful for first-time setup on a fresh install.
     Migrate,
+    /// Scaffold `.agentic/agents/{architect,tdd-developer,qa,reviewer}.md`
+    /// in a target repo so the pipeline finds its agents on first run.
+    Init {
+        /// Target repo to scaffold. Defaults to the current working
+        /// directory.
+        #[arg(long)]
+        target: Option<PathBuf>,
+        /// Overwrite agent files that already exist.
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[tokio::main]
@@ -131,7 +142,24 @@ async fn run_command(cli: Cli) -> Result<()> {
         }
         Command::Doctor => cmd_doctor(),
         Command::Migrate => cmd_migrate(&paths).await,
+        Command::Init { target, force } => cmd_init(target.as_deref(), force),
     }
+}
+
+fn cmd_init(target: Option<&std::path::Path>, force: bool) -> Result<()> {
+    let target = match target {
+        Some(p) => p.to_path_buf(),
+        None => std::env::current_dir().context("resolve current working directory")?,
+    };
+    let report = agentic_cli::init::write_agent_scaffolding(&target, force)
+        .with_context(|| format!("scaffold .agentic/ under {}", target.display()))?;
+    println!("Scaffolded {} agent files:", report.created.len());
+    for path in &report.created {
+        println!("  {}", path.display());
+    }
+    println!("\nNext: edit each file to fit your project, then run");
+    println!("  agentic-cli run --ticket \"<your ticket>\"");
+    Ok(())
 }
 
 /// Spawns the three background tasks common to all run modes:

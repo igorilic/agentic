@@ -2,6 +2,8 @@
 
 A simplified, honest user manual for what works today and how to use it. Not the spec — see `spec.md` for the full design. Not the roadmap — see `todo.md` for what's shipped vs planned.
 
+> **Freshness**: this file is updated alongside any feature/bug commit that changes user-visible behaviour. If a section here disagrees with the code, trust the code and file an issue.
+
 ---
 
 ## 1. What is Agentic?
@@ -35,7 +37,7 @@ Roughly Phase 11 of 14 is in flight. Quick truth-table:
 |---|---|---|---|
 | `agentic-cli run --ticket "fix X"` against your repo | ✅ | | |
 | `agentic-cli run --scripted demo.json` | ✅ | | |
-| `agentic-cli doctor` / `migrate` | ✅ | | |
+| `agentic-cli doctor` / `migrate` / `init` | ✅ | | |
 | Claude Code backend | ✅ | | |
 | Copilot CLI backend | ✅ | | |
 | Event persistence (SQLite) | ✅ | | |
@@ -96,7 +98,31 @@ Missing rows are non-fatal — only the backends you actually use need to be pre
 cargo run -p agentic-cli -- migrate
 ```
 
-Creates `~/Library/Application Support/io.agentic.app/agentic.db` (macOS) — equivalent path on Linux/Windows under `directories::ProjectDirs`. Idempotent; safe to re-run after a pull.
+Creates `~/Library/Application Support/agentic/state.db` (macOS) — equivalent path on Linux/Windows under `directories::ProjectDirs`. Idempotent; safe to re-run after a pull.
+
+### Scaffold a project's `.agentic/` directory
+
+Before you can run a real ticket-driven pipeline against another repo, that repo needs four agent files. Bootstrap them in one shot:
+
+```fish
+cd ~/work/my-project
+~/agentic/target/debug/agentic-cli init
+```
+
+This writes:
+
+```
+.agentic/agents/architect.md
+.agentic/agents/tdd-developer.md
+.agentic/agents/qa.md
+.agentic/agents/reviewer.md
+```
+
+Each file has reasonable defaults (Opus for architect, Sonnet for tdd-developer/reviewer, Haiku for qa) and a starter system prompt. You should read each one and edit the prompt to fit your project's conventions.
+
+Flags:
+- `--target <path>` — scaffold into a different directory (defaults to cwd)
+- `--force` — overwrite existing files (default: refuse, so hand-edits aren't clobbered)
 
 ---
 
@@ -236,7 +262,7 @@ cargo tauri dev
   - `/plan #42` → system message `[STUB] /plan…`
   - `/status <run-id>`, `/cancel <run-id>` → same stubs
   - `@architect ship it` → routes through `mention_agent` IPC, streams two stub envelopes onto the dedicated `agentic://mention-event` channel which renders as `chat-message-mention` rows
-- **FindingsTable** — for the run shown in the cockpit, lists `Event::Finding` entries with `[Fix] [Tech-debt] [Ignore]` buttons. Triage writes through the IPC and updates `findings.triage` in SQLite.
+- **FindingsTable** — for the run shown in the cockpit, lists `Event::Finding` entries with `[Fix] [Tech-debt] [Ignore]` buttons. Triage writes through the IPC and updates `findings.triage` in SQLite. See §8 for what each tag means in practice.
 
 ### The demo loop (CP-9)
 
@@ -258,16 +284,71 @@ Paste the path into StartRunForm, set delay 200ms, click **Start**. Watch the St
 
 ---
 
-## 8. Practical scenarios
+## 8. Triage tags — Fix / Tech-debt / Ignore
+
+Each `Finding` the reviewer emits has three possible triage states. You set them via the `[Fix] [Tech-debt] [Ignore]` buttons on a row in the FindingsTable (Tauri UI today; future TUI / VS Code surfaces will follow). The triage state lives on the `findings` row — it survives reloads and is queryable with `SELECT triage FROM findings WHERE run_id = '…'`.
+
+### `Fix` — block the merge
+
+The finding represents a real defect or correctness regression that must be addressed before the change ships. The pipeline's reviewer-loop semantics (when wired in Phase 13+) will route findings tagged `fix` back to the tdd-developer agent for another pass; max 3 loops, then the run completes with status `failed`.
+
+**Use for:**
+- Bugs the reviewer caught that have no test coverage yet
+- Spec or contract violations
+- Security issues (hardcoded secrets, injection vectors, missing auth checks)
+- Anything the reviewer marked `severity = "error"` that you confirm is real
+
+### `Tech-debt` — file as a follow-up
+
+The finding is real but not urgent enough to block this change. You acknowledge it and expect to address it later. Convention in this project: file each `tech-debt` triaged finding as a GitHub issue with the `tech-debt` label so it doesn't fall on the floor.
+
+**Use for:**
+- Latent issues the reviewer flagged but that the current change didn't introduce
+- Ergonomics, naming, or refactor opportunities
+- Missing test coverage for an unrelated area
+- Anything `severity = "warning"` that you accept for now
+
+When you tag `tech-debt`, the run completes with `status = completed_with_tech_debt` (already wired in `RunStatus`).
+
+### `Ignore` — false positive or out-of-scope
+
+The finding is wrong, irrelevant to this change, or so minor it isn't worth tracking. The row stays in the DB with `triage = ignore` for audit but doesn't generate an issue and doesn't block the merge.
+
+**Use for:**
+- Reviewer's nits the formatter would have caught anyway
+- Findings about code outside the change's scope
+- Genuine false positives (the reviewer misread something)
+
+### Re-triage
+
+You can change a finding's triage by clicking a different button on the row. The badge updates locally and the new value writes through `triage_finding(findingId, triage)`. Re-triage is idempotent in the DB — only the latest button click counts.
+
+### Querying triage state
+
+```fish
+sqlite3 ~/Library/Application\ Support/agentic/state.db "
+  SELECT
+    severity,
+    COALESCE(triage, '<untriaged>') AS triage,
+    message
+  FROM findings
+  WHERE run_id = '01...'
+  ORDER BY created_at;
+"
+```
+
+---
+
+## 9. Practical scenarios
 
 ### Scenario A — fix a bug in another repo
 
 ```fish
 cd ~/work/my-project
 
-# 1. Ensure agent files exist (one-time per repo)
-mkdir -p .agentic/agents
-# … create architect.md / tdd-developer.md / qa.md / reviewer.md
+# 1. Scaffold agent files (one-time per repo)
+~/agentic/target/debug/agentic-cli init
+# Edit .agentic/agents/{architect,tdd-developer,qa,reviewer}.md to taste.
 
 # 2. Verify tools
 ~/agentic/target/debug/agentic-cli doctor
@@ -315,7 +396,7 @@ Build a scripted JSON that mimics the events your real run would produce, run it
 
 ---
 
-## 9. Where things live
+## 10. Where things live
 
 | What | Path (macOS) |
 |---|---|
@@ -338,7 +419,7 @@ agentic-cli migrate
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### "agent 'architect' not found"
 
@@ -374,7 +455,7 @@ Real CLI ticket runs use a separate DB connection from the Tauri app's bus. The 
 
 ---
 
-## 11. Project layout
+## 12. Project layout
 
 ```
 agentic/
@@ -396,7 +477,7 @@ Key invariants:
 
 ---
 
-## 12. Roadmap pointers
+## 13. Roadmap pointers
 
 - Tauri shell completion (Phase 11): findings table ✅ wired (Step 11.5). Real ticket runs from chat input still pending.
 - TUI (Phase 12): not started.
@@ -407,7 +488,7 @@ For exact status see `todo.md`. The convention: `### [x] Step N.N` = shipped, `#
 
 ---
 
-## 13. Getting help
+## 14. Getting help
 
 - **What does X command do?** — `cargo run -p agentic-cli -- <cmd> --help`
 - **What does the spec actually say?** — `spec.md`
