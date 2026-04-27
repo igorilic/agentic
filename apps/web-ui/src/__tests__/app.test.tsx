@@ -26,4 +26,9 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByTestId("start-run-form")).toBeInTheDocument();
   });
+
+  it("renders the cockpit stepper", () => {
+    render(<App />);
+    expect(screen.getByTestId("cockpit-stepper")).toBeInTheDocument();
+  });
 });
