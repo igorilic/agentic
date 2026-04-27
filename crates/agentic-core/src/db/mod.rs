@@ -1,5 +1,6 @@
 use crate::{Paths, Result};
 
+pub mod chat;
 pub mod migrations;
 pub mod runs;
 mod status;

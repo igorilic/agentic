@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import ChatPane from "./components/ChatPane";
 import EventList from "./components/EventList";
 import StartRunForm from "./components/StartRunForm";
 import Stepper from "./components/Stepper";
@@ -32,6 +33,9 @@ export default function App() {
       />
       <Stepper state={runState} />
       <section className="p-6">
+        <ChatPane />
+      </section>
+      <section className="px-6 pb-6">
         <EventList events={events} />
       </section>
     </main>

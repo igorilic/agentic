@@ -1,15 +1,5 @@
-use agentic_core::{Db, Paths};
 use agentic_core::db::chat::{ChatMessage, ChatRepo};
-
-fn setup() -> (tempfile::TempDir, Db, ChatRepo) {
-    let tmp = tempfile::tempdir().unwrap();
-    let paths = Paths::for_tests(tmp.path());
-    paths.ensure_dirs().unwrap();
-    let db = Db::open(&paths).expect("Db::open");
-    seed_workspace(&db, "ws1");
-    let repo = ChatRepo::new(&db);
-    (tmp, db, repo)
-}
+use agentic_core::Db;
 
 fn setup_in_memory() -> (Db, ChatRepo) {
     let db = Db::open_in_memory().expect("Db::open_in_memory");
@@ -28,7 +18,13 @@ fn seed_workspace(db: &Db, id: &str) {
     .unwrap();
 }
 
-fn sample_message(id: &str, session_id: &str, role: &str, content: &str, created_at: i64) -> ChatMessage {
+fn sample_message(
+    id: &str,
+    session_id: &str,
+    role: &str,
+    content: &str,
+    created_at: i64,
+) -> ChatMessage {
     ChatMessage {
         id: id.to_string(),
         session_id: session_id.to_string(),
@@ -42,8 +38,9 @@ fn sample_message(id: &str, session_id: &str, role: &str, content: &str, created
 
 #[test]
 fn insert_message_returns_message_and_persists() {
-    let (db, repo) = setup_in_memory();
-    repo.create_session("sess1", "ws1", 100).expect("create_session");
+    let (_db, repo) = setup_in_memory();
+    repo.create_session("sess1", "ws1", 100)
+        .expect("create_session");
 
     let msg = sample_message("msg1", "sess1", "user", "hello", 200);
     let returned = repo.insert_message(msg.clone()).expect("insert_message");
@@ -62,8 +59,9 @@ fn insert_message_returns_message_and_persists() {
 
 #[test]
 fn list_by_session_returns_messages_in_chronological_order() {
-    let (db, repo) = setup_in_memory();
-    repo.create_session("sess2", "ws1", 100).expect("create_session");
+    let (_db, repo) = setup_in_memory();
+    repo.create_session("sess2", "ws1", 100)
+        .expect("create_session");
 
     // Insert out of order by timestamp.
     repo.insert_message(sample_message("msg3", "sess2", "assistant", "third", 300))
@@ -82,8 +80,10 @@ fn list_by_session_returns_messages_in_chronological_order() {
 
 #[test]
 fn list_by_session_returns_empty_for_unknown_session() {
-    let (db, repo) = setup_in_memory();
+    let (_db, repo) = setup_in_memory();
 
-    let list = repo.list_by_session("no-such-session").expect("list_by_session");
+    let list = repo
+        .list_by_session("no-such-session")
+        .expect("list_by_session");
     assert!(list.is_empty(), "expected empty vec for unknown session");
 }
