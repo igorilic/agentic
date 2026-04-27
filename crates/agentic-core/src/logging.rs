@@ -30,7 +30,9 @@ pub fn init(filter: Option<&str>) {
     SUBSCRIBER_INSTALLED.get_or_init(|| {
         let filter_str = resolved_filter(filter, "info");
         let env_filter = EnvFilter::new(filter_str);
-        fmt().with_env_filter(env_filter).init();
+        fmt().with_env_filter(env_filter).try_init().expect(
+            "agentic-core logging: another tracing subscriber is already installed globally",
+        );
     });
 }
 
@@ -47,6 +49,9 @@ pub fn init_test_subscriber() {
         fmt()
             .with_test_writer()
             .with_env_filter(EnvFilter::new(filter_str))
-            .init();
+            .try_init()
+            .expect(
+                "agentic-core logging: another tracing subscriber is already installed globally",
+            );
     });
 }
