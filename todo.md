@@ -1416,7 +1416,7 @@ Legend:
 
 ---
 
-### Step 11.3: Slash-command routing (`/plan`, `/status`, `/cancel`)
+### [x] Step 11.3: Slash-command routing (`/plan`, `/status`, `/cancel`)
 
 **Goal**: Parse leading `/<cmd> args` and dispatch to typed handlers per spec §16.4. Start with three commands.
 

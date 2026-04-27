@@ -1,15 +1,46 @@
 import { useState } from "react";
 import { useChat } from "../hooks/useChat";
+import { parseSlashCommand, formatSlashParseError } from "../slash/parser";
+import { dispatchSlashCommand, type SlashServices } from "../slash/dispatcher";
+
+const slashServices: SlashServices = {
+  plan: async (_ticket) => {
+    return "stub-run-" + Math.random().toString(36).slice(2, 8);
+  },
+  status: async (runId) => {
+    return runId ? `Status of ${runId}: (not yet implemented)` : "No active run.";
+  },
+  cancel: async (_runId) => {
+    return false;
+  },
+};
 
 export default function ChatPane() {
   const { messages, send, sending, error } = useChat();
   const [draft, setDraft] = useState("");
+  const [systemMessages, setSystemMessages] = useState<string[]>([]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!draft.trim() || sending) return;
     const text = draft;
     setDraft("");
+
+    if (text.trim().startsWith("/")) {
+      const parsed = parseSlashCommand(text);
+      if (!parsed.ok) {
+        setSystemMessages((prev) => [...prev, formatSlashParseError(parsed.error)]);
+        return;
+      }
+      try {
+        const result = await dispatchSlashCommand(parsed.command, slashServices);
+        setSystemMessages((prev) => [...prev, result.message]);
+      } catch (err) {
+        setSystemMessages((prev) => [...prev, `Command failed: ${err}`]);
+      }
+      return;
+    }
+
     await send(text);
   };
 
@@ -39,7 +70,19 @@ export default function ChatPane() {
             <span className="text-sm text-gray-800">{m.content}</span>
           </li>
         ))}
-        {messages.length === 0 && (
+        {systemMessages.map((msg, i) => (
+          <li
+            key={`sys-${i}`}
+            data-testid="chat-message-system"
+            className="px-3 py-2 flex gap-3"
+          >
+            <span className="text-xs font-semibold uppercase shrink-0 text-yellow-600">
+              system
+            </span>
+            <span className="text-sm text-gray-800">{msg}</span>
+          </li>
+        ))}
+        {messages.length === 0 && systemMessages.length === 0 && (
           <li className="px-3 py-2 italic text-gray-400">No messages yet.</li>
         )}
       </ul>
