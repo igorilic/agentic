@@ -423,13 +423,87 @@ async fn start_scripted_run_persists_findings_to_db() {
         "expected one persisted finding, got {}",
         list.len()
     );
-    assert_eq!(list[0].id, "f1");
+    // The DB row id is scoped with the run_id (`<run_id>:<finding_id>`)
+    // so the same script can be replayed without PK collisions. The
+    // envelope on the bus still carries the original finding_id.
+    assert_eq!(list[0].id, format!("{run_id}:f1"));
     assert_eq!(list[0].run_id, run_id);
     assert_eq!(list[0].severity, "warning");
     assert_eq!(list[0].message, "missing-error-handling");
     assert_eq!(list[0].file_path.as_deref(), Some("src/main.rs"));
     assert_eq!(list[0].line, Some(42));
     assert!(list[0].triage.is_none(), "fresh findings start untriaged");
+}
+
+// ─── REGRESSION — running the same script twice persists findings both times ─
+#[tokio::test(flavor = "multi_thread")]
+async fn start_scripted_run_persists_findings_across_reruns_with_same_finding_id() {
+    // Real bug: the demo script uses literal finding_id "f1"/"f2". Since
+    // findings.id is a TEXT PRIMARY KEY and the original implementation
+    // stored finding_id as the row id, the second run silently lost its
+    // findings to a UNIQUE-constraint failure (logged as a tracing::warn,
+    // but tracing wasn't initialised in the Tauri binary so the warning
+    // vanished). Three of the user's demo runs ended up with no findings.
+    let (app, _db) = build_app_with_db();
+
+    let events = vec![
+        Event::StepStarted {
+            agent: "reviewer".to_string(),
+            model: ModelId("fake".to_string()),
+        },
+        Event::Finding {
+            finding_id: "f1".to_string(),
+            severity: Severity::Warning,
+            file: None,
+            line: None,
+            message: "msg-1".to_string(),
+            suggestion: None,
+        },
+        Event::Finding {
+            finding_id: "f2".to_string(),
+            severity: Severity::Error,
+            file: None,
+            line: None,
+            message: "msg-2".to_string(),
+            suggestion: None,
+        },
+    ];
+    let script = write_script_under_cwd(&events);
+    let path = script.path().to_string_lossy().into_owned();
+
+    // First run.
+    let run_a = start_scripted_run(
+        app.handle().clone(),
+        app.state::<EventBusState>(),
+        app.state::<Db>(),
+        path.clone(),
+        Some(0),
+    )
+    .await
+    .expect("first run");
+
+    // Second run — same script, same literal finding_ids.
+    let run_b = start_scripted_run(
+        app.handle().clone(),
+        app.state::<EventBusState>(),
+        app.state::<Db>(),
+        path,
+        Some(0),
+    )
+    .await
+    .expect("second run");
+
+    assert_ne!(run_a, run_b, "different runs must get different ULIDs");
+
+    // Wait for both spawn loops to drain.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let state = app.state::<FindingsState>();
+    let a_findings = state.repo.list_by_run(&run_a).expect("list run_a");
+    let b_findings = state.repo.list_by_run(&run_b).expect("list run_b");
+
+    assert_eq!(a_findings.len(), 2, "first run should persist 2 findings");
+    assert_eq!(b_findings.len(), 2, "second run should persist 2 findings");
 }
 
 // ─── NEW TEST 4 — F7: cancel_run returns false for unknown run_id ─────────────

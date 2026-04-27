@@ -21,7 +21,7 @@ export default function App() {
   const [findingsRefetchKey, setFindingsRefetchKey] = useState(0);
 
   const { events, historyError } = useTauriEvents(activeRunId);
-  const { findings } = useFindings(findingsRunId, findingsRefetchKey);
+  const { findings, error: findingsError } = useFindings(findingsRunId, findingsRefetchKey);
 
   useEffect(() => {
     if (activeRunId && activeRunId !== findingsRunId) {
@@ -66,6 +66,15 @@ export default function App() {
         <EventList events={events} />
       </section>
       <section className="px-6 pb-6">
+        {findingsError && (
+          <div
+            className="mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700"
+            role="alert"
+            data-testid="findings-error-banner"
+          >
+            Could not load findings: {findingsError}
+          </div>
+        )}
         <FindingsTable findings={findings} />
       </section>
     </main>

@@ -10,13 +10,18 @@ use std::sync::Arc;
 
 use agentic_core::db::workspaces::{Workspace, WorkspaceRepo};
 use agentic_core::events::EventBus;
-use agentic_core::{Db, Paths};
+use agentic_core::{Db, Paths, init as init_logging};
 use commands::chat::ChatState;
 use commands::events::EventBusState;
 use commands::findings::FindingsState;
 use tauri::Manager;
 
 fn main() {
+    // Initialise tracing so backend warnings (e.g., "failed to persist
+    // finding; continuing") actually surface in stderr instead of vanishing.
+    // Override via `RUST_LOG=agentic_tauri=debug,agentic_core=debug`.
+    init_logging(None);
+
     tauri::Builder::default()
         .setup(|app| {
             let paths = Paths::from_os().expect("resolve OS paths");
