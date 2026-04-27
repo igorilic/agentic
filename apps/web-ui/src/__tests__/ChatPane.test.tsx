@@ -92,6 +92,19 @@ describe("ChatPane", () => {
     });
   });
 
+  it("typing a /plan command shows a [STUB] system message", async () => {
+    const user = userEvent.setup();
+    render(<ChatPane />);
+
+    await user.type(screen.getByTestId("chat-input"), "/plan #42");
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-message-system")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("chat-message-system")).toHaveTextContent("[STUB]");
+  });
+
   it("displays error when invoke rejects", async () => {
     invokeMock.mockRejectedValueOnce("content is empty");
     const user = userEvent.setup();

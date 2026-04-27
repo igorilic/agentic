@@ -84,5 +84,11 @@ describe("parseSlashCommand", () => {
     expect(
       formatSlashParseError({ kind: "missing_argument", cmd: "plan", argName: "ticket" }),
     ).toContain("ticket");
+    expect(
+      formatSlashParseError({ kind: "not_a_slash_command", input: "hello" }),
+    ).toContain("hello");
+    expect(
+      formatSlashParseError({ kind: "extra_argument", cmd: "status", surplus: "trailing" }),
+    ).toContain("trailing");
   });
 });

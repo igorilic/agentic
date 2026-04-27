@@ -5,13 +5,13 @@ import { dispatchSlashCommand, type SlashServices } from "../slash/dispatcher";
 
 const slashServices: SlashServices = {
   plan: async (_ticket) => {
-    return "stub-run-" + Math.random().toString(36).slice(2, 8);
+    throw new Error("[STUB] /plan is not yet wired to a real backend (Phase 11.4+)");
   },
-  status: async (runId) => {
-    return runId ? `Status of ${runId}: (not yet implemented)` : "No active run.";
+  status: async (_runId) => {
+    throw new Error("[STUB] /status is not yet wired to a real backend (Phase 11.4+)");
   },
   cancel: async (_runId) => {
-    return false;
+    throw new Error("[STUB] /cancel is not yet wired to a real backend (Phase 11.4+)");
   },
 };
 
