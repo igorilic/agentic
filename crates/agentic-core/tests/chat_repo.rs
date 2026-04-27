@@ -1,5 +1,5 @@
-use agentic_core::db::chat::{ChatMessage, ChatRepo};
 use agentic_core::Db;
+use agentic_core::db::chat::{ChatMessage, ChatRepo};
 
 fn setup_in_memory() -> (Db, ChatRepo) {
     let db = Db::open_in_memory().expect("Db::open_in_memory");
