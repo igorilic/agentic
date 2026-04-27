@@ -36,4 +36,9 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByTestId("chat-pane")).toBeInTheDocument();
   });
+
+  it("renders the findings table", () => {
+    render(<App />);
+    expect(screen.getByTestId("findings-table")).toBeInTheDocument();
+  });
 });

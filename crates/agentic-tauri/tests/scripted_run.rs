@@ -5,9 +5,10 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use agentic_core::ModelId;
-use agentic_core::events::{Event, EventBus, EventEnvelope, RunStatus, StepStatus};
+use agentic_core::events::{Event, EventBus, EventEnvelope, RunStatus, Severity, StepStatus};
+use agentic_core::{Db, ModelId};
 use agentic_tauri::commands::events::{EVENT_CHANNEL, EventBusState, subscribe_events};
+use agentic_tauri::commands::findings::FindingsState;
 use agentic_tauri::commands::scripted::{cancel_run, start_scripted_run};
 use tauri::test::{mock_builder, mock_context, noop_assets};
 use tauri::{Listener, Manager, WebviewWindowBuilder};
@@ -27,16 +28,36 @@ fn write_script_under_cwd(events: &[Event]) -> tempfile::NamedTempFile {
 
 // ─── helper: build a standard mock app with both commands registered ─────────
 fn build_app() -> tauri::App<tauri::test::MockRuntime> {
+    build_app_with_db().0
+}
+
+/// Build the same mock app but also expose the Db so tests can read the
+/// findings table directly. Workspace `default` is seeded so finding inserts
+/// can FK against it via the run row scripted_run creates at start.
+fn build_app_with_db() -> (tauri::App<tauri::test::MockRuntime>, Db) {
     let bus = Arc::new(EventBus::new());
-    mock_builder()
+    let db = Db::open_in_memory().expect("Db::open_in_memory");
+    {
+        let conn = db.conn().unwrap();
+        conn.execute(
+            "INSERT INTO workspaces (id, name, root_path, profile, created_at, last_opened) \
+             VALUES ('default', 'test', '/tmp/test', 'github', 100, 100)",
+            [],
+        )
+        .unwrap();
+    }
+    let app = mock_builder()
         .invoke_handler(tauri::generate_handler![
             agentic_tauri::commands::events::subscribe_events,
             agentic_tauri::commands::scripted::start_scripted_run,
             agentic_tauri::commands::scripted::cancel_run,
         ])
         .manage(EventBusState::new(bus))
+        .manage(FindingsState::new(&db))
+        .manage(db.clone())
         .build(mock_context(noop_assets()))
-        .expect("build mock app")
+        .expect("build mock app");
+    (app, db)
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -356,6 +377,58 @@ async fn cancel_run_aborts_in_flight_run() {
             "summary should mention cancellation: {summary}"
         );
     }
+}
+
+// ─── NEW TEST — CP-9: findings emitted in a script land in the findings table ─
+#[tokio::test(flavor = "multi_thread")]
+async fn start_scripted_run_persists_findings_to_db() {
+    let (app, _db) = build_app_with_db();
+
+    let events = vec![
+        Event::StepStarted {
+            agent: "reviewer".to_string(),
+            model: ModelId("fake".to_string()),
+        },
+        Event::Finding {
+            finding_id: "f1".to_string(),
+            severity: Severity::Warning,
+            file: Some(std::path::PathBuf::from("src/main.rs")),
+            line: Some(42),
+            message: "missing-error-handling".to_string(),
+            suggestion: None,
+        },
+        Event::StepComplete {
+            status: StepStatus::Passed,
+            summary: "ok".to_string(),
+            token_usage: agentic_core::TokenUsage::default(),
+            cost_usd: None,
+            duration_ms: 10,
+        },
+    ];
+    let script = write_script_under_cwd(&events);
+
+    let run_id = start_scripted_run(
+        app.handle().clone(),
+        app.state::<EventBusState>(),
+        script.path().to_string_lossy().into_owned(),
+        Some(0),
+    )
+    .await
+    .expect("start_scripted_run");
+
+    // Wait for the publisher loop + finding insert to flush.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let state = app.state::<FindingsState>();
+    let list = state.repo.list_by_run(&run_id).expect("list_by_run");
+    assert_eq!(list.len(), 1, "expected one persisted finding, got {}", list.len());
+    assert_eq!(list[0].id, "f1");
+    assert_eq!(list[0].run_id, run_id);
+    assert_eq!(list[0].severity, "warning");
+    assert_eq!(list[0].message, "missing-error-handling");
+    assert_eq!(list[0].file_path.as_deref(), Some("src/main.rs"));
+    assert_eq!(list[0].line, Some(42));
+    assert!(list[0].triage.is_none(), "fresh findings start untriaged");
 }
 
 // ─── NEW TEST 4 — F7: cancel_run returns false for unknown run_id ─────────────

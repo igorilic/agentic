@@ -2,7 +2,7 @@
 
 use agentic_core::Db;
 use agentic_core::db::findings::{FindingRow, FindingsRepo};
-use agentic_tauri::commands::findings::{FindingsState, triage_finding};
+use agentic_tauri::commands::findings::{FindingsState, list_findings, triage_finding};
 use tauri::Manager;
 use tauri::test::{mock_builder, mock_context, noop_assets};
 
@@ -53,6 +53,7 @@ fn build_app() -> (tauri::App<tauri::test::MockRuntime>, Db) {
     let app = mock_builder()
         .invoke_handler(tauri::generate_handler![
             agentic_tauri::commands::findings::triage_finding,
+            agentic_tauri::commands::findings::list_findings,
         ])
         .manage(FindingsState::new(&db))
         .build(mock_context(noop_assets()))
@@ -88,6 +89,32 @@ async fn triage_finding_returns_err_for_unknown_id() {
     let result = triage_finding(state, "nope".to_string(), "fix".to_string()).await;
 
     assert!(result.is_err(), "expected Err for unknown finding id");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_findings_returns_seeded_rows_for_known_run() {
+    let (app, _db) = build_app();
+    let state = app.state::<FindingsState>();
+
+    let rows = list_findings(state, "run1".to_string())
+        .await
+        .expect("list_findings");
+
+    assert_eq!(rows.len(), 1, "expected the seeded finding");
+    assert_eq!(rows[0].id, "f1");
+    assert_eq!(rows[0].run_id, "run1");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_findings_returns_empty_vec_for_unknown_run() {
+    let (app, _db) = build_app();
+    let state = app.state::<FindingsState>();
+
+    let rows = list_findings(state, "no-such-run".to_string())
+        .await
+        .expect("list_findings");
+
+    assert!(rows.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread")]
