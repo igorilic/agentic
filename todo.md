@@ -1452,7 +1452,7 @@ Legend:
 
 ---
 
-### Step 11.5: Findings table + triage buttons
+### [x] Step 11.5: Findings table + triage buttons
 
 **Goal**: Render findings from a run with `[Fix] [Tech-debt] [Ignore]` actions wired to a Tauri command that updates the row.
 
