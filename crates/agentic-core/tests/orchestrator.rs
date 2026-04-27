@@ -49,6 +49,28 @@ fn seed_run_running(id: &str, started_at: i64) -> Run {
     }
 }
 
+fn seed_run_pending(id: &str, started_at: i64) -> Run {
+    Run {
+        id: id.to_string(),
+        workspace_id: "ws1".to_string(),
+        pipeline_name: "default".to_string(),
+        status: RunStatus::Pending,
+        ticket_type: None,
+        ticket_ref: None,
+        ticket_title: None,
+        ticket_body: None,
+        backend: "scripted".to_string(),
+        model: "fake".to_string(),
+        started_at,
+        completed_at: None,
+        duration_ms: None,
+        token_usage: None,
+        cost_usd: None,
+        summary: None,
+        subprocess_pid: None,
+    }
+}
+
 fn seed_step(id: &str, run_id: &str, seq: i64, status: StepStatus) -> Step {
     Step {
         id: id.to_string(),
@@ -171,9 +193,7 @@ async fn run_started_event_transitions_run_row_to_running() {
     let (_tmp, _db, runs, steps, bus) = setup();
 
     // Seed run as Pending (the natural default).
-    let mut run = seed_run_running("run-rs", 100);
-    run.status = RunStatus::Pending;
-    runs.insert(run).unwrap();
+    runs.insert(seed_run_pending("run-rs", 100)).unwrap();
 
     let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
     bus.publish(EventEnvelope::now(
@@ -196,4 +216,54 @@ async fn run_started_event_transitions_run_row_to_running() {
 
     let run = runs.get("run-rs").unwrap().unwrap();
     assert_eq!(run.status, RunStatus::Running);
+}
+
+#[tokio::test]
+async fn run_started_for_unknown_run_logs_error_and_continues() {
+    let (_tmp, _db, runs, steps, bus) = setup();
+
+    // Do NOT insert any run row for "ghost-run".
+
+    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
+
+    // Publish RunStarted for a run_id that doesn't exist.
+    bus.publish(EventEnvelope::now(
+        "ghost-run".to_string(),
+        None,
+        Event::RunStarted {
+            ticket: TicketRef {
+                kind: TicketKind::FreeText,
+                reference: "test".into(),
+                title: None,
+            },
+            profile: ProfileId("custom".into()),
+            backend: BackendId("scripted".into()),
+            model: ModelId("fake".into()),
+        },
+    ));
+
+    // Now publish a valid event for a different run that DOES exist, to verify
+    // the orchestrator continues processing after the error.
+    runs.insert(seed_run_pending("survivor-run", 100)).unwrap();
+    bus.publish(EventEnvelope::now(
+        "survivor-run".to_string(),
+        None,
+        Event::RunStarted {
+            ticket: TicketRef {
+                kind: TicketKind::FreeText,
+                reference: "test".into(),
+                title: None,
+            },
+            profile: ProfileId("custom".into()),
+            backend: BackendId("scripted".into()),
+            model: ModelId("fake".into()),
+        },
+    ));
+
+    drop(bus);
+    handle.await.expect("orchestrator joins");
+
+    // Verify the survivor was transitioned despite the earlier ghost error.
+    let survivor = runs.get("survivor-run").unwrap().unwrap();
+    assert_eq!(survivor.status, RunStatus::Running);
 }

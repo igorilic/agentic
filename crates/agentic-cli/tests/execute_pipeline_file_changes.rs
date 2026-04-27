@@ -188,7 +188,7 @@ fn seed_run(db: &Db, run_id: &str, ws_id: &str) {
         id: run_id.to_string(),
         workspace_id: ws_id.to_string(),
         pipeline_name: "default".to_string(),
-        status: RunStatus::Running,
+        status: RunStatus::Pending,
         ticket_type: None,
         ticket_ref: None,
         ticket_title: None,

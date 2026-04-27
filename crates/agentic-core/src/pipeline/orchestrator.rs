@@ -10,6 +10,9 @@ use crate::events::{Event, EventBus, EventEnvelope, RunStatus, StepStatus};
 /// them to `runs`/`run_steps` rows. One per bus per DB.
 ///
 /// Consumed event variants:
+/// - `RunStarted`: transitions the run row to `Running`. Idempotent —
+///   if the run is already `Running`, no-op (handles duplicate
+///   emissions / event replay).
 /// - `StepStarted`: transitions the step row to `Running`.
 /// - `StepComplete`: sets step status + `completed_at` (= envelope
 ///   `timestamp_ms`) + `duration_ms` (from event payload).
@@ -56,6 +59,14 @@ impl PipelineOrchestrator {
 fn apply_event(envelope: &EventEnvelope, runs: &RunRepo, steps: &StepRepo) -> Result<()> {
     match &envelope.event {
         Event::RunStarted { .. } => {
+            let current = runs
+                .get(&envelope.run_id)?
+                .ok_or_else(|| crate::CoreError::Db(format!("run not found: {}", envelope.run_id)))?
+                .status;
+            if current == RunStatus::Running {
+                // Already transitioned (e.g., duplicate RunStarted, replay). No-op.
+                return Ok(());
+            }
             runs.transition(&envelope.run_id, RunStatus::Running)?;
         }
         Event::StepStarted { .. } => {
