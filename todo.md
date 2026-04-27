@@ -1434,7 +1434,7 @@ Legend:
 
 ---
 
-### Step 11.4: `@mention` routing (`@architect`)
+### [x] Step 11.4: `@mention` routing (`@architect`)
 
 **Goal**: Parse leading `@<agent>` and dispatch a single-agent run through core.
 
