@@ -9,12 +9,33 @@ use super::events::EventBusState;
 /// cockpit Stepper does NOT subscribe to this channel.
 pub const MENTION_EVENT_CHANNEL: &str = "agentic://mention-event";
 
+/// Maximum accepted body length. Mirrors the chat-message bound to keep IPC
+/// payloads predictable.
+const MAX_BODY_LEN: usize = 4096;
+
+/// Validate an agent name. Mirrors the frontend regex `[a-zA-Z0-9_-]+` so the
+/// server enforces the same contract a malicious or buggy frontend could
+/// otherwise bypass.
+fn is_valid_agent_name(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
 #[derive(Debug, Serialize)]
 pub struct MentionResult {
     pub run_id: String,
     pub agent: String,
-    /// True when a real backend dispatch was attempted. Phase 11.4 stub: always
-    /// false. Phase 11.5+ sets this to true when `Backend::execute` is wired.
+    /// Whether a real backend dispatch was attempted.
+    ///
+    /// Lifecycle:
+    /// - Phase 11.4 (current): always `false` — the IPC contract is wired but
+    ///   the backend is a synthetic event-stream stub. Frontend MUST treat
+    ///   `false` as "no real run started" and surface a [STUB] indicator.
+    /// - Phase 11.5+: flips to `true` once `Backend::execute` is wired and a
+    ///   real `RunStarted` envelope has been published to the EventBus. The
+    ///   field stays `true` for the lifetime of the result; it is not a
+    ///   running-state flag.
     pub dispatched: bool,
 }
 
@@ -30,11 +51,28 @@ pub async fn mention_agent<R: Runtime>(
     agent: String,
     body: String,
 ) -> Result<MentionResult, String> {
-    if agent.trim().is_empty() {
+    let agent = agent.trim().to_string();
+    if agent.is_empty() {
         return Err("agent is empty".to_string());
     }
-    if body.trim().is_empty() {
+    if !is_valid_agent_name(&agent) {
+        return Err(format!(
+            "agent name contains invalid characters (allowed: alphanumeric, '_', '-'): {agent}"
+        ));
+    }
+
+    // Trim the body server-side as well as the frontend so the contract is
+    // symmetric — a non-Tauri caller (e.g., integration tests) gets the same
+    // normalisation as the React parser.
+    let body = body.trim().to_string();
+    if body.is_empty() {
         return Err("body is empty".to_string());
+    }
+    if body.len() > MAX_BODY_LEN {
+        return Err(format!(
+            "body exceeds {MAX_BODY_LEN} bytes (got {})",
+            body.len()
+        ));
     }
 
     let run_id = Ulid::new().to_string().to_lowercase();
@@ -49,7 +87,7 @@ pub async fn mention_agent<R: Runtime>(
                 run_id_clone.clone(),
                 None,
                 Event::TextDelta {
-                    content: format!("@{} received: {}", agent_clone, body_clone),
+                    content: format!("[STUB] @{agent_clone} received: {body_clone}"),
                 },
             ),
             EventEnvelope::now(

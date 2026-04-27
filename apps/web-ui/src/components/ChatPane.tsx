@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useChat } from "../hooks/useChat";
+import { useMentionEvents } from "../hooks/useMentionEvents";
 import { parseSlashCommand, formatSlashParseError } from "../slash/parser";
 import { dispatchSlashCommand, type SlashServices } from "../slash/dispatcher";
 import { parseMention, formatMentionParseError } from "../mention/parser";
@@ -27,6 +28,24 @@ export default function ChatPane() {
   const { messages, send, sending, error } = useChat();
   const [draft, setDraft] = useState("");
   const [systemMessages, setSystemMessages] = useState<string[]>([]);
+  const mentionEvents = useMentionEvents();
+
+  // Project mention envelopes into renderable text. Only TextDelta is shown;
+  // other envelope kinds (RunStarted, RunComplete, …) are bookkeeping for the
+  // future real backend and would be noise in the chat transcript.
+  const mentionMessages = useMemo(
+    () =>
+      mentionEvents
+        .map((env) => {
+          const ev = env.event as { type: string; data?: { content?: string } };
+          if (ev.type === "TextDelta" && typeof ev.data?.content === "string") {
+            return { id: env.event_id, content: ev.data.content };
+          }
+          return null;
+        })
+        .filter((m): m is { id: string; content: string } => m !== null),
+    [mentionEvents],
+  );
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,9 +130,23 @@ export default function ChatPane() {
             <span className="text-sm text-gray-800">{msg}</span>
           </li>
         ))}
-        {messages.length === 0 && systemMessages.length === 0 && (
-          <li className="px-3 py-2 italic text-gray-400">No messages yet.</li>
-        )}
+        {mentionMessages.map((m) => (
+          <li
+            key={`mention-${m.id}`}
+            data-testid="chat-message-mention"
+            className="px-3 py-2 flex gap-3"
+          >
+            <span className="text-xs font-semibold uppercase shrink-0 text-purple-600">
+              mention
+            </span>
+            <span className="text-sm text-gray-800 whitespace-pre-wrap">{m.content}</span>
+          </li>
+        ))}
+        {messages.length === 0 &&
+          systemMessages.length === 0 &&
+          mentionMessages.length === 0 && (
+            <li className="px-3 py-2 italic text-gray-400">No messages yet.</li>
+          )}
       </ul>
       {error && (
         <div

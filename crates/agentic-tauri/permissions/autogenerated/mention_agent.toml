@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mention-agent"
+description = "Enables the mention_agent command without any pre-configured scope."
+commands.allow = ["mention_agent"]
+
+[[permission]]
+identifier = "deny-mention-agent"
+description = "Denies the mention_agent command without any pre-configured scope."
+commands.deny = ["mention_agent"]

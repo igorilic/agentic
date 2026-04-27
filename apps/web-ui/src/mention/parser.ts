@@ -1,4 +1,4 @@
-import type { MentionCommand, MentionParseError, MentionParseResult } from "./types";
+import type { MentionParseError, MentionParseResult } from "./types";
 
 /**
  * Parse a candidate `@mention` from a chat input.
@@ -14,6 +14,9 @@ export function parseMention(input: string): MentionParseResult {
     return { ok: false, error: { kind: "not_a_mention", input } };
   }
   // Match: @ followed by valid agent name characters, then whitespace, then body.
+  // The `/s` (dotAll) flag lets `.` match newline characters so that
+  // multi-line bodies (e.g., shift-enter pasted prompts) are accepted as
+  // a single mention rather than being truncated at the first `\n`.
   const match = trimmed.match(/^@([a-zA-Z0-9_-]+)(\s+(.+))?$/s);
   if (!match) {
     return { ok: false, error: { kind: "missing_agent", input } };

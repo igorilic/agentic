@@ -70,6 +70,15 @@ describe("parseMention", () => {
       expect(r.command.body).toBe("hello");
     }
   });
+
+  it("preserves newlines in the body via the /s (dotAll) regex flag", () => {
+    const r = parseMention("@architect line one\nline two\nline three");
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.command.agent).toBe("architect");
+      expect(r.command.body).toBe("line one\nline two\nline three");
+    }
+  });
 });
 
 describe("formatMentionParseError", () => {
