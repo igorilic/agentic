@@ -1396,7 +1396,7 @@ Legend:
 
 ---
 
-### Step 11.2: Chat pane MVP
+### [x] Step 11.2: Chat pane MVP
 
 **Goal**: Chat input + message list bound to `chat_messages` via a Tauri command.
 
