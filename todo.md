@@ -1602,7 +1602,7 @@ Legend:
 
 ---
 
-### Step 13.2: Diff viewer in Tauri
+### [x] Step 13.2: Diff viewer in Tauri
 
 **Goal**: Embedded diff viewer for `FileChange` events.
 

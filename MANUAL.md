@@ -21,7 +21,7 @@ Three shells share one Rust core:
 | Shell | Status |
 |---|---|
 | **CLI** (`agentic-cli`) | working — recommended for real work today |
-| **Tauri desktop app** | MVP cockpit — observability + chat stub + scripted demos |
+| **Tauri desktop app** | MVP cockpit — observability + chat stub + scripted demos + DiffViewer component (13.2) for unified-diff text |
 | **TUI** (`agentic-tui`) | Steps 12.1–12.5 + 13.1 — alt-screen with two-pane (cockpit \| chat) layout, `Tab` toggles focus, `[` / `]` resize cockpit (clamped 20–80%), `:` enters command mode (`:plan <ticket>`, `:status`, `:q`), `Esc` cancels command mode. Cockpit pane stacks a four-row stepper (architect → tdd-developer → qa → reviewer; icons ○ ◐ ✓ ✗ ⚠ ⊘) on top of a findings list — `j`/`k` navigate, `f`/`t`/`i` triage. Chat pane shows a unified diff with +/- colouring when `current_diff` is set (population via DB lookup on `Event::FileChange` is wiring TBD). `:plan` is accepted but the binary doesn't yet spawn a backend. |
 | **VS Code extension** | not built yet (Phase 14) |
 
