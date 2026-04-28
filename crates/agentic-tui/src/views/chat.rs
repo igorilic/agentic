@@ -50,7 +50,7 @@ pub fn render(area: Rect, state: &AppState, frame: &mut Frame<'_>) {
     let footer_area = chunks[1];
 
     if let Some(diff_text) = &state.current_diff {
-        diff::render(body_area, diff_text, frame);
+        diff::render(body_area, diff_text, state.diff_scroll_offset, frame);
     }
 
     let footer: Paragraph<'_> = match &state.mode {

@@ -87,4 +87,54 @@ describe("DiffViewer", () => {
     expect(screen.queryByTestId("diff-line-add")).toBeNull();
     expect(screen.queryByTestId("diff-line-remove")).toBeNull();
   });
+
+  it("classifies `\\ No newline at end of file` as a meta line", () => {
+    const diff = `-old\n+new\n\\ No newline at end of file\n`;
+    render(<DiffViewer diff={diff} />);
+    const meta = screen.getAllByTestId("diff-line-meta");
+    expect(meta).toHaveLength(1);
+    expect(meta[0].textContent).toBe("\\ No newline at end of file");
+    expect(meta[0].className).toMatch(/italic/);
+  });
+
+  it("handles multi-hunk diffs in one file", () => {
+    const multi = `--- a/foo
++++ b/foo
+@@ -1,3 +1,3 @@
+ fn one() {}
+-fn old_two() {}
++fn new_two() {}
+@@ -50,3 +50,3 @@
+ fn fifty() {}
+-fn old_fifty_one() {}
++fn new_fifty_one() {}
+`;
+    render(<DiffViewer diff={multi} />);
+    expect(screen.getAllByTestId("diff-line-hunk")).toHaveLength(2);
+    expect(screen.getAllByTestId("diff-line-add")).toHaveLength(2);
+    expect(screen.getAllByTestId("diff-line-remove")).toHaveLength(2);
+  });
+
+  it("handles CRLF line endings without leaving \\r artifacts", () => {
+    // Diffs from files checked in with CRLF would otherwise leave a
+    // visible \r at the end of each rendered line.
+    const diff = "--- a/x\r\n+++ b/x\r\n@@ -1 +1 @@\r\n-old\r\n+new\r\n";
+    render(<DiffViewer diff={diff} />);
+    const adds = screen.getAllByTestId("diff-line-add");
+    expect(adds[0].textContent).toBe("+new");
+    const removes = screen.getAllByTestId("diff-line-remove");
+    expect(removes[0].textContent).toBe("-old");
+  });
+
+  it("outer section carries an aria-label for screen readers", () => {
+    const { container } = render(<DiffViewer diff="" />);
+    const section = container.querySelector("section");
+    expect(section?.getAttribute("aria-label")).toBe("Unified diff");
+  });
+
+  it("non-empty branch also carries an aria-label", () => {
+    const { container } = render(<DiffViewer diff={SAMPLE} />);
+    const section = container.querySelector("section");
+    expect(section?.getAttribute("aria-label")).toBe("Unified diff");
+  });
 });

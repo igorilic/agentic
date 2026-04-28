@@ -24,6 +24,9 @@ pub enum DiffLine {
     Add(String),
     /// `-removed` — red; the inner string omits the leading `-`.
     Remove(String),
+    /// `\ No newline at end of file` and similar git-diff metadata —
+    /// rendered in dim italic so it's distinct from context lines.
+    Meta(String),
     /// ` unchanged` (or any other line) — neutral; inner string keeps
     /// its leading space if present.
     Context(String),
@@ -48,6 +51,10 @@ fn classify(line: &str) -> DiffLine {
     if line.starts_with("@@") {
         return DiffLine::Hunk(line.to_string());
     }
+    // git-diff metadata like "\ No newline at end of file".
+    if line.starts_with("\\ ") {
+        return DiffLine::Meta(line.to_string());
+    }
     if let Some(rest) = line.strip_prefix('+') {
         return DiffLine::Add(rest.to_string());
     }
@@ -57,12 +64,12 @@ fn classify(line: &str) -> DiffLine {
     DiffLine::Context(line.to_string())
 }
 
-pub fn render(area: Rect, diff_text: &str, frame: &mut Frame<'_>) {
+pub fn render(area: Rect, diff_text: &str, scroll_offset: u16, frame: &mut Frame<'_>) {
     let lines: Vec<Line<'_>> = parse_unified(diff_text)
         .into_iter()
         .map(render_line)
         .collect();
-    let body = Paragraph::new(lines);
+    let body = Paragraph::new(lines).scroll((scroll_offset, 0));
     frame.render_widget(body, area);
 }
 
@@ -92,6 +99,12 @@ fn render_line(line: DiffLine) -> Line<'static> {
                 Span::styled(text, style),
             ])
         }
+        DiffLine::Meta(text) => Line::styled(
+            text,
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
+        ),
         DiffLine::Context(text) => Line::raw(text),
     }
 }

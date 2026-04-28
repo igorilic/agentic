@@ -60,10 +60,13 @@ pub struct AppState {
     pub last_status: Option<String>,
     /// Unified-diff text for the file currently being viewed. When
     /// `Some`, the chat-pane interior is replaced by the diff
-    /// renderer. Population from `Event::FileChange` requires a DB
-    /// lookup (the event carries only hashes, not the diff text); the
-    /// binary will wire that in alongside bus subscription.
+    /// renderer. Runtime callers should use `set_diff` to mutate this
+    /// (it also resets the scroll offset); tests may write the field
+    /// directly when they don't care about scroll state.
     pub current_diff: Option<String>,
+    /// Vertical scroll offset for the diff view (number of lines
+    /// scrolled past the top). Reset to 0 by `set_diff`.
+    pub diff_scroll_offset: u16,
 }
 
 impl Default for AppState {
@@ -76,6 +79,7 @@ impl Default for AppState {
             findings: FindingsState::default(),
             last_status: None,
             current_diff: None,
+            diff_scroll_offset: 0,
         }
     }
 }
@@ -107,6 +111,14 @@ impl AppState {
         self.findings.ingest(envelope);
     }
 
+    /// Replace the currently-viewed diff text and re-anchor scroll to
+    /// the top. Use this from the runtime path so swapping files
+    /// can't leave a stale scroll offset visible.
+    pub fn set_diff(&mut self, text: Option<String>) {
+        self.current_diff = text;
+        self.diff_scroll_offset = 0;
+    }
+
     /// Process a key event. The interpretation depends on `self.mode`:
     ///
     /// - `Normal`: `:` enters command mode; `Tab` toggles focus; `[`/`]`
@@ -127,8 +139,20 @@ impl AppState {
                     KeyCode::Tab => self.handle(AppEvent::ToggleFocus),
                     KeyCode::Char(']') => self.handle(AppEvent::WidenCockpit),
                     KeyCode::Char('[') => self.handle(AppEvent::NarrowCockpit),
-                    KeyCode::Char('j') => self.findings.cursor_down(),
-                    KeyCode::Char('k') => self.findings.cursor_up(),
+                    KeyCode::Char('j') => {
+                        if self.focus == Pane::Chat && self.current_diff.is_some() {
+                            self.diff_scroll_offset = self.diff_scroll_offset.saturating_add(1);
+                        } else {
+                            self.findings.cursor_down();
+                        }
+                    }
+                    KeyCode::Char('k') => {
+                        if self.focus == Pane::Chat && self.current_diff.is_some() {
+                            self.diff_scroll_offset = self.diff_scroll_offset.saturating_sub(1);
+                        } else {
+                            self.findings.cursor_up();
+                        }
+                    }
                     KeyCode::Char('f') => self.findings.triage_selected(Triage::Fix),
                     KeyCode::Char('t') => self.findings.triage_selected(Triage::TechDebt),
                     KeyCode::Char('i') => self.findings.triage_selected(Triage::Ignore),

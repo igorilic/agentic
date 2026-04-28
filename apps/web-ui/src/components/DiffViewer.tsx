@@ -17,20 +17,26 @@ type DiffLine =
   | { kind: "hunk"; text: string }
   | { kind: "add"; text: string } // text includes the leading `+`
   | { kind: "remove"; text: string } // text includes the leading `-`
+  | { kind: "meta"; text: string } // git-diff metadata e.g. "\ No newline..."
   | { kind: "context"; text: string };
 
 function parseUnified(diff: string): DiffLine[] {
   if (diff.length === 0) return [];
-  return diff.split("\n").flatMap((line, idx, arr): DiffLine[] => {
+  // CRLF-safe split — files checked in with Windows endings would
+  // otherwise leave a visible \r at the end of each rendered line.
+  return diff.split(/\r?\n/).flatMap((line, idx, arr): DiffLine[] => {
     // Drop the trailing empty entry produced by `split` on a string
-    // that ends with `\n`. Other empty lines inside the diff are rare
-    // but legal — keep them as context.
+    // that ends with a newline. Other empty lines inside the diff are
+    // rare but legal — keep them as context.
     if (line === "" && idx === arr.length - 1) return [];
     if (line.startsWith("--- ") || line.startsWith("+++ ")) {
       return [{ kind: "file-header", text: line }];
     }
     if (line.startsWith("@@")) {
       return [{ kind: "hunk", text: line }];
+    }
+    if (line.startsWith("\\ ")) {
+      return [{ kind: "meta", text: line }];
     }
     if (line.startsWith("+")) return [{ kind: "add", text: line }];
     if (line.startsWith("-")) return [{ kind: "remove", text: line }];
@@ -43,6 +49,7 @@ const STYLES: Record<DiffLine["kind"], string> = {
   hunk: "text-purple-700",
   add: "text-green-700 bg-green-50",
   remove: "text-red-700 bg-red-50",
+  meta: "text-gray-400 italic",
   context: "text-gray-600",
 };
 
@@ -53,6 +60,7 @@ export default function DiffViewer({ diff }: DiffViewerProps) {
     return (
       <section
         data-testid="diff-viewer"
+        aria-label="Unified diff"
         className="border border-gray-200 rounded p-4 text-sm text-gray-500 italic"
       >
         <span data-testid="diff-empty">No diff to display.</span>
@@ -63,12 +71,15 @@ export default function DiffViewer({ diff }: DiffViewerProps) {
   return (
     <section
       data-testid="diff-viewer"
+      aria-label="Unified diff"
       className="border border-gray-200 rounded overflow-hidden font-mono text-xs"
     >
       <pre className="m-0 p-0 overflow-x-auto">
         {lines.map((line, idx) => (
+          // Compound key: lines aren't re-ordered today, but if line
+          // filtering lands later this avoids reconciliation glitches.
           <div
-            key={idx}
+            key={`${line.kind}-${idx}`}
             data-testid={`diff-line-${line.kind}`}
             className={`px-3 py-0.5 whitespace-pre ${STYLES[line.kind]}`}
           >

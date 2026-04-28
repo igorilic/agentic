@@ -5,9 +5,10 @@
 //! the pure parser, the colour mapping, and end-to-end rendering via
 //! `draw_app` once `AppState.current_diff` is set.
 
-use agentic_tui::app::AppState;
+use agentic_tui::app::{AppState, Pane};
 use agentic_tui::draw_app;
 use agentic_tui::views::diff::{DiffLine, parse_unified};
+use crossterm::event::KeyCode;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Color;
@@ -79,6 +80,46 @@ fn parse_treats_triple_dash_or_plus_as_file_header_not_remove_or_add() {
     let lines = parse_unified("--- a/foo\n+++ b/foo\n");
     assert!(matches!(lines[0], DiffLine::FileHeader(_)));
     assert!(matches!(lines[1], DiffLine::FileHeader(_)));
+}
+
+#[test]
+fn parse_classifies_no_newline_marker_as_meta() {
+    // `similar`'s unified_diff() emits "\ No newline at end of file"
+    // when either side lacks a trailing newline. Must be visually
+    // distinct from context lines.
+    let lines = parse_unified("-old\n+new\n\\ No newline at end of file\n");
+    assert!(matches!(lines[0], DiffLine::Remove(_)));
+    assert!(matches!(lines[1], DiffLine::Add(_)));
+    assert!(
+        matches!(&lines[2], DiffLine::Meta(s) if s.starts_with("\\ ")),
+        "expected Meta variant, got {:?}",
+        lines[2]
+    );
+}
+
+#[test]
+fn parse_handles_multi_hunk_diff_in_one_file() {
+    let multi_hunk = "--- a/foo\n\
++++ b/foo\n\
+@@ -1,3 +1,3 @@\n\
+ fn one() {}\n\
+-fn old_two() {}\n\
++fn new_two() {}\n\
+@@ -50,3 +50,3 @@\n\
+ fn fifty() {}\n\
+-fn old_fifty_one() {}\n\
++fn new_fifty_one() {}\n";
+    let lines = parse_unified(multi_hunk);
+    let hunks: Vec<&DiffLine> = lines
+        .iter()
+        .filter(|l| matches!(l, DiffLine::Hunk(_)))
+        .collect();
+    assert_eq!(hunks.len(), 2, "expected two @@ hunk headers");
+    let adds: Vec<&DiffLine> = lines
+        .iter()
+        .filter(|l| matches!(l, DiffLine::Add(_)))
+        .collect();
+    assert_eq!(adds.len(), 2);
 }
 
 // ─── render — colours via Cell.fg ───────────────────────────────────────────
@@ -173,4 +214,116 @@ fn is_green(c: Color) -> bool {
 
 fn is_red(c: Color) -> bool {
     matches!(c, Color::Red | Color::LightRed) || matches!(c, Color::Rgb(r, g, b) if r > g && r > b)
+}
+
+// ─── F3: set_diff encapsulation ─────────────────────────────────────────────
+
+#[test]
+fn set_diff_some_then_none_resets_scroll_offset() {
+    let mut s = AppState::default();
+    s.set_diff(Some(SAMPLE.to_string()));
+    s.diff_scroll_offset = 7;
+    s.set_diff(None);
+    assert_eq!(s.diff_scroll_offset, 0);
+    assert_eq!(s.current_diff, None);
+}
+
+#[test]
+fn set_diff_swapping_a_diff_resets_scroll_offset() {
+    // Switching between files should re-anchor scroll to the top.
+    let mut s = AppState::default();
+    s.set_diff(Some("--- a/x\n+++ b/x\n".to_string()));
+    s.diff_scroll_offset = 5;
+    s.set_diff(Some("--- a/y\n+++ b/y\n".to_string()));
+    assert_eq!(s.diff_scroll_offset, 0);
+}
+
+// ─── F1: scrolling ──────────────────────────────────────────────────────────
+
+#[test]
+fn default_diff_scroll_offset_is_zero() {
+    let s = AppState::default();
+    assert_eq!(s.diff_scroll_offset, 0);
+}
+
+#[test]
+fn j_in_chat_focus_with_diff_set_scrolls_diff_down() {
+    let mut s = AppState {
+        focus: Pane::Chat,
+        current_diff: Some(SAMPLE.to_string()),
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char('j'));
+    assert_eq!(s.diff_scroll_offset, 1);
+}
+
+#[test]
+fn k_in_chat_focus_with_diff_set_scrolls_diff_up_saturating() {
+    let mut s = AppState {
+        focus: Pane::Chat,
+        current_diff: Some(SAMPLE.to_string()),
+        diff_scroll_offset: 0,
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char('k'));
+    assert_eq!(s.diff_scroll_offset, 0, "k must saturate at 0");
+}
+
+#[test]
+fn j_in_cockpit_focus_still_navigates_findings_not_diff() {
+    use agentic_core::events::{Event, EventEnvelope, Severity};
+    let mut s = AppState {
+        focus: Pane::Cockpit,
+        current_diff: Some(SAMPLE.to_string()),
+        ..Default::default()
+    };
+    // Seed a finding so cursor_down has somewhere to go.
+    s.apply_envelope(&EventEnvelope {
+        schema_version: 1,
+        event_id: "e1".into(),
+        run_id: "run1".into(),
+        step_id: Some("run1-step-3-reviewer".into()),
+        timestamp_ms: 0,
+        event: Event::Finding {
+            finding_id: "f1".into(),
+            severity: Severity::Warning,
+            file: None,
+            line: None,
+            message: "x".into(),
+            suggestion: None,
+        },
+    });
+    s.apply_envelope(&EventEnvelope {
+        schema_version: 1,
+        event_id: "e2".into(),
+        run_id: "run1".into(),
+        step_id: Some("run1-step-3-reviewer".into()),
+        timestamp_ms: 0,
+        event: Event::Finding {
+            finding_id: "f2".into(),
+            severity: Severity::Warning,
+            file: None,
+            line: None,
+            message: "y".into(),
+            suggestion: None,
+        },
+    });
+    s.handle_key(KeyCode::Char('j'));
+    assert_eq!(s.findings.cursor, 1);
+    assert_eq!(
+        s.diff_scroll_offset, 0,
+        "j in cockpit focus must not scroll diff"
+    );
+}
+
+#[test]
+fn j_in_chat_focus_without_a_diff_is_a_noop() {
+    let mut s = AppState {
+        focus: Pane::Chat,
+        current_diff: None,
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char('j'));
+    assert_eq!(s.diff_scroll_offset, 0);
+    assert_eq!(s.findings.cursor, 0);
 }
