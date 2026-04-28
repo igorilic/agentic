@@ -66,6 +66,8 @@ impl FindingsState {
 
     /// Append a `Event::Finding` envelope to the list. Called from
     /// `AppState::apply_envelope` for every Finding event the bus emits.
+    /// De-duplicates by `finding_id` — bus replay (e.g. after a crash
+    /// resume) shouldn't force the user to triage the same issue twice.
     pub fn ingest(&mut self, envelope: &EventEnvelope) {
         if let Event::Finding {
             finding_id,
@@ -76,6 +78,9 @@ impl FindingsState {
             ..
         } = &envelope.event
         {
+            if self.items.iter().any(|i| i.id == *finding_id) {
+                return;
+            }
             self.items.push(Finding {
                 id: finding_id.clone(),
                 severity: *severity,

@@ -79,17 +79,20 @@ impl RunState {
                 }
             }
             Event::StepComplete { status, .. } => {
-                // Find the row by step_id → agent. The orchestrator stamps
-                // `step_id = "<run>-step-<seq>-<agent>"`, but to stay
-                // robust we match by suffix on agent name from the
-                // envelope's `step_id`.
+                // Primary: route via step_id ("<run>-step-<seq>-<agent>").
+                // Fallback: the orchestrator runs steps sequentially, so
+                // exactly one row should be in Running — apply the
+                // status to that row. Covers replayed events and any
+                // future Event::StepComplete payload that drops step_id.
                 let agent = envelope
                     .step_id
                     .as_deref()
                     .and_then(extract_agent_from_step_id);
-                if let Some(agent) = agent
-                    && let Some(row) = self.row_mut(agent)
-                {
+                let row = match agent {
+                    Some(a) => self.row_mut(a),
+                    None => self.running_row_mut(),
+                };
+                if let Some(row) = row {
                     row.status = map_step_status(*status);
                 }
             }
@@ -99,6 +102,12 @@ impl RunState {
 
     fn row_mut(&mut self, agent: &str) -> Option<&mut StepRow> {
         self.steps.iter_mut().find(|r| r.agent == agent)
+    }
+
+    fn running_row_mut(&mut self) -> Option<&mut StepRow> {
+        self.steps
+            .iter_mut()
+            .find(|r| r.status == StepRunStatus::Running)
     }
 }
 

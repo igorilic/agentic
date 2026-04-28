@@ -8,7 +8,7 @@ use std::io;
 use agentic_tui::app::AppState;
 use agentic_tui::draw_app;
 use agentic_tui::modes::AppCommand;
-use crossterm::event::{self, Event};
+use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -38,7 +38,11 @@ fn run_loop<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> io::Res
     let mut state = AppState::default();
     loop {
         terminal.draw(|f| draw_app(f, &state))?;
+        // Filter to Press only — on Linux/Windows with the keyboard
+        // enhancement flag enabled, crossterm emits Press AND Release
+        // for each keystroke, which would double-fire every key.
         if let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
             && let Some(cmd) = state.handle_key(key.code)
         {
             match cmd {

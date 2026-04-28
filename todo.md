@@ -2104,3 +2104,8 @@ Cross-cutting reminders:
 - **Windows subprocess semantics**: Steps 6.2, 7.3, 16.5 need a `cfg(windows)` branch for signal handling (`TerminateProcess` instead of SIGTERM). Tests gated accordingly.
 - **Tauri + keyring on Linux**: the `libsecret` backend requires a running daemon. Document in README before Phase 9 ships.
 - **Feature flags for shell builds**: release builds should not include `scripted` backend; gate behind `#[cfg(any(test, feature = "testing"))]` as noted in Step 4.2.
+
+## TUI tech-debt (logged from Phase 12 review)
+
+- **TUI test helpers duplicated**: `flatten()` is copy-pasted across `crates/agentic-tui/tests/{cockpit,command_mode,findings}.rs`. Extract to a shared `tests/common/mod.rs` when it reaches a fourth caller or when `TestBackend` API changes.
+- **`render_row -> Line<'static>`**: `crates/agentic-tui/src/views/findings.rs:38` — annotation is satisfied by owned-string allocations, not actual statics. Switch to `Line<'_>` borrowed from the `Finding` input when there's a reason to (e.g. avoiding the per-frame `format!` calls).

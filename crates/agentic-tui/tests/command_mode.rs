@@ -248,11 +248,99 @@ fn normal_mode_does_not_render_a_command_prompt() {
     let s = AppState::default();
     terminal.draw(|f| draw_app(f, &s)).unwrap();
     let content = flatten(&terminal);
-    // The prompt-leading colon should not appear anywhere — chat pane
-    // is empty in normal mode.
+    // The cursor glyph `█` is unique to the command-mode prompt; the
+    // hint line uses ` · ` separators only.
     assert!(
-        !content.contains(": "),
-        "no command prompt expected in normal mode; got: {content:?}"
+        !content.contains('█'),
+        "no command-mode cursor expected in normal mode; got: {content:?}"
+    );
+}
+
+// ─── status / hint line ─────────────────────────────────────────────────────
+
+#[test]
+fn default_last_status_is_none() {
+    let s = AppState::default();
+    assert_eq!(s.last_status, None);
+}
+
+#[test]
+fn enter_unknown_command_sets_last_status() {
+    let mut s = AppState::default();
+    s.handle_key(KeyCode::Char(':'));
+    type_str(&mut s, "bogus");
+    s.handle_key(KeyCode::Enter);
+    let status = s.last_status.expect("expected last_status set");
+    assert!(
+        status.to_lowercase().contains("bogus") || status.to_lowercase().contains("unknown"),
+        "expected error to mention 'bogus' or 'unknown'; got: {status:?}"
+    );
+}
+
+#[test]
+fn enter_plan_with_no_ticket_sets_last_status() {
+    let mut s = AppState::default();
+    s.handle_key(KeyCode::Char(':'));
+    type_str(&mut s, "plan");
+    s.handle_key(KeyCode::Enter);
+    let status = s.last_status.expect("expected last_status set");
+    assert!(
+        status.to_lowercase().contains("ticket") || status.to_lowercase().contains("plan"),
+        "expected error to mention ticket/plan; got: {status:?}"
+    );
+}
+
+#[test]
+fn successful_command_clears_last_status() {
+    let mut s = AppState {
+        last_status: Some("stale error".to_string()),
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char(':'));
+    type_str(&mut s, "status");
+    s.handle_key(KeyCode::Enter);
+    assert_eq!(s.last_status, None);
+}
+
+#[test]
+fn entering_command_mode_does_not_immediately_clear_last_status() {
+    // The user typing `:` to retry should still see the previous error
+    // until they execute a new command — they may need to refer to it.
+    let mut s = AppState {
+        last_status: Some("some error".to_string()),
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char(':'));
+    assert_eq!(s.last_status, Some("some error".to_string()));
+}
+
+#[test]
+fn normal_mode_renders_hint_line() {
+    let backend = TestBackend::new(120, 24);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let s = AppState::default();
+    terminal.draw(|f| draw_app(f, &s)).unwrap();
+    let content = flatten(&terminal);
+    // Hint text mentions some keys.
+    assert!(
+        content.contains("j/k") || content.contains("triage") || content.contains("commands"),
+        "expected hint text in chat pane footer; got: {content:?}"
+    );
+}
+
+#[test]
+fn normal_mode_with_last_status_renders_status_instead_of_hint() {
+    let backend = TestBackend::new(120, 24);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let s = AppState {
+        last_status: Some("Unknown command: bogus".to_string()),
+        ..Default::default()
+    };
+    terminal.draw(|f| draw_app(f, &s)).unwrap();
+    let content = flatten(&terminal);
+    assert!(
+        content.contains("Unknown command: bogus"),
+        "expected status text in chat pane footer; got: {content:?}"
     );
 }
 

@@ -69,7 +69,10 @@ fn status_style(status: StepRunStatus) -> Style {
             .add_modifier(Modifier::BOLD),
         StepRunStatus::Passed => Style::default().fg(Color::Green),
         StepRunStatus::Failed => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-        StepRunStatus::NeedsTriage => Style::default().fg(Color::Yellow),
-        StepRunStatus::Skipped => Style::default().fg(Color::Yellow),
+        // Tauri's Stepper uses text-orange-600 (rgb 234, 88, 12) for
+        // NeedsTriage and text-yellow-600 (rgb 202, 138, 4) for Skipped.
+        // Approximate both — ratatui has no named "orange".
+        StepRunStatus::NeedsTriage => Style::default().fg(Color::Rgb(234, 88, 12)),
+        StepRunStatus::Skipped => Style::default().fg(Color::Rgb(202, 138, 4)),
     }
 }

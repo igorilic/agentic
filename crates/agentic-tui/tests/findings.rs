@@ -171,6 +171,17 @@ fn event_finding_appends_to_the_findings_list() {
     assert_eq!(s.findings.items[1].id, "f2");
 }
 
+#[test]
+fn re_ingesting_same_finding_id_does_not_duplicate_the_row() {
+    // The bus can re-emit the same Event::Finding on replay (e.g.
+    // history-buffer flush after resume). Ingest must dedupe so the
+    // user doesn't have to triage the same issue twice.
+    let mut s = AppState::default();
+    s.apply_envelope(&finding_envelope("f1", "first"));
+    s.apply_envelope(&finding_envelope("f1", "first")); // same id
+    assert_eq!(s.findings.items.len(), 1);
+}
+
 // ─── command-mode interaction ───────────────────────────────────────────────
 
 #[test]

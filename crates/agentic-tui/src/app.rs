@@ -10,7 +10,7 @@ use agentic_core::events::EventEnvelope;
 use crossterm::event::KeyCode;
 
 use crate::findings::{FindingsState, Triage};
-use crate::modes::{AppCommand, Mode, parse_command};
+use crate::modes::{AppCommand, Mode, ParseResult, parse_command};
 use crate::run::RunState;
 
 /// Which pane currently receives input. Pure state — the renderer reads
@@ -54,6 +54,10 @@ pub struct AppState {
     /// Reviewer findings — renders below the stepper, navigated with
     /// `j`/`k`, triaged with `f`/`t`/`i`.
     pub findings: FindingsState,
+    /// One-line user-facing status — set when a command parse fails so
+    /// the user sees feedback. Cleared when a command succeeds. The
+    /// chat pane renders this in place of the hint line.
+    pub last_status: Option<String>,
 }
 
 impl Default for AppState {
@@ -64,6 +68,7 @@ impl Default for AppState {
             run: RunState::default(),
             mode: Mode::Normal,
             findings: FindingsState::default(),
+            last_status: None,
         }
     }
 }
@@ -138,9 +143,19 @@ impl AppState {
                     None
                 }
                 KeyCode::Enter => {
-                    let cmd = parse_command(buffer);
+                    let parsed = parse_command(buffer);
                     self.mode = Mode::Normal;
-                    cmd
+                    match parsed {
+                        ParseResult::Empty => None,
+                        ParseResult::Cmd(c) => {
+                            self.last_status = None;
+                            Some(c)
+                        }
+                        ParseResult::Err(msg) => {
+                            self.last_status = Some(msg);
+                            None
+                        }
+                    }
                 }
                 _ => None,
             },

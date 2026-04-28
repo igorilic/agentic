@@ -10,15 +10,26 @@ use agentic_tui::run::{CANONICAL_AGENTS, StepRunStatus};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
+/// Build an envelope using the same `step_id` format the real
+/// orchestrator emits — `<run>-step-<seq>-<agent>` — so the tests
+/// exercise the production parsing path, not just `ends_with`.
 fn envelope_for(agent: &str, event: Event) -> EventEnvelope {
+    let seq = canonical_seq(agent);
     EventEnvelope {
         schema_version: 1,
         event_id: format!("evt-{agent}"),
         run_id: "run1".to_string(),
-        step_id: Some(format!("run1-step-{agent}")),
+        step_id: Some(format!("run1-step-{seq}-{agent}")),
         timestamp_ms: 0,
         event,
     }
+}
+
+fn canonical_seq(agent: &str) -> usize {
+    CANONICAL_AGENTS
+        .iter()
+        .position(|a| *a == agent)
+        .unwrap_or(0)
 }
 
 fn flatten(terminal: &Terminal<TestBackend>) -> String {
@@ -148,6 +159,63 @@ fn unknown_agent_in_event_does_not_panic_or_mutate_state() {
     for row in &s.run.steps {
         assert_eq!(row.status, StepRunStatus::Pending);
     }
+}
+
+#[test]
+fn step_complete_without_step_id_falls_back_to_running_row() {
+    // Real bus envelopes always carry a step_id, but a replayed or
+    // history-buffered event might not. The state machine should still
+    // mark the step that is currently Running as Passed.
+    let mut s = AppState::default();
+    s.apply_envelope(&envelope_for(
+        "tdd-developer",
+        Event::StepStarted {
+            agent: "tdd-developer".to_string(),
+            model: agentic_core::backends::ModelId("m".to_string()),
+        },
+    ));
+    assert_eq!(s.run.steps[1].status, StepRunStatus::Running);
+
+    s.apply_envelope(&EventEnvelope {
+        schema_version: 1,
+        event_id: "evt-no-stepid".to_string(),
+        run_id: "run1".to_string(),
+        step_id: None, // ← the fallback path
+        timestamp_ms: 0,
+        event: Event::StepComplete {
+            status: StepStatus::Passed,
+            summary: "done".to_string(),
+            token_usage: TokenUsage::default(),
+            cost_usd: None,
+            duration_ms: 1,
+        },
+    });
+    assert_eq!(s.run.steps[1].status, StepRunStatus::Passed);
+}
+
+#[test]
+fn step_complete_routes_tdd_developer_via_real_orchestrator_step_id_format() {
+    // The orchestrator emits step_id="<run>-step-<seq>-<agent>".
+    // tdd-developer's hyphen makes the parse easy to break — pin it.
+    let mut s = AppState::default();
+    s.apply_envelope(&EventEnvelope {
+        schema_version: 1,
+        event_id: "evt-tdd".to_string(),
+        run_id: "run1".to_string(),
+        step_id: Some("run1-step-1-tdd-developer".to_string()),
+        timestamp_ms: 0,
+        event: Event::StepComplete {
+            status: StepStatus::Passed,
+            summary: "done".to_string(),
+            token_usage: TokenUsage::default(),
+            cost_usd: None,
+            duration_ms: 1,
+        },
+    });
+    assert_eq!(s.run.steps[1].status, StepRunStatus::Passed);
+    // Must NOT bleed onto neighbouring rows — `architect` (which is a
+    // strict prefix of nothing here, but worth pinning).
+    assert_eq!(s.run.steps[0].status, StepRunStatus::Pending);
 }
 
 #[test]

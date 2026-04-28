@@ -4,11 +4,14 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders, Paragraph};
 
 use crate::app::{AppState, Pane};
 use crate::modes::Mode;
+
+const HINT: &str = "j/k findings · f/t/i triage · : commands";
 
 pub fn render(area: Rect, state: &AppState, frame: &mut Frame<'_>) {
     let title = if state.focus == Pane::Chat {
@@ -34,14 +37,31 @@ pub fn render(area: Rect, state: &AppState, frame: &mut Frame<'_>) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    if let Mode::Command { buffer } = &state.mode {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(1)])
-            .split(inner);
+    // The bottom row of the chat pane is the user-feedback line. It
+    // shows one of three things, in priority order:
+    //
+    //   - the command prompt while typing (`:plan hello█`)
+    //   - the last_status (e.g. "Unknown command: :bogus") in red
+    //   - the static hint line in dim grey
+    //
+    // Putting it at the bottom matches vim's `:` line position.
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(inner);
+    let footer_area = chunks[1];
+
+    let footer: Paragraph<'_> = match &state.mode {
         // Cursor glyph (█) makes it obvious where typed input lands —
         // ratatui's TestBackend surfaces this character verbatim.
-        let prompt = Paragraph::new(format!(":{buffer}█"));
-        frame.render_widget(prompt, chunks[1]);
-    }
+        Mode::Command { buffer } => Paragraph::new(format!(":{buffer}█")),
+        Mode::Normal => match &state.last_status {
+            Some(msg) => Paragraph::new(Span::styled(
+                msg.clone(),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            )),
+            None => Paragraph::new(Span::styled(HINT, Style::default().fg(Color::DarkGray))),
+        },
+    };
+    frame.render_widget(footer, footer_area);
 }
