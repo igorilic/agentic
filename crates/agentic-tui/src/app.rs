@@ -58,6 +58,12 @@ pub struct AppState {
     /// the user sees feedback. Cleared when a command succeeds. The
     /// chat pane renders this in place of the hint line.
     pub last_status: Option<String>,
+    /// Unified-diff text for the file currently being viewed. When
+    /// `Some`, the chat-pane interior is replaced by the diff
+    /// renderer. Population from `Event::FileChange` requires a DB
+    /// lookup (the event carries only hashes, not the diff text); the
+    /// binary will wire that in alongside bus subscription.
+    pub current_diff: Option<String>,
 }
 
 impl Default for AppState {
@@ -69,6 +75,7 @@ impl Default for AppState {
             mode: Mode::Normal,
             findings: FindingsState::default(),
             last_status: None,
+            current_diff: None,
         }
     }
 }

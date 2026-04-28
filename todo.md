@@ -1584,7 +1584,7 @@ Legend:
 
 ## Phase 13 — Diff viewing + file changes surface
 
-### Step 13.1: Unified diff renderer in TUI
+### [x] Step 13.1: Unified diff renderer in TUI
 
 **Goal**: Show `file_changes.diff` as inline unified diff with +/- coloring per spec §7.2.
 
@@ -2109,3 +2109,5 @@ Cross-cutting reminders:
 
 - **TUI test helpers duplicated**: `flatten()` is copy-pasted across `crates/agentic-tui/tests/{cockpit,command_mode,findings}.rs`. Extract to a shared `tests/common/mod.rs` when it reaches a fourth caller or when `TestBackend` API changes.
 - **`render_row -> Line<'static>`**: `crates/agentic-tui/src/views/findings.rs:38` — annotation is satisfied by owned-string allocations, not actual statics. Switch to `Line<'_>` borrowed from the `Finding` input when there's a reason to (e.g. avoiding the per-frame `format!` calls).
+- **`syntect` syntax highlighting in diff view**: Step 13.1 ships +/- coloring only (the spec's primary contract). Adding `syntect` for in-line code colouring is the next quality bump — it brings ~20 MB of `.tmTheme` / `.sublime-syntax` data, so wait until the binary's distribution story is settled.
+- **`current_diff` population from `Event::FileChange`**: the event carries only hashes; the diff text lives in `file_changes.diff` (DB BLOB). Wiring the lookup into the TUI binary needs a `Db` handle in the run loop — defer until the binary subscribes to a real bus (12.4-style integration step that didn't make 12.4's scope).

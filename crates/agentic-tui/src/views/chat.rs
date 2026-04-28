@@ -10,6 +10,7 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 
 use crate::app::{AppState, Pane};
 use crate::modes::Mode;
+use crate::views::diff;
 
 const HINT: &str = "j/k findings · f/t/i triage · : commands";
 
@@ -37,19 +38,20 @@ pub fn render(area: Rect, state: &AppState, frame: &mut Frame<'_>) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // The bottom row of the chat pane is the user-feedback line. It
-    // shows one of three things, in priority order:
-    //
-    //   - the command prompt while typing (`:plan hello█`)
-    //   - the last_status (e.g. "Unknown command: :bogus") in red
-    //   - the static hint line in dim grey
-    //
-    // Putting it at the bottom matches vim's `:` line position.
+    // The bottom row is the user-feedback line (one of: command
+    // prompt while typing, last_status in red, or the static hint).
+    // The body above it shows the diff view when `current_diff` is
+    // Some; otherwise it's empty (chat scrollback is a future step).
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(inner);
+    let body_area = chunks[0];
     let footer_area = chunks[1];
+
+    if let Some(diff_text) = &state.current_diff {
+        diff::render(body_area, diff_text, frame);
+    }
 
     let footer: Paragraph<'_> = match &state.mode {
         // Cursor glyph (█) makes it obvious where typed input lands —
