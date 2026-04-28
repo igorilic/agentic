@@ -168,6 +168,42 @@ async fn tool_result_emits_tool_use_end() {
 }
 
 // ---------------------------------------------------------------------------
+// user_text_with_tool_result — user-message blocks may contain text alongside
+// tool_result. The parser must accept the message as a whole and still surface
+// the ToolUseEnd from the tool_result block.
+//
+// Pre-fix bug: the entire UserMessage failed to deserialise on the unknown
+// `text` variant, the parser returned `vec![]`, and the tool_result was
+// silently lost. In real ticket runs that meant agents thought their tool
+// calls had no answer — they "completed" without ever editing files.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn user_message_with_text_block_does_not_drop_tool_result() {
+    let bytes = fixture("user_text_with_tool_result.jsonl");
+    let (events, _outcome) = run_parser(bytes).await;
+
+    let end_ids: Vec<&str> = events
+        .iter()
+        .filter_map(|e| {
+            if let Event::ToolUseEnd { tool_call_id, .. } = e {
+                Some(tool_call_id.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(
+        end_ids.len(),
+        1,
+        "expected exactly 1 ToolUseEnd from the tool_result block, \
+         even though the user message also contains a text block; got: {events:?}"
+    );
+    assert_eq!(end_ids[0], "toolu_mix_01");
+}
+
+// ---------------------------------------------------------------------------
 // hooks_noise — hook lines are silently ignored; only assistant events appear
 // ---------------------------------------------------------------------------
 

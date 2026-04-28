@@ -183,6 +183,20 @@ enum UserContentBlock {
         #[serde(default)]
         is_error: bool,
     },
+    /// User messages from the host can also include `text` blocks (the user's
+    /// instruction to Claude). We don't surface them as events — the architect
+    /// /tdd-developer/etc. system prompts already capture what the user said —
+    /// but we MUST accept the variant. Without this arm, serde rejects the
+    /// whole UserMessage on the unknown variant, dropping any sibling
+    /// `tool_result` blocks. That used to silently strip every tool result
+    /// after Claude switched to mixed-block user messages, leaving agents
+    /// "successful" without ever editing files.
+    Text {
+        // Field is unused but must exist for serde to accept the variant.
+        #[serde(default)]
+        #[allow(dead_code)]
+        text: String,
+    },
 }
 
 #[derive(Deserialize, Default)]
@@ -294,15 +308,19 @@ fn dispatch_envelope(json: &Value, token_usage: &mut TokenUsage) -> Vec<Event> {
 
             msg.content
                 .into_iter()
-                .map(|block| match block {
+                .filter_map(|block| match block {
                     UserContentBlock::ToolResult {
                         tool_use_id,
                         is_error,
-                    } => Event::ToolUseEnd {
+                    } => Some(Event::ToolUseEnd {
                         tool_call_id: tool_use_id,
                         exit_code: Some(if is_error { 1 } else { 0 }),
                         duration_ms: 0,
-                    },
+                    }),
+                    // Text blocks in user messages are the user's instruction
+                    // to Claude — accepted to keep the deserialiser happy,
+                    // but not projected to events.
+                    UserContentBlock::Text { .. } => None,
                 })
                 .collect()
         }
