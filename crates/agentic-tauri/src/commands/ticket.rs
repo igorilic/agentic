@@ -31,8 +31,7 @@ use agentic_core::db::workspaces::{Workspace, WorkspaceRepo};
 use agentic_core::events::{EventBus, RunStatus};
 use agentic_core::pipeline::PipelineConfig;
 use agentic_core::{
-    Backend, ClaudeCodeBackend, CopilotCliBackend, Db, ModelId, Paths, PipelineOrchestrator,
-    PipelineStep, Run, RunRepo, StepRepo,
+    Backend, ClaudeCodeBackend, CopilotCliBackend, Db, ModelId, Paths, PipelineStep, Run, RunRepo,
 };
 use tauri::State;
 use ulid::Ulid;
@@ -82,13 +81,25 @@ pub async fn start_ticket_run(
         return Err("ticket text is empty".to_string());
     }
 
-    let ws_root = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
+    // Workspace root resolution:
+    //   1. AGENTIC_WORKSPACE_ROOT env var (override for `cargo tauri dev`,
+    //      where cwd is the tauri crate dir, not the user's target repo).
+    //   2. process cwd at IPC time.
+    let ws_root = match std::env::var_os("AGENTIC_WORKSPACE_ROOT") {
+        Some(p) => std::path::PathBuf::from(p),
+        None => std::env::current_dir().map_err(|e| format!("cwd: {e}"))?,
+    };
+    if !ws_root.is_dir() {
+        return Err(format!(
+            "workspace root is not a directory: {}",
+            ws_root.display()
+        ));
+    }
     let ws_id = stable_workspace_id(&ws_root);
     let run_id = Ulid::new().to_string().to_lowercase();
 
     let db = (*db_state).clone();
     let runs_repo = RunRepo::new(&db);
-    let steps_repo = StepRepo::new(&db);
     let ws_repo = WorkspaceRepo::new(&db);
 
     // Seed workspace + run rows synchronously so the IPC errors out cleanly
@@ -128,15 +139,16 @@ pub async fn start_ticket_run(
         .map_err(|e| format!("seed run: {e}"))?;
 
     // Use the Tauri-managed bus so subscribe_events forwards envelopes into
-    // the webview live. We need an owned EventBus to pass to the
-    // orchestrator and execute_pipeline; clone the inner one out of the Arc.
+    // the webview live. We need an owned EventBus to pass into
+    // execute_pipeline; clone the inner one out of the Arc.
+    //
+    // The PipelineOrchestrator that projects status back into runs+steps
+    // is spawned ONCE at app startup (main.rs::setup). Spawning per-run
+    // here previously caused two orchestrators to race on the same
+    // RunStarted event after a second /plan invocation, producing
+    // `invalid state transition from "running" to "running"`.
     let bus: EventBus = (*bus_state.bus).clone();
     let returned_run_id = run_id.clone();
-
-    // Spawn the orchestrator — projects StepStarted/StepComplete back into
-    // run_steps + runs status. Without this, runs.status stays Pending.
-    let _orch_handle =
-        PipelineOrchestrator::spawn(bus.clone(), runs_repo.clone(), steps_repo.clone());
 
     // Resolve Paths for execute_pipeline (it needs the data dir for various
     // sub-flows like file snapshots).

@@ -10,8 +10,11 @@ use std::sync::Arc;
 
 use agentic_core::auth::secrets::KeyringSecretStore;
 use agentic_core::db::auth::AuthRepo;
+use agentic_core::db::runs::RunRepo;
+use agentic_core::db::steps::StepRepo;
 use agentic_core::db::workspaces::{Workspace, WorkspaceRepo};
 use agentic_core::events::EventBus;
+use agentic_core::pipeline::PipelineOrchestrator;
 use agentic_core::{Db, Paths, init as init_logging};
 use commands::auth::{AuthState, WebbrowserOpener};
 use commands::chat::ChatState;
@@ -51,6 +54,25 @@ fn main() {
                 .expect("seed default workspace");
 
             let bus = Arc::new(EventBus::new());
+
+            // Spawn ONE PipelineOrchestrator subscribed to the managed bus
+            // for the lifetime of the app. Per-run spawning (the previous
+            // approach) caused two orchestrators to race on RunStarted
+            // after the second /plan, producing
+            // `invalid state transition from "running" to "running"`.
+            // The handle is intentionally not stored: the orchestrator
+            // exits when the bus is dropped, which happens at app shutdown.
+            tauri::async_runtime::block_on(async {
+                // Drop the JoinHandle deliberately — the spawned task runs
+                // independently and exits when the bus is dropped at app
+                // shutdown.
+                let _orchestrator = PipelineOrchestrator::spawn(
+                    (*bus).clone(),
+                    RunRepo::new(&db),
+                    StepRepo::new(&db),
+                );
+            });
+
             // EventBusState::new internally handles the missing-runtime
             // case (Tauri 2's setup hook runs outside a tokio context).
             app.manage(EventBusState::new(bus));

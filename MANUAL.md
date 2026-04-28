@@ -455,12 +455,22 @@ The DB is the ground truth. The Tauri UI's history is read from `stream_events` 
 
 ### Scenario E — drive a real ticket run from the Tauri shell's chat
 
-Replaces the CLI `agentic-cli run --ticket "…"` flow with a UI version. **Important caveat**: the run uses the Tauri binary's *cwd at launch time* as the workspace root, so launch the binary from inside the project you want it to operate on.
+Replaces the CLI `agentic-cli run --ticket "…"` flow with a UI version. The Tauri shell needs to know which directory to operate on. Two ways to tell it:
 
+**Option 1 — launch from the target repo's cwd:**
 ```fish
 cd ~/work/my-project
-~/agentic/target/debug/agentic-tauri    # or `cargo tauri dev` from crates/agentic-tauri
+~/agentic/target/debug/agentic-tauri
 ```
+
+**Option 2 — set `AGENTIC_WORKSPACE_ROOT` (use this with `cargo tauri dev`):**
+```fish
+# `cargo tauri dev` cd's into crates/agentic-tauri, so cwd ≠ your repo.
+# Override the workspace root explicitly:
+AGENTIC_WORKSPACE_ROOT=~/work/my-project cargo tauri dev
+```
+
+The IPC checks `AGENTIC_WORKSPACE_ROOT` first, then falls back to cwd. If the resolved path isn't a directory, the run fails with a clear error.
 
 In the chat pane, type:
 
@@ -548,6 +558,14 @@ Then click **Connect GitHub** again.
 ### "Connect GitHub" fails with "gh CLI not available"
 
 `gh` isn't on your PATH. Install it from https://cli.github.com/ (or `brew install gh` on macOS).
+
+### `invalid state transition from "running" to "running"` in Tauri logs
+
+Pre-fix: `start_ticket_run` spawned a fresh `PipelineOrchestrator` per
+invocation, so a second `/plan` left two orchestrators racing on
+`RunStarted`. Closed in commit (current). Now the orchestrator is
+spawned once at app startup. If you still see this on the latest
+`main`, please file an issue.
 
 ### Past runs are listed as `status='running'` forever
 
