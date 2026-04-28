@@ -14,8 +14,8 @@ importers:
         specifier: ^10.0.10
         version: 10.0.10
       '@types/vscode':
-        specifier: ^1.90.0
-        version: 1.116.0
+        specifier: 1.90.0
+        version: 1.90.0
       '@vscode/test-cli':
         specifier: ^0.0.12
         version: 0.0.12
@@ -615,8 +615,8 @@ packages:
   '@types/react@18.3.28':
     resolution: {integrity: sha512-z9VXpC7MWrhfWipitjNdgCauoMLRdIILQsAEV+ZesIzBq/oUlxk0m3ApZuMFCXdnS4U7KrI+l3WRUEGQ8K1QKw==}
 
-  '@types/vscode@1.116.0':
-    resolution: {integrity: sha512-sYHp4MO6BqJ2PD7Hjt0hlIS3tMaYsVPJrd0RUjDJ8HtOYnyJIEej0bLSccM8rE77WrC+Xox/kdBwEFDO8MsxNA==}
+  '@types/vscode@1.90.0':
+    resolution: {integrity: sha512-oT+ZJL7qHS9Z8bs0+WKf/kQ27qWYR3trsXpq46YDjFqBsMLG4ygGGjPaJ2tyrH0wJzjOEmDyg9PDJBBhWg9pkQ==}
 
   '@vitejs/plugin-react@4.7.0':
     resolution: {integrity: sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==}
@@ -2298,7 +2298,7 @@ snapshots:
       '@types/prop-types': 15.7.15
       csstype: 3.2.3
 
-  '@types/vscode@1.116.0': {}
+  '@types/vscode@1.90.0': {}
 
   '@vitejs/plugin-react@4.7.0(vite@5.4.21(@types/node@24.12.2))':
     dependencies:
