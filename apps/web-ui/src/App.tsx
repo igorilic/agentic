@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import ChatPane from "./components/ChatPane";
 import DismissableBanner from "./components/DismissableBanner";
 import EventList from "./components/EventList";
@@ -49,6 +50,20 @@ export default function App() {
 
   const runState = useMemo(() => deriveRunState(events), [events]);
 
+  // Wall-clock start of the active run, derived from the first envelope's
+  // timestamp_ms. `null` until the first event arrives — the indicator
+  // shows "starting…" in that gap.
+  const startedAtMs = useMemo<number | null>(() => {
+    if (!activeRunId) return null;
+    const first = events.find((e) => e.run_id === activeRunId);
+    return first ? first.timestamp_ms : null;
+  }, [events, activeRunId]);
+
+  const cancelActiveRun = useCallback(async () => {
+    if (!activeRunId) return;
+    await invoke("cancel_run", { runId: activeRunId });
+  }, [activeRunId]);
+
   return (
     <main className="min-h-screen bg-gray-50">
       <header className="px-6 py-4 border-b border-gray-200">
@@ -76,7 +91,12 @@ export default function App() {
       />
       <Stepper state={runState} />
       <section className="p-6">
-        <ChatPane onTicketRunStarted={setActiveRunId} />
+        <ChatPane
+          onTicketRunStarted={setActiveRunId}
+          activeRunId={activeRunId ?? null}
+          activeRunStartedAtMs={startedAtMs}
+          onCancelActiveRun={cancelActiveRun}
+        />
       </section>
       <section className="px-6 pb-6">
         <EventList events={events} />

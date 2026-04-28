@@ -5,6 +5,7 @@ import { useMentionEvents } from "../hooks/useMentionEvents";
 import { parseSlashCommand, formatSlashParseError } from "../slash/parser";
 import { dispatchSlashCommand, type SlashServices } from "../slash/dispatcher";
 import { parseMention, formatMentionParseError } from "../mention/parser";
+import ActiveRunIndicator from "./ActiveRunIndicator";
 
 type MentionResult = {
   run_id: string;
@@ -17,9 +18,23 @@ export type ChatPaneProps = {
   /// The cockpit uses this to pin its active-run id so the Stepper /
   /// EventList / FindingsTable follow the new run.
   onTicketRunStarted?: (runId: string) => void;
+  /// Currently-active run, if any. When set, the indicator strip above
+  /// the chat input shows the run id + elapsed time + a Cancel button.
+  activeRunId?: string | null;
+  /// Wall-clock start of the active run (from the first envelope's
+  /// timestamp_ms). Drives the indicator's elapsed-time display.
+  activeRunStartedAtMs?: number | null;
+  /// Cancels the currently-active run (best-effort SIGTERM via the
+  /// `cancel_run` IPC). Required when `activeRunId` may be set.
+  onCancelActiveRun?: () => Promise<void>;
 };
 
-export default function ChatPane({ onTicketRunStarted }: ChatPaneProps = {}) {
+export default function ChatPane({
+  onTicketRunStarted,
+  activeRunId = null,
+  activeRunStartedAtMs = null,
+  onCancelActiveRun,
+}: ChatPaneProps = {}) {
   const { messages, send, sending, error } = useChat();
   const [draft, setDraft] = useState("");
   const [systemMessages, setSystemMessages] = useState<string[]>([]);
@@ -179,6 +194,15 @@ export default function ChatPane({ onTicketRunStarted }: ChatPaneProps = {}) {
           data-testid="chat-error"
         >
           {error}
+        </div>
+      )}
+      {activeRunId && onCancelActiveRun && (
+        <div className="px-3 py-1 border-t border-gray-200 bg-gray-50">
+          <ActiveRunIndicator
+            runId={activeRunId}
+            startedAtMs={activeRunStartedAtMs ?? null}
+            onCancel={onCancelActiveRun}
+          />
         </div>
       )}
       <form

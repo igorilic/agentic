@@ -487,7 +487,9 @@ Behaviour:
 
 Backend defaults to `claude-code`. To use copilot-cli, the `start_ticket_run` IPC accepts a `backend` arg, but the chat command doesn't expose a switch yet — workaround: the CLI still does (`agentic-cli run --backend copilot-cli --ticket "…"`).
 
-**Cancelling a run**: while the pipeline is in flight, the Cancel button in StartRunForm becomes active (it follows `activeRunId`, which `/plan` sets). Click it — the running claude subprocess receives SIGTERM and the run completes with status=Failed and summary="cancelled". Useful when claude goes off the rails; faster than waiting for the timeout.
+**Cancelling a run**: while the pipeline is in flight, an active-run indicator strip appears just above the chat input showing the run id, elapsed time, and a Cancel button. Click it — the running claude subprocess receives SIGTERM and the run completes with status=Failed and summary="cancelled". Useful when claude goes off the rails; faster than waiting for the timeout. The same Cancel button is also available in StartRunForm for scripted runs.
+
+**Backend selection**: `/plan` defaults to claude-code. Pass `--backend=copilot-cli` (or `--backend=claude-code` explicitly) as the first arg: `/plan --backend=copilot-cli implement export`. Unknown values fail the parse and show the allowed list.
 
 **Findings populate the FindingsTable** — at the end of a run, the reviewer agent emits a fenced markdown block tagged `agentic-findings` containing a JSON array. The host parses it, persists each entry via `FindingsRepo`, and publishes an `Event::Finding` envelope. The cockpit's FindingsTable updates live. Empty array (`[]`) means the reviewer found nothing — the projection runs but inserts no rows, which is the expected "everything looks fine" state.
 
