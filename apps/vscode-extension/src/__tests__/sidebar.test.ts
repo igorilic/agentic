@@ -65,8 +65,9 @@ suite("AgenticChatViewProvider", () => {
   }
 
   test("resolveWebviewView sets html containing <div id=root>", async () => {
+    // __dirname at runtime = out/__tests__/; two levels up = extension root
     const extensionUri = vscode.Uri.file(
-      path.resolve(__dirname, "..", "..", ".."),
+      path.resolve(__dirname, "..", ".."),
     );
     const provider = new AgenticChatViewProvider(extensionUri);
     const { view, capturedHtml } = makeMockWebviewView();
@@ -87,7 +88,7 @@ suite("AgenticChatViewProvider", () => {
 
   test("resolveWebviewView rewrites /assets/ paths through asWebviewUri", async () => {
     const extensionUri = vscode.Uri.file(
-      path.resolve(__dirname, "..", "..", ".."),
+      path.resolve(__dirname, "..", ".."),
     );
     const provider = new AgenticChatViewProvider(extensionUri);
     const { view, capturedHtml } = makeMockWebviewView();
@@ -121,7 +122,7 @@ suite("AgenticChatViewProvider", () => {
 
   test("webview localResourceRoots includes web-ui dist directory", async () => {
     const extensionUri = vscode.Uri.file(
-      path.resolve(__dirname, "..", "..", ".."),
+      path.resolve(__dirname, "..", ".."),
     );
     const provider = new AgenticChatViewProvider(extensionUri);
     const { view } = makeMockWebviewView();
