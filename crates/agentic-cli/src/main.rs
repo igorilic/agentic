@@ -83,13 +83,34 @@ enum Command {
     /// Ensure the database is initialized (runs pending migrations).
     /// Useful for first-time setup on a fresh install.
     Migrate,
-    /// Scaffold `.agentic/agents/{architect,tdd-developer,qa,reviewer}.md`
-    /// in a target repo so the pipeline finds its agents on first run.
+    /// Scaffold the four required agent files
+    /// (architect, tdd-developer, qa, reviewer) into a directory the
+    /// pipeline can discover. Default destination: `<cwd>/.claude/agents/`
+    /// (reuses Claude Code's project-local convention so the same files
+    /// drive both Agentic and Claude Code subagents). Use `--copilot` for
+    /// `.github/agents/` instead, `--global` for the corresponding
+    /// `$HOME/.{claude,copilot}/agents/` location, and `--agentic` for
+    /// the explicit `.agentic/agents/` override.
     Init {
-        /// Target repo to scaffold. Defaults to the current working
-        /// directory.
+        /// Target repo root. Defaults to the current working directory.
+        /// Ignored when `--global` is set.
         #[arg(long)]
         target: Option<PathBuf>,
+        /// Use Copilot's convention: `.github/agents/` (or
+        /// `$HOME/.copilot/agents/` with `--global`). Default is the
+        /// Claude convention.
+        #[arg(long)]
+        copilot: bool,
+        /// Write to `$HOME` instead of the repo. Combined with `--copilot`
+        /// targets `$HOME/.copilot/agents/`; otherwise `$HOME/.claude/agents/`.
+        #[arg(long)]
+        global: bool,
+        /// Use Agentic's explicit project override (`.agentic/agents/`)
+        /// instead of the Claude/Copilot defaults. Useful when you want
+        /// agents the underlying CLI tools don't see. Mutually exclusive
+        /// with `--copilot` and `--global`.
+        #[arg(long, conflicts_with_all = ["copilot", "global"])]
+        agentic: bool,
         /// Overwrite agent files that already exist.
         #[arg(long)]
         force: bool,
@@ -142,18 +163,49 @@ async fn run_command(cli: Cli) -> Result<()> {
         }
         Command::Doctor => cmd_doctor(),
         Command::Migrate => cmd_migrate(&paths).await,
-        Command::Init { target, force } => cmd_init(target.as_deref(), force),
+        Command::Init {
+            target,
+            copilot,
+            global,
+            agentic,
+            force,
+        } => cmd_init(target.as_deref(), copilot, global, agentic, force),
     }
 }
 
-fn cmd_init(target: Option<&std::path::Path>, force: bool) -> Result<()> {
-    let target = match target {
+fn cmd_init(
+    target: Option<&std::path::Path>,
+    copilot: bool,
+    global: bool,
+    agentic: bool,
+    force: bool,
+) -> Result<()> {
+    use agentic_cli::init::AgentDestination;
+
+    let destination = match (agentic, copilot, global) {
+        (true, _, _) => AgentDestination::AgenticRepo,
+        (false, true, true) => AgentDestination::CopilotHome,
+        (false, true, false) => AgentDestination::CopilotRepo,
+        (false, false, true) => AgentDestination::ClaudeHome,
+        (false, false, false) => AgentDestination::ClaudeRepo,
+    };
+
+    let repo_root = match target {
         Some(p) => p.to_path_buf(),
         None => std::env::current_dir().context("resolve current working directory")?,
     };
-    let report = agentic_cli::init::write_agent_scaffolding(&target, force)
-        .with_context(|| format!("scaffold .agentic/ under {}", target.display()))?;
-    println!("Scaffolded {} agent files:", report.created.len());
+    let home = directories::BaseDirs::new().map(|b| b.home_dir().to_path_buf());
+    let agents_dir = destination
+        .resolve(&repo_root, home.as_deref())
+        .context("resolve agents directory from --copilot/--global flags")?;
+
+    let report = agentic_cli::init::write_agent_scaffolding(&agents_dir, force)
+        .with_context(|| format!("scaffold agent files under {}", agents_dir.display()))?;
+    println!(
+        "Scaffolded {} agent files into {}:",
+        report.created.len(),
+        report.agents_dir.display()
+    );
     for path in &report.created {
         println!("  {}", path.display());
     }

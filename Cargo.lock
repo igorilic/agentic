@@ -17,6 +17,7 @@ dependencies = [
  "async-trait",
  "blake3",
  "clap",
+ "directories",
  "rusqlite",
  "serde_json",
  "tempfile",

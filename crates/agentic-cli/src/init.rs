@@ -1,16 +1,18 @@
-//! `agentic-cli init` — scaffold the `.agentic/` directory required to
-//! drive a pipeline against an arbitrary repo.
+//! `agentic-cli init` — scaffold an agents directory required to drive a
+//! pipeline against an arbitrary repo.
 //!
 //! Writes one agent file per role (`architect`, `tdd-developer`, `qa`,
-//! `reviewer`) under `<target>/.agentic/agents/<name>.md`. Without these
-//! files the pipeline fails immediately with `agent 'architect' not found`.
+//! `reviewer`) into a caller-supplied directory. The CLI resolves the
+//! directory based on flags (default: `<cwd>/.claude/agents/` to reuse
+//! Claude Code's existing convention; alternatives via `--copilot` and/or
+//! `--global`). Without these files the pipeline fails immediately with
+//! `agent 'architect' not found in workspace …`.
 //!
 //! The shipped templates are reasonable defaults — the user is expected to
 //! tweak the system prompts and model choices for their workflow. Refusing
 //! to overwrite by default protects hand-edited files.
 
 use std::fs;
-use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
@@ -19,19 +21,61 @@ use anyhow::{Context, Result, anyhow};
 /// pipeline execution order (architect → tdd-developer → qa → reviewer).
 pub const AGENT_NAMES: &[&str] = &["architect", "tdd-developer", "qa", "reviewer"];
 
+/// Where to scaffold agent files. The CLI resolves this from `--copilot`
+/// and `--global` flags; tests pass an explicit value.
+#[derive(Debug, Clone, Copy)]
+pub enum AgentDestination {
+    /// `<repo>/.claude/agents/` — Claude Code's project-local convention.
+    /// Default when no flag is given.
+    ClaudeRepo,
+    /// `<repo>/.github/agents/` — Copilot project-local (Agentic-defined,
+    /// alongside other `.github/` config files).
+    CopilotRepo,
+    /// `<repo>/.agentic/agents/` — Agentic-explicit project override. Use
+    /// when you want agents that the underlying CLI tools don't see.
+    AgenticRepo,
+    /// `$HOME/.claude/agents/` — Claude Code's global subagents location.
+    ClaudeHome,
+    /// `$HOME/.copilot/agents/` — Copilot global (Agentic-defined).
+    CopilotHome,
+}
+
+impl AgentDestination {
+    /// Resolve to the actual filesystem directory.
+    ///
+    /// `repo_root` is used by the `*Repo` variants. `home` is used by the
+    /// `*Home` variants. Returns `Err` if a `*Home` variant is requested
+    /// but `home` is `None`.
+    pub fn resolve(self, repo_root: &Path, home: Option<&Path>) -> Result<PathBuf> {
+        Ok(match self {
+            AgentDestination::ClaudeRepo => repo_root.join(".claude").join("agents"),
+            AgentDestination::CopilotRepo => repo_root.join(".github").join("agents"),
+            AgentDestination::AgenticRepo => repo_root.join(".agentic").join("agents"),
+            AgentDestination::ClaudeHome => home
+                .ok_or_else(|| anyhow!("could not resolve $HOME for --global"))?
+                .join(".claude")
+                .join("agents"),
+            AgentDestination::CopilotHome => home
+                .ok_or_else(|| anyhow!("could not resolve $HOME for --global"))?
+                .join(".copilot")
+                .join("agents"),
+        })
+    }
+}
+
 /// Report returned by `write_agent_scaffolding`. Lists every file the call
 /// created so the CLI can print a concise summary.
 #[derive(Debug, Default)]
 pub struct InitReport {
+    pub agents_dir: PathBuf,
     pub created: Vec<PathBuf>,
 }
 
-/// Scaffold `.agentic/agents/*.md` under `target`. Creates parent dirs as
-/// needed. Returns `Err` if any agent file already exists and `force` is
-/// false; in that case nothing is written, so partial state can't appear.
-pub fn write_agent_scaffolding(target: &Path, force: bool) -> Result<InitReport> {
-    let agents_dir = target.join(".agentic").join("agents");
-
+/// Scaffold the four required agent files into `agents_dir`. Creates parent
+/// dirs as needed. Returns `Err` if any agent file already exists and
+/// `force` is false; in that case nothing is written, so partial state can't
+/// appear.
+pub fn write_agent_scaffolding(agents_dir: &Path, force: bool) -> Result<InitReport> {
     if !force {
         for name in AGENT_NAMES {
             let path = agents_dir.join(format!("{name}.md"));
@@ -44,23 +88,17 @@ pub fn write_agent_scaffolding(target: &Path, force: bool) -> Result<InitReport>
         }
     }
 
-    fs::create_dir_all(&agents_dir).with_context(|| format!("create {}", agents_dir.display()))?;
+    fs::create_dir_all(agents_dir).with_context(|| format!("create {}", agents_dir.display()))?;
 
-    let mut report = InitReport::default();
+    let mut report = InitReport {
+        agents_dir: agents_dir.to_path_buf(),
+        created: Vec::with_capacity(AGENT_NAMES.len()),
+    };
     for name in AGENT_NAMES {
         let path = agents_dir.join(format!("{name}.md"));
         let body = template_for(name).ok_or_else(|| anyhow!("no template for agent {name}"))?;
-        match fs::write(&path, body) {
-            Ok(()) => report.created.push(path),
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                // We already pre-checked above when !force, so this branch
-                // should be unreachable; keep it explicit for safety.
-                return Err(anyhow!("{}: {e}", path.display()));
-            }
-            Err(e) => {
-                return Err(anyhow!("write {}: {e}", path.display()));
-            }
-        }
+        fs::write(&path, body).with_context(|| format!("write {}", path.display()))?;
+        report.created.push(path);
     }
     Ok(report)
 }

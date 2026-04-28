@@ -13,6 +13,7 @@ agentic-core = { path = "../agentic-core" }
 anyhow = { workspace = true }
 blake3 = { workspace = true }
 clap = { workspace = true }
+directories = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

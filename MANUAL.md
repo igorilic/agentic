@@ -100,29 +100,41 @@ cargo run -p agentic-cli -- migrate
 
 Creates `~/Library/Application Support/agentic/state.db` (macOS) — equivalent path on Linux/Windows under `directories::ProjectDirs`. Idempotent; safe to re-run after a pull.
 
-### Scaffold a project's `.agentic/` directory
+### Scaffold an agents directory
 
-Before you can run a real ticket-driven pipeline against another repo, that repo needs four agent files. Bootstrap them in one shot:
+Before you can run a real ticket-driven pipeline against another repo, the pipeline needs four agent definitions. By default Agentic reuses Claude Code's existing convention so the same files drive both tools:
 
 ```fish
 cd ~/work/my-project
 ~/agentic/target/debug/agentic-cli init
 ```
 
-This writes:
+This writes the four agents into `<cwd>/.claude/agents/` — same place Claude Code looks for project-local subagents:
 
 ```
-.agentic/agents/architect.md
-.agentic/agents/tdd-developer.md
-.agentic/agents/qa.md
-.agentic/agents/reviewer.md
+.claude/agents/architect.md
+.claude/agents/tdd-developer.md
+.claude/agents/qa.md
+.claude/agents/reviewer.md
 ```
 
-Each file has reasonable defaults (Opus for architect, Sonnet for tdd-developer/reviewer, Haiku for qa) and a starter system prompt. You should read each one and edit the prompt to fit your project's conventions.
+Each file has reasonable defaults (Opus for architect, Sonnet for tdd-developer/reviewer, Haiku for qa) and a starter system prompt. Read each one and edit the prompt to fit your project's conventions.
 
-Flags:
-- `--target <path>` — scaffold into a different directory (defaults to cwd)
+Flags pick the destination convention:
+
+| Flags | Destination |
+|---|---|
+| (none) | `<cwd>/.claude/agents/` — Claude Code repo-local (default) |
+| `--copilot` | `<cwd>/.github/agents/` — Copilot repo-local |
+| `--global` | `$HOME/.claude/agents/` — Claude Code global subagents |
+| `--copilot --global` | `$HOME/.copilot/agents/` — Copilot global |
+| `--agentic` | `<cwd>/.agentic/agents/` — explicit project override (only Agentic sees these) |
+
+Plus:
+- `--target <path>` — use a different repo root (defaults to cwd; ignored with `--global`)
 - `--force` — overwrite existing files (default: refuse, so hand-edits aren't clobbered)
+
+If you already have agents in `~/.claude/agents/` from Claude Code, the pipeline will discover them automatically — `init` is only needed when you want fresh project-local copies.
 
 ---
 
@@ -145,13 +157,20 @@ Findings flow into a typed `findings` table. You triage each one (currently via 
 
 ## 5. Agent files
 
-The pipeline looks for agent definitions in this order under your **target repo's root**:
+The pipeline looks for agent definitions in priority order — first match wins. The search reuses existing conventions where possible, so Claude Code subagents and Copilot agents work as-is:
 
-1. `<repo>/.agentic/agents/<name>.md`
-2. `<repo>/.claude/agents/<name>.md`
-3. `<repo>/agents/<name>.md`
+| # | Path | Purpose |
+|---|---|---|
+| 1 | `<repo>/.agentic/agents/<name>.md` | Explicit project override (Agentic-only — won't bleed into other tools) |
+| 2 | `<repo>/.claude/agents/<name>.md` | **Claude Code's project-local convention** — shared with the `claude` CLI |
+| 3 | `<repo>/.github/agents/<name>.md` | Copilot project-local (Agentic-defined) |
+| 4 | `<repo>/agents/<name>.md` | Legacy / unscoped |
+| 5 | `$HOME/.claude/agents/<name>.md` | **Claude Code's global subagents** — shared with `claude` |
+| 6 | `$HOME/.copilot/agents/<name>.md` | Copilot global (Agentic-defined) |
 
-Each is a markdown file with TOML frontmatter between `+++` fences, e.g. `<repo>/.agentic/agents/architect.md`:
+Practical implication: if you've already curated subagents under `~/.claude/agents/` for use with Claude Code itself, **the pipeline will pick them up with no extra setup** as long as the names match (`architect.md`, `tdd-developer.md`, `qa.md`, `reviewer.md`).
+
+Each file is a markdown file with TOML frontmatter between `+++` fences, e.g. `~/.claude/agents/architect.md`:
 
 ```markdown
 +++
@@ -171,7 +190,7 @@ You are the architect. Read the ticket. Produce…
 
 Required fields: `name`, `description`, `pipeline_role`. Optional: `model`, `tools`, `allowed_questions`, `timeout_seconds`. The body becomes the agent's system prompt.
 
-You need four files: `architect.md`, `tdd-developer.md`, `qa.md`, `reviewer.md`. Without them the pipeline fails immediately with `agent 'architect' not found`.
+You need four files: `architect.md`, `tdd-developer.md`, `qa.md`, `reviewer.md`. Without them the pipeline fails immediately with `agent 'architect' not found`. Use `agentic-cli init` (§3) to scaffold them in any of the supported locations.
 
 ---
 
@@ -347,8 +366,11 @@ sqlite3 ~/Library/Application\ Support/agentic/state.db "
 cd ~/work/my-project
 
 # 1. Scaffold agent files (one-time per repo)
+#    Default writes into .claude/agents/ — the same place Claude Code reads
+#    its subagents from. If you already have these in ~/.claude/agents/ from
+#    Claude Code itself, this step is unnecessary; the pipeline will find them.
 ~/agentic/target/debug/agentic-cli init
-# Edit .agentic/agents/{architect,tdd-developer,qa,reviewer}.md to taste.
+# Edit .claude/agents/{architect,tdd-developer,qa,reviewer}.md to taste.
 
 # 2. Verify tools
 ~/agentic/target/debug/agentic-cli doctor

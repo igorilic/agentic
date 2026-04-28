@@ -1,5 +1,5 @@
 mod discovery;
-pub use discovery::discover_agent;
+pub use discovery::{discover_agent, discover_agent_with_home};
 
 use serde::{Deserialize, Serialize};
 
