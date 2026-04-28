@@ -95,6 +95,15 @@ pub async fn start_ticket_run(
             ws_root.display()
         ));
     }
+
+    // Pre-flight: fail fast with an actionable message if the backend
+    // binary or any required agent file is missing. Without this, the
+    // pipeline starts, the first claude/copilot subprocess crashes (or
+    // discover_agent fails on the first step), and the user sees a
+    // cryptic RunComplete(failed) buried in EventList. The chat IPC
+    // surfaces a clear "install …" / "run agentic-cli init" message.
+    pre_flight_check(&ws_root, &backend_kind)?;
+
     let ws_id = stable_workspace_id(&ws_root);
     let run_id = Ulid::new().to_string().to_lowercase();
 
@@ -216,4 +225,68 @@ pub async fn start_ticket_run(
     });
 
     Ok(returned_run_id)
+}
+
+/// Pre-flight check called before seeding rows or spawning the pipeline.
+///
+/// Validates two things that have caused real "pipeline succeeded but
+/// nothing happened" reports:
+/// 1. The backend binary (`claude` for ClaudeCode, `copilot` for
+///    CopilotCli) is on PATH. Honors the same env-var overrides the
+///    backend runners use (`CLAUDE_CODE_BIN`, `COPILOT_CLI_BIN`) so
+///    integration tests can point at a missing path.
+/// 2. All four required agent files are discoverable from `ws_root`
+///    using the same search order the pipeline itself uses
+///    (`.agentic/agents`, `.claude/agents`, `.github/agents`, …).
+///
+/// Errors are short, actionable strings the chat surfaces verbatim.
+fn pre_flight_check(ws_root: &std::path::Path, backend_kind: &BackendKind) -> Result<(), String> {
+    // 1. Backend binary on PATH.
+    let (binary_env, binary_default, install_hint) = match backend_kind {
+        BackendKind::ClaudeCode => (
+            "CLAUDE_CODE_BIN",
+            "claude",
+            "Install Claude Code from https://docs.claude.com/claude-code and run `claude /login`",
+        ),
+        BackendKind::CopilotCli => (
+            "COPILOT_CLI_BIN",
+            "copilot",
+            "Install GitHub Copilot CLI: https://github.com/github/copilot-cli",
+        ),
+    };
+    let binary = std::env::var(binary_env).unwrap_or_else(|_| binary_default.to_string());
+    if !is_binary_resolvable(&binary) {
+        return Err(format!(
+            "pre-flight: `{binary}` not found on PATH. {install_hint}."
+        ));
+    }
+
+    // 2. Agent files. Use the same discovery the pipeline does.
+    for name in ["architect", "tdd-developer", "qa", "reviewer"] {
+        if agentic_core::discover_agent(ws_root, name).is_err() {
+            return Err(format!(
+                "pre-flight: agent `{name}` not found under {}. \
+                 Run `agentic-cli init` from the workspace to scaffold the four \
+                 required agents (or place them under `.claude/agents/` yourself).",
+                ws_root.display()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// Return `true` if `binary` is either an absolute/relative path that exists
+/// or a bare name resolvable on the user's PATH.
+fn is_binary_resolvable(binary: &str) -> bool {
+    let p = std::path::Path::new(binary);
+    if p.is_absolute() || binary.contains(std::path::MAIN_SEPARATOR) {
+        return p.exists();
+    }
+    // Bare name — search PATH manually. Avoids pulling the `which` crate
+    // for one call site.
+    let Some(path_var) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path_var).any(|dir| dir.join(binary).exists())
 }

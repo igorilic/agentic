@@ -17,6 +17,49 @@ use tokio::sync::Mutex as AsyncMutex;
 /// guard crosses `.await` points inside the test bodies.
 static ENV_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
 
+/// Create a tempdir with `.claude/agents/` containing the four required
+/// agent stubs and a fake `claude` binary at `<tmp>/bin/claude`. Sets
+/// `AGENTIC_WORKSPACE_ROOT` to the tempdir and `CLAUDE_CODE_BIN` to the
+/// fake binary so the pre-flight check passes in happy-path tests
+/// regardless of whether real claude is installed in the CI environment.
+/// Caller MUST hold the ENV_LOCK while this lives. Returns the tempdir so
+/// it stays alive for the duration of the test.
+fn setup_happy_path_workspace() -> tempfile::TempDir {
+    let tmp = tempfile::tempdir().unwrap();
+    let agents_dir = tmp.path().join(".claude").join("agents");
+    std::fs::create_dir_all(&agents_dir).unwrap();
+    for name in ["architect", "tdd-developer", "qa", "reviewer"] {
+        std::fs::write(
+            agents_dir.join(format!("{name}.md")),
+            format!(
+                "+++\nname = \"{name}\"\ndescription = \"stub\"\npipeline_role = \"step\"\n+++\nbody"
+            ),
+        )
+        .unwrap();
+    }
+    let bin_dir = tmp.path().join("bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    let fake_claude = bin_dir.join("claude");
+    std::fs::write(&fake_claude, "#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake_claude, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    unsafe {
+        std::env::set_var("AGENTIC_WORKSPACE_ROOT", tmp.path());
+        std::env::set_var("CLAUDE_CODE_BIN", &fake_claude);
+    }
+    tmp
+}
+
+fn teardown_happy_path_workspace() {
+    unsafe {
+        std::env::remove_var("AGENTIC_WORKSPACE_ROOT");
+        std::env::remove_var("CLAUDE_CODE_BIN");
+    }
+}
+
 fn build_app() -> (tauri::App<tauri::test::MockRuntime>, Db) {
     let bus = Arc::new(EventBus::new());
     let db = Db::open_in_memory().expect("Db::open_in_memory");
@@ -69,6 +112,7 @@ async fn start_ticket_run_rejects_empty_ticket() {
 #[tokio::test(flavor = "multi_thread")]
 async fn start_ticket_run_seeds_workspace_and_run_rows_then_returns_run_id() {
     let _g = ENV_LOCK.lock().await;
+    let _ws = setup_happy_path_workspace();
     let (app, db) = build_app();
 
     let run_id = start_ticket_run(
@@ -80,6 +124,7 @@ async fn start_ticket_run_seeds_workspace_and_run_rows_then_returns_run_id() {
     )
     .await
     .expect("start_ticket_run should succeed on the seed-and-spawn path");
+    teardown_happy_path_workspace();
 
     // ULID lowercase: 26 chars
     assert_eq!(
@@ -113,14 +158,8 @@ async fn start_ticket_run_honors_agentic_workspace_root_env_var() {
     // Regression: when launched via `cargo tauri dev`, cwd is the tauri
     // crate dir — not the user's target repo. The env var override lets
     // users point the IPC at the right workspace without changing cwd.
-    let tmp = tempfile::tempdir().unwrap();
+    let tmp = setup_happy_path_workspace();
     let target_root = tmp.path();
-
-    // SAFETY: tests in this module run on a multi_thread runtime, but env
-    // mutation is process-global. set_var is `unsafe` on Rust 2024.
-    unsafe {
-        std::env::set_var("AGENTIC_WORKSPACE_ROOT", target_root);
-    }
 
     let (app, db) = build_app();
     let result = start_ticket_run(
@@ -131,10 +170,7 @@ async fn start_ticket_run_honors_agentic_workspace_root_env_var() {
         None,
     )
     .await;
-
-    unsafe {
-        std::env::remove_var("AGENTIC_WORKSPACE_ROOT");
-    }
+    teardown_happy_path_workspace();
 
     let run_id = result.expect("start_ticket_run with env override");
 
@@ -193,6 +229,7 @@ async fn start_ticket_run_rejects_workspace_root_that_is_not_a_directory() {
 #[tokio::test(flavor = "multi_thread")]
 async fn start_ticket_run_registers_cancel_token_so_cancel_run_finds_it() {
     let _g = ENV_LOCK.lock().await;
+    let _ws = setup_happy_path_workspace();
     let (app, _db) = build_app();
 
     let run_id = start_ticket_run(
@@ -204,6 +241,7 @@ async fn start_ticket_run_registers_cancel_token_so_cancel_run_finds_it() {
     )
     .await
     .expect("start_ticket_run");
+    teardown_happy_path_workspace();
 
     // The existing cancel_run IPC reads from EventBusState's cancellation
     // registry. start_ticket_run must register the run's token there or
@@ -221,10 +259,101 @@ async fn start_ticket_run_registers_cancel_token_so_cancel_run_finds_it() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn start_ticket_run_fails_fast_when_claude_binary_is_missing() {
+    let _g = ENV_LOCK.lock().await;
+
+    // Point CLAUDE_CODE_BIN at a path that definitely doesn't exist so the
+    // pre-flight `which` resolves to NotFound. Use a tempdir for the
+    // workspace so the agent-file check doesn't fail first.
+    let ws = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(ws.path().join(".claude").join("agents")).unwrap();
+    for name in ["architect", "tdd-developer", "qa", "reviewer"] {
+        std::fs::write(
+            ws.path()
+                .join(".claude")
+                .join("agents")
+                .join(format!("{name}.md")),
+            "+++\nname = \"x\"\ndescription = \"y\"\npipeline_role = \"step\"\n+++\nbody",
+        )
+        .unwrap();
+    }
+    unsafe {
+        std::env::set_var("AGENTIC_WORKSPACE_ROOT", ws.path());
+        std::env::set_var("CLAUDE_CODE_BIN", "/definitely/no/such/binary/claude-xxx");
+    }
+
+    let (app, _db) = build_app();
+    let result = start_ticket_run(
+        app.state::<EventBusState>(),
+        app.state::<Db>(),
+        "fix something".to_string(),
+        "claude-code".to_string(),
+        None,
+    )
+    .await;
+
+    unsafe {
+        std::env::remove_var("AGENTIC_WORKSPACE_ROOT");
+        std::env::remove_var("CLAUDE_CODE_BIN");
+    }
+
+    let err = result.expect_err("missing claude binary must fail pre-flight");
+    assert!(
+        err.to_lowercase().contains("claude")
+            && (err.contains("not found") || err.contains("PATH")),
+        "error should call out claude + actionability; got: {err}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn start_ticket_run_fails_fast_when_agent_files_are_missing() {
+    let _g = ENV_LOCK.lock().await;
+
+    // Empty workspace — no .claude/agents/ at all.
+    let ws = tempfile::tempdir().unwrap();
+    unsafe {
+        std::env::set_var("AGENTIC_WORKSPACE_ROOT", ws.path());
+    }
+
+    let (app, _db) = build_app();
+    let result = start_ticket_run(
+        app.state::<EventBusState>(),
+        app.state::<Db>(),
+        "fix it".to_string(),
+        "claude-code".to_string(),
+        None,
+    )
+    .await;
+
+    unsafe {
+        std::env::remove_var("AGENTIC_WORKSPACE_ROOT");
+    }
+
+    let err = result.expect_err("missing agent files must fail pre-flight");
+    assert!(
+        err.contains("agent")
+            && (err.contains("init") || err.contains("not found") || err.contains("agents/")),
+        "error should call out agent files + suggest `init`; got: {err}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn start_ticket_run_passes_through_the_model_override() {
     let _g = ENV_LOCK.lock().await;
-    let (app, db) = build_app();
+    let _ws = setup_happy_path_workspace();
+    // Override the copilot binary too — the workspace setup only stubs claude.
+    let copilot_path = _ws.path().join("bin").join("copilot");
+    std::fs::write(&copilot_path, "#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&copilot_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    unsafe {
+        std::env::set_var("COPILOT_CLI_BIN", &copilot_path);
+    }
 
+    let (app, db) = build_app();
     let run_id = start_ticket_run(
         app.state::<EventBusState>(),
         app.state::<Db>(),
@@ -234,6 +363,10 @@ async fn start_ticket_run_passes_through_the_model_override() {
     )
     .await
     .expect("start_ticket_run");
+    unsafe {
+        std::env::remove_var("COPILOT_CLI_BIN");
+    }
+    teardown_happy_path_workspace();
 
     let conn = db.conn().unwrap();
     let (model, backend): (String, String) = conn

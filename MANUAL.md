@@ -557,6 +557,15 @@ It's a timing-based test on a busy CI machine; usually passes on retry. Not yet 
 
 The path validator only allows files under `cwd` or the app's data dir. Move your JSON into the repo root or under `~/Library/Application Support/io.agentic.app/`.
 
+### `/plan` fails immediately with "pre-flight: …"
+
+The chat IPC validates two things before spawning the pipeline:
+
+- **`pre-flight: \`claude\` not found on PATH`** — install Claude Code (https://docs.claude.com/claude-code) and run `claude /login`. If `claude` is in a non-standard location, set `CLAUDE_CODE_BIN=/path/to/claude`. Same pattern for Copilot via `COPILOT_CLI_BIN`.
+- **`pre-flight: agent \`<name>\` not found under …`** — your workspace doesn't have the four required agent files. Run `agentic-cli init` from inside the workspace (or `--target <path>`) and re-try. If you already have agents in `~/.claude/agents/`, those are auto-discovered.
+
+These errors fire BEFORE any DB rows are seeded, so a failed pre-flight leaves no orphan run rows behind.
+
 ### "Connect GitHub" fails with "no existing gh session"
 
 You haven't run `gh auth login`. The Settings panel default flow reuses your `gh` CLI session — if `gh` isn't authenticated, there's no token to import. Fix:
