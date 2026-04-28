@@ -1538,7 +1538,7 @@ Legend:
 
 ---
 
-### Step 12.4: Command mode (`:plan`, `:status`, `:q`)
+### [x] Step 12.4: Command mode (`:plan`, `:status`, `:q`)
 
 **Goal**: `:` enters command mode, typing runs slash-command equivalents per spec §7.2/§16.4.
 

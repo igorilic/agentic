@@ -7,7 +7,9 @@
 //! and tests share them.
 
 use agentic_core::events::EventEnvelope;
+use crossterm::event::KeyCode;
 
+use crate::modes::{AppCommand, Mode, parse_command};
 use crate::run::RunState;
 
 /// Which pane currently receives input. Pure state — the renderer reads
@@ -46,6 +48,8 @@ pub struct AppState {
     pub cockpit_ratio: f32,
     /// Pipeline run state — renders as the cockpit stepper.
     pub run: RunState,
+    /// Normal vs. Command — see `modes.rs`.
+    pub mode: Mode,
 }
 
 impl Default for AppState {
@@ -54,6 +58,7 @@ impl Default for AppState {
             focus: Pane::Cockpit,
             cockpit_ratio: 0.50,
             run: RunState::default(),
+            mode: Mode::Normal,
         }
     }
 }
@@ -80,5 +85,52 @@ impl AppState {
     /// loop will call this for every envelope yielded by `EventBus::subscribe`.
     pub fn apply_envelope(&mut self, envelope: &EventEnvelope) {
         self.run.apply_envelope(envelope);
+    }
+
+    /// Process a key event. The interpretation depends on `self.mode`:
+    ///
+    /// - `Normal`: `:` enters command mode; `Tab` toggles focus; `[`/`]`
+    ///   resize. Other keys are no-ops (chat input lands in 12.5).
+    /// - `Command`: characters append to the buffer; Enter parses and
+    ///   may return an `AppCommand`; Esc cancels back to Normal.
+    ///
+    /// Returns `Some(AppCommand)` when a command should be executed.
+    pub fn handle_key(&mut self, key: KeyCode) -> Option<AppCommand> {
+        match &mut self.mode {
+            Mode::Normal => {
+                match key {
+                    KeyCode::Char(':') => {
+                        self.mode = Mode::Command {
+                            buffer: String::new(),
+                        };
+                    }
+                    KeyCode::Tab => self.handle(AppEvent::ToggleFocus),
+                    KeyCode::Char(']') => self.handle(AppEvent::WidenCockpit),
+                    KeyCode::Char('[') => self.handle(AppEvent::NarrowCockpit),
+                    _ => {}
+                }
+                None
+            }
+            Mode::Command { buffer } => match key {
+                KeyCode::Char(c) => {
+                    buffer.push(c);
+                    None
+                }
+                KeyCode::Backspace => {
+                    buffer.pop();
+                    None
+                }
+                KeyCode::Esc => {
+                    self.mode = Mode::Normal;
+                    None
+                }
+                KeyCode::Enter => {
+                    let cmd = parse_command(buffer);
+                    self.mode = Mode::Normal;
+                    cmd
+                }
+                _ => None,
+            },
+        }
     }
 }

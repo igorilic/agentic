@@ -22,7 +22,7 @@ Three shells share one Rust core:
 |---|---|
 | **CLI** (`agentic-cli`) | working — recommended for real work today |
 | **Tauri desktop app** | MVP cockpit — observability + chat stub + scripted demos |
-| **TUI** (`agentic-tui`) | Steps 12.1–12.3 — alt-screen with two-pane (cockpit \| chat) layout, `Tab` toggles focus, `[` / `]` resize cockpit (clamped 20–80%), `q` / `Esc` quits. Cockpit pane renders a four-row stepper (architect → tdd-developer → qa → reviewer) driven by bus envelopes — same icons (○ ◐ ✓ ✗ ⚠ ⊘) as the Tauri Stepper. Bus subscription wiring inside the binary, command mode, and chat input are Steps 12.4–12.5. |
+| **TUI** (`agentic-tui`) | Steps 12.1–12.4 — alt-screen with two-pane (cockpit \| chat) layout, `Tab` toggles focus, `[` / `]` resize cockpit (clamped 20–80%), `:` enters command mode (`:plan <ticket>`, `:status`, `:q`), `Esc` cancels command mode. Cockpit pane renders a four-row stepper (architect → tdd-developer → qa → reviewer) driven by bus envelopes — same icons (○ ◐ ✓ ✗ ⚠ ⊘) as the Tauri Stepper. `:plan` and `:status` are accepted commands but the binary doesn't yet spawn a backend in response — bus wiring + findings triage are Step 12.5. |
 | **VS Code extension** | not built yet (Phase 14) |
 
 > **Realistic expectation**: For driving real pipelines against real tickets, use the CLI. The Tauri app is currently a cockpit for **watching** runs and **demoing** the pipeline shape with scripted JSON; it does not yet kick off real backend pipelines from the UI.
@@ -637,7 +637,7 @@ Key invariants:
 ## 13. Roadmap pointers
 
 - Tauri shell completion (Phase 11): findings table ✅ wired (Step 11.5). Real ticket runs from chat input still pending.
-- TUI (Phase 12): scaffolding (12.1), two-pane layout with focus + resize (12.2), and cockpit stepper driven by bus envelopes (12.3) shipped. Command mode (`:plan`/`:status`/`:q`) and findings triage are 12.4–12.5.
+- TUI (Phase 12): scaffolding (12.1), two-pane layout with focus + resize (12.2), cockpit stepper driven by bus envelopes (12.3), and command mode `:plan`/`:status`/`:q` (12.4) shipped. Findings table with keyboard triage is 12.5.
 - Auth UI / settings panel (Phases 7–8 surfaced in shells): core ready; UI not exposed.
 - VS Code extension (Phase 14): not started.
 

@@ -1,11 +1,14 @@
-//! `agentic-tui` binary entry. Step 12.2: two-pane layout, Tab toggles
-//! focus, `[`/`]` resize the cockpit, q/Esc quits.
+//! `agentic-tui` binary entry. Step 12.4: keys flow through
+//! `AppState::handle_key`, which returns optional `AppCommand`s
+//! (`:q` quits; `:plan <ticket>` and `:status` are placeholders until
+//! the binary wires up a real bus subscription in a follow-up step).
 
 use std::io;
 
-use agentic_tui::app::{AppEvent, AppState};
+use agentic_tui::app::AppState;
 use agentic_tui::draw_app;
-use crossterm::event::{self, Event, KeyCode};
+use agentic_tui::modes::AppCommand;
+use crossterm::event::{self, Event};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -35,13 +38,14 @@ fn run_loop<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> io::Res
     let mut state = AppState::default();
     loop {
         terminal.draw(|f| draw_app(f, &state))?;
-        if let Event::Key(key) = event::read()? {
-            match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                KeyCode::Tab => state.handle(AppEvent::ToggleFocus),
-                KeyCode::Char(']') => state.handle(AppEvent::WidenCockpit),
-                KeyCode::Char('[') => state.handle(AppEvent::NarrowCockpit),
-                _ => {}
+        if let Event::Key(key) = event::read()?
+            && let Some(cmd) = state.handle_key(key.code)
+        {
+            match cmd {
+                AppCommand::Quit => return Ok(()),
+                // Plan + Status are accepted but no-op until a future
+                // step wires the binary up to a real bus + backend.
+                AppCommand::Plan { .. } | AppCommand::Status => {}
             }
         }
     }
