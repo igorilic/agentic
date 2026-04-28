@@ -1502,7 +1502,7 @@ Legend:
 
 ---
 
-### Step 12.2: Pane layout (chat + cockpit, `Tab` switch, `[` / `]` resize)
+### [x] Step 12.2: Pane layout (chat + cockpit, `Tab` switch, `[` / `]` resize)
 
 **Goal**: Two vertical panes; focus switch and resize via keys per spec §7.2.
 

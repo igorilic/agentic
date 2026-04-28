@@ -1,9 +1,10 @@
-//! `agentic-tui` binary entry. Step 12.1: alt-screen, single
-//! "Hello Agentic" frame, `q` to quit.
+//! `agentic-tui` binary entry. Step 12.2: two-pane layout, Tab toggles
+//! focus, `[`/`]` resize the cockpit, q/Esc quits.
 
 use std::io;
 
-use agentic_tui::draw_first_frame;
+use agentic_tui::app::{AppEvent, AppState};
+use agentic_tui::draw_app;
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -31,12 +32,17 @@ fn main() -> io::Result<()> {
 }
 
 fn run_loop<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
+    let mut state = AppState::default();
     loop {
-        terminal.draw(draw_first_frame)?;
-        if let Event::Key(key) = event::read()?
-            && matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
-        {
-            return Ok(());
+        terminal.draw(|f| draw_app(f, &state))?;
+        if let Event::Key(key) = event::read()? {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
+                KeyCode::Tab => state.handle(AppEvent::ToggleFocus),
+                KeyCode::Char(']') => state.handle(AppEvent::WidenCockpit),
+                KeyCode::Char('[') => state.handle(AppEvent::NarrowCockpit),
+                _ => {}
+            }
         }
     }
 }
