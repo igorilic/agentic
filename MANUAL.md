@@ -489,6 +489,8 @@ Backend defaults to `claude-code`. To use copilot-cli, the `start_ticket_run` IP
 
 **Cancelling a run**: while the pipeline is in flight, the Cancel button in StartRunForm becomes active (it follows `activeRunId`, which `/plan` sets). Click it — the running claude subprocess receives SIGTERM and the run completes with status=Failed and summary="cancelled". Useful when claude goes off the rails; faster than waiting for the timeout.
 
+**Findings populate the FindingsTable** — at the end of a run, the reviewer agent emits a fenced markdown block tagged `agentic-findings` containing a JSON array. The host parses it, persists each entry via `FindingsRepo`, and publishes an `Event::Finding` envelope. The cockpit's FindingsTable updates live. Empty array (`[]`) means the reviewer found nothing — the projection runs but inserts no rows, which is the expected "everything looks fine" state.
+
 **Inspecting what changed**: the tdd-developer agent commits its own work (one commit per RED, one per GREEN, per the agent template's procedure). After a run, your working tree will likely be clean — the changes are in `git log`, not `git diff`. To see what landed:
 
 ```fish

@@ -219,28 +219,43 @@ timeout_seconds = 900
 # Reviewer
 
 You review the cumulative diff produced by the tdd-developer step(s).
-Your output is a list of `Finding` events that the user will triage as
-`fix`, `tech-debt`, or `ignore`.
+Your output is a list of findings that the user will triage as
+`fix`, `tech-debt`, or `ignore` in the cockpit UI.
 
 ## Severity rubric
 
-- `error`  — real defect or correctness regression. Blocks merge.
+- `error`   — real defect or correctness regression. Blocks merge.
 - `warning` — latent issue, ergonomics, or convention violation. Worth
   flagging but doesn't block.
-- `info`   — informational; e.g., a renaming or refactor opportunity.
+- `info`    — informational; e.g., a renaming or refactor opportunity.
 
-## Output
+## OUTPUT FORMAT — REQUIRED
 
-For each issue:
+After your review prose, end your final response with ONE fenced block
+tagged `agentic-findings` containing a JSON array. The host parses this
+exact block to populate the FindingsTable; without it, your findings
+are invisible to the user. If you have nothing to flag, emit an empty
+array `[]` — don't omit the block.
 
-```
-Event::Finding {
-  finding_id: <short stable id, unique within run>,
-  severity: <error | warning | info>,
-  file: <path>, line: <n>,
-  message: <one-sentence summary>,
-  suggestion: <optional concrete remedy>,
-}
+Each entry must have these fields (file, line, suggestion are
+optional):
+
+```agentic-findings
+[
+  {
+    "finding_id": "f1",
+    "severity": "warning",
+    "file": "src/auth.rs",
+    "line": 42,
+    "message": "missing rate limit on /login",
+    "suggestion": "wrap the route in tower-governor"
+  },
+  {
+    "finding_id": "f2",
+    "severity": "error",
+    "message": "test for empty input was deleted, regression risk"
+  }
+]
 ```
 
 ## Constraints
@@ -250,4 +265,6 @@ Event::Finding {
 - No more than 8 findings per run; merge minor ones into a single
   finding rather than flooding the table.
 - Don't include style nits the formatter would catch.
+- Do NOT use any tools to "submit" findings — just emit the fenced
+  block in your final text response.
 "#;

@@ -4,6 +4,7 @@ pub mod agents;
 pub use agents::{Agent, PipelineRole, discover_agent, discover_agent_with_home, parse_agent};
 pub mod backends;
 pub mod events;
+pub mod findings;
 #[cfg(any(test, feature = "testing"))]
 pub use backends::ScriptedBackend;
 pub use backends::claude_code::ClaudeCodeBackend;

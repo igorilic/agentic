@@ -6,6 +6,9 @@ use std::time::Instant;
 use anyhow::Result;
 use tokio_util::sync::CancellationToken;
 
+use agentic_core::db::findings::{FindingRow, FindingsRepo};
+use agentic_core::events::Severity;
+use agentic_core::findings::extractor::extract_findings;
 use agentic_core::{
     Backend, Db, Event, EventBus, EventEnvelope, ExecuteRequest, ModelId, Paths, Pipeline,
     PipelineStep, RunId, RunRepo, RunStatus, Step, StepId, StepRepo, StepStatus, ToolUseObserver,
@@ -53,6 +56,7 @@ pub fn stable_workspace_id(ws_root: &Path) -> String {
 
 /// Context for executing a single pipeline step, derived from [`PipelineRunContext`].
 struct SingleStepCtx<'a> {
+    db: &'a Db,
     bus: &'a EventBus,
     run_id: &'a str,
     ws_id: &'a str,
@@ -116,6 +120,7 @@ pub async fn execute_pipeline<'a>(
     let loop_result = async {
         for (i, pipeline_step) in pipeline.steps.iter().enumerate() {
             let step_ctx = SingleStepCtx {
+                db,
                 bus,
                 run_id,
                 ws_id,
@@ -174,6 +179,7 @@ async fn execute_single_step<'a>(
     backend_factory: &BackendFactory<'_>,
 ) -> Result<()> {
     let SingleStepCtx {
+        db,
         bus,
         run_id,
         ws_id,
@@ -272,6 +278,11 @@ async fn execute_single_step<'a>(
             .unwrap_or_else(CancellationToken::new),
     };
 
+    // Subscribe to the bus BEFORE running the backend so we can drain
+    // TextDelta envelopes for this step afterwards. Used to project
+    // reviewer findings (see `project_findings` below).
+    let mut text_rx = bus.subscribe();
+
     let backend = backend_factory(pipeline_step);
     let execute_result = backend.execute(req, bus.sender()).await;
 
@@ -293,6 +304,21 @@ async fn execute_single_step<'a>(
     let outcome = execute_result
         .map_err(|e| anyhow::anyhow!("backend error for agent '{}': {}", pipeline_step.agent, e))?;
 
+    // Project agent-emitted findings into the typed table. Only the
+    // reviewer agent emits the `agentic-findings` fenced block today;
+    // skipping for other agents avoids paying for the drain.
+    if pipeline_step.agent == "reviewer" {
+        let agent_text = drain_text_for_step(&mut text_rx, &step_id);
+        if let Err(e) = project_findings(db, bus, run_id, &step_id, &agent_text) {
+            tracing::warn!(
+                run_id = run_id,
+                step_id = %step_id,
+                error = %e,
+                "findings projection failed; reviewer text was extracted but persistence failed",
+            );
+        }
+    }
+
     if outcome.status == StepStatus::Failed && pipeline_step.stop_on_failure {
         return Err(anyhow::anyhow!(
             "step '{}' failed: {}",
@@ -302,6 +328,105 @@ async fn execute_single_step<'a>(
     }
 
     Ok(())
+}
+
+/// Drain every `TextDelta` envelope for `step_id` from `rx` and concatenate
+/// the content into one string. Non-blocking: stops at the first empty recv.
+fn drain_text_for_step(
+    rx: &mut tokio::sync::broadcast::Receiver<EventEnvelope>,
+    step_id: &str,
+) -> String {
+    let mut out = String::new();
+    loop {
+        match rx.try_recv() {
+            Ok(env) => {
+                if env.step_id.as_deref() == Some(step_id)
+                    && let Event::TextDelta { content } = &env.event
+                {
+                    out.push_str(content);
+                }
+            }
+            Err(tokio::sync::broadcast::error::TryRecvError::Empty) => break,
+            Err(tokio::sync::broadcast::error::TryRecvError::Lagged(n)) => {
+                tracing::warn!(
+                    skipped = n,
+                    "drain_text_for_step: receiver lagged; some TextDelta events lost",
+                );
+            }
+            Err(tokio::sync::broadcast::error::TryRecvError::Closed) => break,
+        }
+    }
+    out
+}
+
+/// Parse `agent_text` for `agentic-findings` blocks and persist each entry
+/// via `FindingsRepo`. Also publishes an `Event::Finding` envelope per
+/// row so the cockpit's live findings view picks it up.
+fn project_findings(
+    db: &Db,
+    bus: &EventBus,
+    run_id: &str,
+    step_id: &str,
+    agent_text: &str,
+) -> agentic_core::Result<()> {
+    let drafts = extract_findings(agent_text);
+    if drafts.is_empty() {
+        return Ok(());
+    }
+    let repo = FindingsRepo::new(db);
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    for draft in drafts {
+        let row_id = format!("{run_id}:{}", draft.finding_id);
+        // Insert; on PK or FK error log + continue rather than abort the
+        // whole projection. Reviewer findings are advisory.
+        let row = FindingRow {
+            id: row_id.clone(),
+            run_id: run_id.to_string(),
+            step_id: step_id.to_string(),
+            severity: draft.severity.clone(),
+            file_path: draft.file.clone(),
+            line: draft.line,
+            message: draft.message.clone(),
+            suggestion: draft.suggestion.clone(),
+            triage: None,
+            triaged_at: None,
+            created_at: now_ms,
+        };
+        if let Err(e) = repo.insert(&row) {
+            tracing::warn!(
+                error = %e,
+                row_id = %row_id,
+                "project_findings: insert failed; skipping",
+            );
+            continue;
+        }
+        // Publish the live envelope. Best-effort.
+        let severity_enum = parse_severity(&draft.severity);
+        bus.publish(EventEnvelope::now(
+            run_id.to_string(),
+            Some(step_id.to_string()),
+            Event::Finding {
+                finding_id: draft.finding_id,
+                severity: severity_enum,
+                file: draft.file.map(std::path::PathBuf::from),
+                line: draft.line,
+                message: draft.message,
+                suggestion: draft.suggestion,
+            },
+        ));
+    }
+    Ok(())
+}
+
+fn parse_severity(s: &str) -> Severity {
+    match s {
+        "error" => Severity::Error,
+        "warning" => Severity::Warning,
+        _ => Severity::Info,
+    }
 }
 
 #[cfg(test)]
