@@ -1646,7 +1646,7 @@ Legend:
 
 ---
 
-### Step 14.2: VS Code extension scaffolding
+### [x] Step 14.2: VS Code extension scaffolding
 
 **Goal**: A minimal extension that activates on workspace open and registers a single command `Agentic: Hello`.
 
