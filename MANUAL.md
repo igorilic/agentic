@@ -22,7 +22,7 @@ Three shells share one Rust core:
 |---|---|
 | **CLI** (`agentic-cli`) | working — recommended for real work today |
 | **Tauri desktop app** | MVP cockpit — observability + chat stub + scripted demos |
-| **TUI** (`agentic-tui`) | Steps 12.1–12.4 — alt-screen with two-pane (cockpit \| chat) layout, `Tab` toggles focus, `[` / `]` resize cockpit (clamped 20–80%), `:` enters command mode (`:plan <ticket>`, `:status`, `:q`), `Esc` cancels command mode. Cockpit pane renders a four-row stepper (architect → tdd-developer → qa → reviewer) driven by bus envelopes — same icons (○ ◐ ✓ ✗ ⚠ ⊘) as the Tauri Stepper. `:plan` and `:status` are accepted commands but the binary doesn't yet spawn a backend in response — bus wiring + findings triage are Step 12.5. |
+| **TUI** (`agentic-tui`) | Steps 12.1–12.5 — alt-screen with two-pane (cockpit \| chat) layout, `Tab` toggles focus, `[` / `]` resize cockpit (clamped 20–80%), `:` enters command mode (`:plan <ticket>`, `:status`, `:q`), `Esc` cancels command mode. Cockpit pane stacks a four-row stepper (architect → tdd-developer → qa → reviewer; icons ○ ◐ ✓ ✗ ⚠ ⊘) on top of a findings list — `j`/`k` navigate, `f`/`t`/`i` triage (fix / tech-debt / ignore). `:plan` is accepted but the binary doesn't yet spawn a backend (bus subscription is wired at the AppState level — main loop integration is the remaining gap). |
 | **VS Code extension** | not built yet (Phase 14) |
 
 > **Realistic expectation**: For driving real pipelines against real tickets, use the CLI. The Tauri app is currently a cockpit for **watching** runs and **demoing** the pipeline shape with scripted JSON; it does not yet kick off real backend pipelines from the UI.
@@ -637,7 +637,7 @@ Key invariants:
 ## 13. Roadmap pointers
 
 - Tauri shell completion (Phase 11): findings table ✅ wired (Step 11.5). Real ticket runs from chat input still pending.
-- TUI (Phase 12): scaffolding (12.1), two-pane layout with focus + resize (12.2), cockpit stepper driven by bus envelopes (12.3), and command mode `:plan`/`:status`/`:q` (12.4) shipped. Findings table with keyboard triage is 12.5.
+- TUI (Phase 12): scaffolding (12.1), two-pane layout with focus + resize (12.2), cockpit stepper driven by bus envelopes (12.3), command mode `:plan`/`:status`/`:q` (12.4), and findings list with `j`/`k` navigation + `f`/`t`/`i` triage (12.5) shipped. CP-10 milestone reached: TUI is at cockpit parity with Tauri on scripted runs. Main-loop integration with a real `EventBus::subscribe()` is the remaining gap.
 - Auth UI / settings panel (Phases 7–8 surfaced in shells): core ready; UI not exposed.
 - VS Code extension (Phase 14): not started.
 

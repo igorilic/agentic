@@ -9,6 +9,7 @@
 use agentic_core::events::EventEnvelope;
 use crossterm::event::KeyCode;
 
+use crate::findings::{FindingsState, Triage};
 use crate::modes::{AppCommand, Mode, parse_command};
 use crate::run::RunState;
 
@@ -50,6 +51,9 @@ pub struct AppState {
     pub run: RunState,
     /// Normal vs. Command — see `modes.rs`.
     pub mode: Mode,
+    /// Reviewer findings — renders below the stepper, navigated with
+    /// `j`/`k`, triaged with `f`/`t`/`i`.
+    pub findings: FindingsState,
 }
 
 impl Default for AppState {
@@ -59,6 +63,7 @@ impl Default for AppState {
             cockpit_ratio: 0.50,
             run: RunState::default(),
             mode: Mode::Normal,
+            findings: FindingsState::default(),
         }
     }
 }
@@ -81,10 +86,13 @@ impl AppState {
         }
     }
 
-    /// Forward a bus envelope into the run-state machine. The bin's main
-    /// loop will call this for every envelope yielded by `EventBus::subscribe`.
+    /// Forward a bus envelope into both the run-state machine (for
+    /// step-status events) and the findings list (for `Event::Finding`).
+    /// The bin's main loop will call this for every envelope yielded by
+    /// `EventBus::subscribe`.
     pub fn apply_envelope(&mut self, envelope: &EventEnvelope) {
         self.run.apply_envelope(envelope);
+        self.findings.ingest(envelope);
     }
 
     /// Process a key event. The interpretation depends on `self.mode`:
@@ -107,6 +115,11 @@ impl AppState {
                     KeyCode::Tab => self.handle(AppEvent::ToggleFocus),
                     KeyCode::Char(']') => self.handle(AppEvent::WidenCockpit),
                     KeyCode::Char('[') => self.handle(AppEvent::NarrowCockpit),
+                    KeyCode::Char('j') => self.findings.cursor_down(),
+                    KeyCode::Char('k') => self.findings.cursor_up(),
+                    KeyCode::Char('f') => self.findings.triage_selected(Triage::Fix),
+                    KeyCode::Char('t') => self.findings.triage_selected(Triage::TechDebt),
+                    KeyCode::Char('i') => self.findings.triage_selected(Triage::Ignore),
                     _ => {}
                 }
                 None

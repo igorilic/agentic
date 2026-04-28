@@ -1556,7 +1556,7 @@ Legend:
 
 ---
 
-### Step 12.5: Findings table with keyboard triage (`f`/`t`/`i`)
+### [x] Step 12.5: Findings table with keyboard triage (`f`/`t`/`i`)
 
 **Goal**: Findings keyboard triage per spec §16.6.
 

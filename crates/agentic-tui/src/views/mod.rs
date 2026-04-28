@@ -4,3 +4,4 @@
 
 pub mod chat;
 pub mod cockpit;
+pub mod findings;
