@@ -16,14 +16,16 @@ impl FindingsState {
     }
 }
 
-/// Tauri command: triage a finding.
+/// Tauri command: triage a finding identified by composite (run_id,
+/// finding_id) — matches the table's PRIMARY KEY since migration 0008.
 ///
 /// `triage` must be one of `"fix" | "tech-debt" | "ignore"`. Returns
-/// `Err` for an unknown finding id or invalid triage value — the frontend
+/// `Err` for an unknown finding or invalid triage value — the frontend
 /// surfaces both as a generic "triage failed" toast.
 #[tauri::command]
 pub async fn triage_finding(
     state: State<'_, FindingsState>,
+    run_id: String,
     finding_id: String,
     triage: String,
 ) -> Result<(), String> {
@@ -34,11 +36,13 @@ pub async fn triage_finding(
 
     let updated = state
         .repo
-        .update_triage(&finding_id, &triage, now)
+        .update_triage(&run_id, &finding_id, &triage, now)
         .map_err(|e| e.to_string())?;
 
     if !updated {
-        return Err(format!("finding not found: {finding_id}"));
+        return Err(format!(
+            "finding not found: run={run_id} finding={finding_id}"
+        ));
     }
 
     Ok(())

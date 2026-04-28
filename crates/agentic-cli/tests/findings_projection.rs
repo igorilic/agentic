@@ -128,9 +128,7 @@ async fn reviewer_findings_block_is_projected_into_findings_table() {
     );
 
     // Pipeline with a single "reviewer" step.
-    let pipeline = PipelineConfig::builtin_default()
-        .default_pipeline()
-        .clone();
+    let pipeline = PipelineConfig::builtin_default().default_pipeline().clone();
     let reviewer_only = agentic_core::Pipeline {
         steps: pipeline
             .steps
@@ -145,8 +143,9 @@ async fn reviewer_findings_block_is_projected_into_findings_table() {
         "default pipeline must include exactly one reviewer step"
     );
 
-    let factory: BackendFactory<'_> =
-        Box::new(|_step: &PipelineStep| -> Box<dyn Backend> { Box::new(ReviewerWithFindingsBackend) });
+    let factory: BackendFactory<'_> = Box::new(|_step: &PipelineStep| -> Box<dyn Backend> {
+        Box::new(ReviewerWithFindingsBackend)
+    });
 
     execute_pipeline(
         PipelineRunContext {
@@ -169,10 +168,7 @@ async fn reviewer_findings_block_is_projected_into_findings_table() {
     // Findings rows persisted.
     let rows = FindingsRepo::new(&db).list_by_run(RUN_ID).unwrap();
     assert_eq!(rows.len(), 2, "both findings should land in the DB");
-    let by_id: std::collections::HashMap<_, _> = rows
-        .iter()
-        .map(|r| (r.id.split(':').next_back().unwrap().to_string(), r))
-        .collect();
+    let by_id: std::collections::HashMap<_, _> = rows.iter().map(|r| (r.id.as_str(), r)).collect();
     let f1 = by_id.get("f1").expect("f1 row");
     assert_eq!(f1.severity, "warning");
     assert_eq!(f1.file_path.as_deref(), Some("src/main.py"));
@@ -181,5 +177,4 @@ async fn reviewer_findings_block_is_projected_into_findings_table() {
     let f2 = by_id.get("f2").expect("f2 row");
     assert_eq!(f2.severity, "error");
     assert!(f2.file_path.is_none());
-
 }

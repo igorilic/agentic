@@ -42,6 +42,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "findings_triage_check",
         sql: include_str!("0007_findings_triage_check.sql"),
     },
+    Migration {
+        version: 8,
+        name: "findings_composite_pk",
+        sql: include_str!("0008_findings_composite_pk.sql"),
+    },
 ];
 
 pub struct Migrator;

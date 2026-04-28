@@ -266,16 +266,11 @@ pub async fn start_scripted_run<R: Runtime>(
                             id
                         }
                     };
-                    // The findings table has a PK on `id`. Scripted demos
-                    // use literal finding_ids ("f1", "f2", …) which would
-                    // collide on every re-run after the first, causing all
-                    // subsequent runs to silently lose their findings. Scope
-                    // the DB id with the run_id so each run gets its own
-                    // unique row even when the script's finding_id repeats.
-                    // The envelope on the bus still carries the original
-                    // finding_id for the frontend.
+                    // findings PK is composite (run_id, id) since
+                    // migration 0008, so plain finding_id is fine — repeats
+                    // across runs don't collide.
                     let row = FindingRow {
-                        id: format!("{run_id}:{finding_id}"),
+                        id: finding_id.clone(),
                         run_id: run_id.clone(),
                         step_id,
                         severity: severity_str(severity).to_string(),

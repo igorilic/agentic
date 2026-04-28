@@ -66,9 +66,14 @@ async fn triage_finding_updates_the_row() {
     let (app, db) = build_app();
     let state = app.state::<FindingsState>();
 
-    triage_finding(state, "f1".to_string(), "tech-debt".to_string())
-        .await
-        .expect("triage_finding");
+    triage_finding(
+        state,
+        "run1".to_string(),
+        "f1".to_string(),
+        "tech-debt".to_string(),
+    )
+    .await
+    .expect("triage_finding");
 
     let repo = FindingsRepo::new(&db);
     let row = repo
@@ -86,7 +91,13 @@ async fn triage_finding_returns_err_for_unknown_id() {
     let (app, _db) = build_app();
     let state = app.state::<FindingsState>();
 
-    let result = triage_finding(state, "nope".to_string(), "fix".to_string()).await;
+    let result = triage_finding(
+        state,
+        "run1".to_string(),
+        "nope".to_string(),
+        "fix".to_string(),
+    )
+    .await;
 
     assert!(result.is_err(), "expected Err for unknown finding id");
 }
@@ -122,7 +133,13 @@ async fn triage_finding_rejects_invalid_triage_value() {
     let (app, _db) = build_app();
     let state = app.state::<FindingsState>();
 
-    let result = triage_finding(state, "f1".to_string(), "wat".to_string()).await;
+    let result = triage_finding(
+        state,
+        "run1".to_string(),
+        "f1".to_string(),
+        "wat".to_string(),
+    )
+    .await;
 
     assert!(result.is_err(), "expected Err for invalid triage");
 }

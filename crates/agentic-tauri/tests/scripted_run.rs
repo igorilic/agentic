@@ -423,10 +423,9 @@ async fn start_scripted_run_persists_findings_to_db() {
         "expected one persisted finding, got {}",
         list.len()
     );
-    // The DB row id is scoped with the run_id (`<run_id>:<finding_id>`)
-    // so the same script can be replayed without PK collisions. The
-    // envelope on the bus still carries the original finding_id.
-    assert_eq!(list[0].id, format!("{run_id}:f1"));
+    // Migration 0008 made findings PK composite (run_id, id), so the row
+    // id is just the script's literal finding_id — no scoping required.
+    assert_eq!(list[0].id, "f1");
     assert_eq!(list[0].run_id, run_id);
     assert_eq!(list[0].severity, "warning");
     assert_eq!(list[0].message, "missing-error-handling");

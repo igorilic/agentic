@@ -67,7 +67,9 @@ fn update_triage_sets_triage_value_and_returns_true() {
     repo.insert(&sample_finding("f1", "msg", "warning"))
         .unwrap();
 
-    let updated = repo.update_triage("f1", "tech-debt", 300).expect("update");
+    let updated = repo
+        .update_triage("run1", "f1", "tech-debt", 300)
+        .expect("update");
     assert!(
         updated,
         "expected update_triage to return true for existing row"
@@ -84,7 +86,7 @@ fn update_triage_returns_false_for_unknown_finding() {
     let (_db, repo) = setup_in_memory();
 
     let updated = repo
-        .update_triage("nonexistent", "fix", 300)
+        .update_triage("run1", "nonexistent", "fix", 300)
         .expect("update_triage");
     assert!(
         !updated,
@@ -98,7 +100,7 @@ fn update_triage_rejects_invalid_triage_value() {
     repo.insert(&sample_finding("f1", "msg", "warning"))
         .unwrap();
 
-    let result = repo.update_triage("f1", "lol-not-a-real-triage", 300);
+    let result = repo.update_triage("run1", "f1", "lol-not-a-real-triage", 300);
     assert!(result.is_err(), "expected error for invalid triage value");
 }
 
@@ -109,7 +111,7 @@ fn update_triage_trims_whitespace_around_value() {
         .unwrap();
 
     let updated = repo
-        .update_triage("f1", "  tech-debt  ", 300)
+        .update_triage("run1", "f1", "  tech-debt  ", 300)
         .expect("update");
     assert!(updated, "trimmed triage should match ALLOWED_TRIAGE");
 

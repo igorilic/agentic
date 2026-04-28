@@ -70,6 +70,7 @@ describe("FindingsTable", () => {
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("triage_finding", {
+        runId: "run1",
         findingId: "f1",
         triage: "tech-debt",
       });
@@ -84,6 +85,7 @@ describe("FindingsTable", () => {
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("triage_finding", {
+        runId: "run1",
         findingId: "f1",
         triage: "fix",
       });
@@ -98,6 +100,7 @@ describe("FindingsTable", () => {
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("triage_finding", {
+        runId: "run1",
         findingId: "f1",
         triage: "ignore",
       });

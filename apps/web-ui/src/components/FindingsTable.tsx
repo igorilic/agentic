@@ -20,14 +20,15 @@ export default function FindingsTable({ findings }: FindingsTableProps) {
   const [overrides, setOverrides] = useState<Record<string, Triage>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const onTriage = async (findingId: string, triage: Triage) => {
+  const onTriage = async (runId: string, findingId: string, triage: Triage) => {
     setPending((p) => ({ ...p, [findingId]: true }));
     setErrors((e) => {
       const { [findingId]: _drop, ...rest } = e;
       return rest;
     });
     try {
-      await invoke("triage_finding", { findingId, triage });
+      // findings PK is composite (run_id, id) since migration 0008.
+      await invoke("triage_finding", { runId, findingId, triage });
       setOverrides((o) => ({ ...o, [findingId]: triage }));
     } catch (err) {
       setErrors((e) => ({ ...e, [findingId]: String(err) }));
@@ -88,7 +89,7 @@ export default function FindingsTable({ findings }: FindingsTableProps) {
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => onTriage(f.id, opt.value)}
+                    onClick={() => onTriage(f.run_id, f.id, opt.value)}
                     disabled={isPending}
                     data-testid={`triage-${opt.value}-${f.id}`}
                     className={`px-2 py-0.5 text-xs rounded border transition ${

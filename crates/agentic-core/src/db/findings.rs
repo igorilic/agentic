@@ -108,15 +108,23 @@ impl FindingsRepo {
         Ok(rows)
     }
 
-    /// Update the triage state for a finding. Returns `Ok(true)` if a row was
-    /// updated, `Ok(false)` if no finding with the given id exists.
+    /// Update the triage state for a finding identified by composite
+    /// `(run_id, finding_id)` (matches the table's PRIMARY KEY since
+    /// migration 0008). Returns `Ok(true)` if a row was updated,
+    /// `Ok(false)` if no matching row exists.
     /// Returns `Err` if `triage` (after trimming) is not one of
     /// [`ALLOWED_TRIAGE`].
     ///
     /// `triage` is trimmed before validation so the server contract mirrors
     /// the frontend's whitespace tolerance — the same symmetry rule we apply
     /// to mention bodies.
-    pub fn update_triage(&self, finding_id: &str, triage: &str, triaged_at: i64) -> Result<bool> {
+    pub fn update_triage(
+        &self,
+        run_id: &str,
+        finding_id: &str,
+        triage: &str,
+        triaged_at: i64,
+    ) -> Result<bool> {
         let triage = triage.trim();
         if !ALLOWED_TRIAGE.contains(&triage) {
             return Err(CoreError::Parse(format!(
@@ -125,8 +133,9 @@ impl FindingsRepo {
         }
         let conn = self.pool.get()?;
         let updated = conn.execute(
-            "UPDATE findings SET triage = ?1, triaged_at = ?2 WHERE id = ?3",
-            params![triage, triaged_at, finding_id],
+            "UPDATE findings SET triage = ?1, triaged_at = ?2 \
+             WHERE run_id = ?3 AND id = ?4",
+            params![triage, triaged_at, run_id, finding_id],
         )?;
         Ok(updated > 0)
     }

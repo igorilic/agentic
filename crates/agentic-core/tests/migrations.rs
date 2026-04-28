@@ -117,8 +117,8 @@ fn migrator_is_idempotent_when_run_twice() {
         .query_row("SELECT COUNT(*) FROM _migrations", [], |r| r.get(0))
         .unwrap();
     assert_eq!(
-        count, 7,
-        "_migrations should have exactly 7 rows, not {count}"
+        count, 8,
+        "_migrations should have exactly 8 rows, not {count}"
     );
 }
 
@@ -135,8 +135,8 @@ fn each_applied_migration_has_a_row_in_migrations_table() {
         .unwrap();
     assert_eq!(
         versions,
-        vec![1, 2, 3, 4, 5, 6, 7],
-        "expected exactly versions 1, 2, 3, 4, 5, 6, and 7 applied"
+        vec![1, 2, 3, 4, 5, 6, 7, 8],
+        "expected exactly versions 1..=8 applied"
     );
     let applied_at: i64 = conn
         .query_row(

@@ -379,11 +379,10 @@ fn project_findings(
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
     for draft in drafts {
-        let row_id = format!("{run_id}:{}", draft.finding_id);
-        // Insert; on PK or FK error log + continue rather than abort the
-        // whole projection. Reviewer findings are advisory.
+        // findings PK is composite (run_id, id) since migration 0008 — plain
+        // finding_id is fine, no scoping required.
         let row = FindingRow {
-            id: row_id.clone(),
+            id: draft.finding_id.clone(),
             run_id: run_id.to_string(),
             step_id: step_id.to_string(),
             severity: draft.severity.clone(),
@@ -398,7 +397,8 @@ fn project_findings(
         if let Err(e) = repo.insert(&row) {
             tracing::warn!(
                 error = %e,
-                row_id = %row_id,
+                run_id = run_id,
+                finding_id = %draft.finding_id,
                 "project_findings: insert failed; skipping",
             );
             continue;
