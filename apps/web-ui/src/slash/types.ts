@@ -1,9 +1,16 @@
+export type BackendKind = "claude-code" | "copilot-cli";
+
+export const ALLOWED_BACKENDS: readonly BackendKind[] = [
+  "claude-code",
+  "copilot-cli",
+] as const;
+
 /**
  * Discriminated union of supported slash commands. Each variant carries
  * its parsed args. Add new variants as new commands land in later steps.
  */
 export type SlashCommand =
-  | { kind: "plan"; ticket: string }
+  | { kind: "plan"; ticket: string; backend?: BackendKind }
   | { kind: "status"; runId: string | null }
   | { kind: "cancel"; runId: string };
 
@@ -19,4 +26,5 @@ export type SlashParseError =
   | { kind: "not_a_slash_command"; input: string }
   | { kind: "unknown_command"; cmd: string }
   | { kind: "missing_argument"; cmd: string; argName: string }
-  | { kind: "extra_argument"; cmd: string; surplus: string };
+  | { kind: "extra_argument"; cmd: string; surplus: string }
+  | { kind: "invalid_backend"; given: string };

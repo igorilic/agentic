@@ -40,6 +40,55 @@ describe("parseSlashCommand", () => {
     expect(r.ok).toBe(true);
     if (r.ok && r.command.kind === "plan") {
       expect(r.command.ticket).toBe("add hello world test");
+      expect(r.command.backend).toBeUndefined();
+    }
+  });
+
+  it("/plan --backend=copilot-cli passes backend through and strips the flag from ticket", () => {
+    const r = parseSlashCommand("/plan --backend=copilot-cli fix the auth race");
+    expect(r.ok).toBe(true);
+    if (r.ok && r.command.kind === "plan") {
+      expect(r.command.backend).toBe("copilot-cli");
+      expect(r.command.ticket).toBe("fix the auth race");
+    }
+  });
+
+  it("/plan --backend=claude-code is also accepted explicitly", () => {
+    const r = parseSlashCommand("/plan --backend=claude-code #42");
+    expect(r.ok).toBe(true);
+    if (r.ok && r.command.kind === "plan") {
+      expect(r.command.backend).toBe("claude-code");
+      expect(r.command.ticket).toBe("#42");
+    }
+  });
+
+  it("/plan --backend=foo returns invalid_backend error", () => {
+    const r = parseSlashCommand("/plan --backend=foo #42");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("invalid_backend");
+      if (r.error.kind === "invalid_backend") {
+        expect(r.error.given).toBe("foo");
+      }
+    }
+  });
+
+  it("/plan --backend with no = and ticket fails parse (not silently treated as ticket)", () => {
+    // Conservative: a malformed flag is a user error, not part of the
+    // ticket text. Forces them to re-type rather than silently
+    // sending "--backend" as part of the ticket body.
+    const r = parseSlashCommand("/plan --backend foo #42");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("invalid_backend");
+    }
+  });
+
+  it("/plan with --backend at end and no ticket fails missing_argument", () => {
+    const r = parseSlashCommand("/plan --backend=claude-code");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("missing_argument");
     }
   });
 

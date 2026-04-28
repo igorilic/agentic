@@ -11,13 +11,23 @@ function makeMockServices(overrides: Partial<SlashServices> = {}): SlashServices
 }
 
 describe("dispatchSlashCommand", () => {
-  it("plan calls services.plan with the ticket", async () => {
+  it("plan calls services.plan with the ticket and an undefined backend by default", async () => {
     const services = makeMockServices();
     const result = await dispatchSlashCommand({ kind: "plan", ticket: "#42" }, services);
-    expect(services.plan).toHaveBeenCalledWith("#42");
+    expect(services.plan).toHaveBeenCalledWith("#42", undefined);
     expect(result.runId).toBe("run-123");
     expect(result.message).toContain("run-123");
     expect(result.message).toContain("#42");
+  });
+
+  it("plan forwards the parsed BackendKind through to services.plan", async () => {
+    const services = makeMockServices();
+    const result = await dispatchSlashCommand(
+      { kind: "plan", ticket: "implement export", backend: "copilot-cli" },
+      services,
+    );
+    expect(services.plan).toHaveBeenCalledWith("implement export", "copilot-cli");
+    expect(result.message).toContain("copilot-cli");
   });
 
   it("status calls services.status with runId or null", async () => {

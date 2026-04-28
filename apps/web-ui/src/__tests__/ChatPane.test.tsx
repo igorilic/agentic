@@ -120,6 +120,43 @@ describe("ChatPane", () => {
     );
   });
 
+  it("/plan --backend=copilot-cli forwards the parsed backend to the IPC", async () => {
+    invokeMock.mockResolvedValueOnce("01def");
+    const user = userEvent.setup();
+    render(<ChatPane />);
+
+    await user.type(
+      screen.getByTestId("chat-input"),
+      "/plan --backend=copilot-cli implement export",
+    );
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("start_ticket_run", {
+        ticket: "implement export",
+        backend: "copilot-cli",
+        model: null,
+      });
+    });
+    expect(screen.getByTestId("chat-message-system")).toHaveTextContent(
+      /\[copilot-cli\]/,
+    );
+  });
+
+  it("/plan --backend=foo shows an actionable parse error", async () => {
+    const user = userEvent.setup();
+    render(<ChatPane />);
+
+    await user.type(screen.getByTestId("chat-input"), "/plan --backend=foo #42");
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-message-system")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("chat-message-system")).toHaveTextContent(/foo/);
+    expect(screen.getByTestId("chat-message-system")).toHaveTextContent(/allowed/);
+  });
+
   it("displays error when invoke rejects", async () => {
     invokeMock.mockRejectedValueOnce("content is empty");
     const user = userEvent.setup();

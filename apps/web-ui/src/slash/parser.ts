@@ -1,4 +1,9 @@
-import type { SlashParseError, SlashParseResult } from "./types";
+import {
+  ALLOWED_BACKENDS,
+  type BackendKind,
+  type SlashParseError,
+  type SlashParseResult,
+} from "./types";
 
 /**
  * Parse a candidate slash command from a chat input. Pure function — no
@@ -23,11 +28,34 @@ export function parseSlashCommand(input: string): SlashParseResult {
 
   switch (cmd) {
     case "plan": {
-      if (args.length === 0) {
+      // Strip leading flags before joining the rest as ticket text.
+      // Currently only `--backend=<value>` is recognised; bare `--backend`
+      // (no `=`) and unknown values are explicit user errors. Unknown
+      // `--…` flags stop flag-parsing — they get treated as ticket text
+      // (so e.g. `/plan --foo bar` sends "--foo bar" to the agent).
+      let backend: BackendKind | undefined;
+      let i = 0;
+      while (i < args.length && args[i].startsWith("--")) {
+        const flag = args[i];
+        if (flag.startsWith("--backend=")) {
+          const given = flag.slice("--backend=".length);
+          if (!ALLOWED_BACKENDS.includes(given as BackendKind)) {
+            return { ok: false, error: { kind: "invalid_backend", given } };
+          }
+          backend = given as BackendKind;
+        } else if (flag === "--backend") {
+          return { ok: false, error: { kind: "invalid_backend", given: "" } };
+        } else {
+          break;
+        }
+        i++;
+      }
+      const rest = args.slice(i);
+      if (rest.length === 0) {
         return { ok: false, error: { kind: "missing_argument", cmd: "plan", argName: "ticket" } };
       }
-      const ticket = args.join(" ").trim();
-      return { ok: true, command: { kind: "plan", ticket } };
+      const ticket = rest.join(" ").trim();
+      return { ok: true, command: { kind: "plan", ticket, backend } };
     }
     case "status": {
       if (args.length > 1) {
@@ -65,5 +93,9 @@ export function formatSlashParseError(err: SlashParseError): string {
       return `Missing argument for /${err.cmd}: <${err.argName}>`;
     case "extra_argument":
       return `Extra argument for /${err.cmd}: ${err.surplus}`;
+    case "invalid_backend":
+      return err.given.length === 0
+        ? `Missing value for --backend (use --backend=claude-code or --backend=copilot-cli)`
+        : `Invalid backend "${err.given}" (allowed: ${ALLOWED_BACKENDS.join(", ")})`;
   }
 }

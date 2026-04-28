@@ -1,4 +1,4 @@
-import type { SlashCommand } from "./types";
+import type { BackendKind, SlashCommand } from "./types";
 
 /**
  * Services injected into the dispatcher. The dispatcher is pure-ish:
@@ -6,8 +6,12 @@ import type { SlashCommand } from "./types";
  * mock the services without mocking the entire Tauri layer.
  */
 export type SlashServices = {
-  /** Start a planned run from a ticket reference. Returns the new run_id. */
-  plan: (ticket: string) => Promise<string>;
+  /**
+   * Start a planned run from a ticket reference. `backend` is the
+   * user-supplied `--backend=…` flag from the slash parser; `undefined`
+   * means the service should pick its default. Returns the new run_id.
+   */
+  plan: (ticket: string, backend: BackendKind | undefined) => Promise<string>;
   /** Get status text for a run (or "no active run" if no runId). */
   status: (runId: string | null) => Promise<string>;
   /** Cancel an in-flight run. Returns true if the run was active. */
@@ -30,8 +34,12 @@ export async function dispatchSlashCommand(
 ): Promise<DispatchResult> {
   switch (cmd.kind) {
     case "plan": {
-      const runId = await services.plan(cmd.ticket);
-      return { message: `Started run ${runId} for ticket: ${cmd.ticket}`, runId };
+      const runId = await services.plan(cmd.ticket, cmd.backend);
+      const backendNote = cmd.backend ? ` [${cmd.backend}]` : "";
+      return {
+        message: `Started run ${runId} for ticket${backendNote}: ${cmd.ticket}`,
+        runId,
+      };
     }
     case "status": {
       const text = await services.status(cmd.runId);

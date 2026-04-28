@@ -30,10 +30,11 @@ export default function ChatPane({ onTicketRunStarted }: ChatPaneProps = {}) {
   // `status` and `cancel` remain stubbed for now — Phase 11.7+.
   const slashServices: SlashServices = useMemo(
     () => ({
-      plan: async (ticket: string) => {
+      plan: async (ticket, backend) => {
         const runId = (await invoke("start_ticket_run", {
           ticket,
-          backend: "claude-code",
+          // User's `--backend=…` flag wins; fall back to claude-code.
+          backend: backend ?? "claude-code",
           model: null,
         })) as string;
         onTicketRunStarted?.(runId);
