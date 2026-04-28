@@ -13,6 +13,9 @@
     "allow-chat-list-messages",
     "allow-mention-agent",
     "allow-triage-finding",
-    "allow-list-findings"
+    "allow-list-findings",
+    "allow-list-auth-accounts",
+    "allow-delete-auth-account",
+    "allow-connect-github"
   ]
 }

@@ -45,4 +45,6 @@ rand = "0.8"
 keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "linux-native"] }
 nix = { version = "0.30", default-features = false, features = ["signal"] }
 axum = "0.7"
+webbrowser = "1"
+url = "2"
 zeroize = { version = "1", features = ["derive"] }

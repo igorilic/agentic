@@ -8,9 +8,12 @@ use agentic_tauri::commands;
 
 use std::sync::Arc;
 
+use agentic_core::auth::secrets::KeyringSecretStore;
+use agentic_core::db::auth::AuthRepo;
 use agentic_core::db::workspaces::{Workspace, WorkspaceRepo};
 use agentic_core::events::EventBus;
 use agentic_core::{Db, Paths, init as init_logging};
+use commands::auth::{AuthState, WebbrowserOpener};
 use commands::chat::ChatState;
 use commands::events::EventBusState;
 use commands::findings::FindingsState;
@@ -53,6 +56,19 @@ fn main() {
             app.manage(EventBusState::new(bus));
             app.manage(ChatState::new(&db));
             app.manage(FindingsState::new(&db));
+
+            // Auth: real OS keyring + production browser opener. The
+            // GitHub base URL is the public host; integration tests
+            // inject a wiremock server via build_app helpers.
+            let auth_state = AuthState {
+                repo: AuthRepo::new(&db),
+                secrets: Arc::new(KeyringSecretStore::new("io.agentic.app")),
+                opener: Arc::new(WebbrowserOpener),
+                github_base_url: "https://github.com".to_string(),
+                callback_timeout_secs: 5 * 60,
+            };
+            app.manage(auth_state);
+
             // Manage the Db itself so commands that need to seed multiple
             // tables in one call (scripted_run) can do their own writes.
             app.manage(db);
@@ -69,6 +85,9 @@ fn main() {
             commands::mention::mention_agent,
             commands::findings::triage_finding,
             commands::findings::list_findings,
+            commands::auth::list_auth_accounts,
+            commands::auth::delete_auth_account,
+            commands::auth::connect_github,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

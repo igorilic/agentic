@@ -10,6 +10,9 @@ fn main() {
             "mention_agent",
             "triage_finding",
             "list_findings",
+            "list_auth_accounts",
+            "delete_auth_account",
+            "connect_github",
         ]),
     ))
     .expect("failed to run tauri build");
