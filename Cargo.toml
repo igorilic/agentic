@@ -6,6 +6,7 @@ members = [
     "crates/agentic-cli",
     "crates/agentic-tauri",
     "crates/agentic-tui",
+    "crates/agentic-node",
 ]
 
 [workspace.package]

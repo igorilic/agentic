@@ -1,0 +1,30 @@
+[package]
+name = "agentic-node"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# napi-rs decision (spec §25.4): default to napi-rs over WASM for
+# better streaming performance — the async-iterator surface for
+# `subscribeEvents` benefits from native bindings + tokio runtime
+# integration. WASM stays as a fallback build option for environments
+# where shipping prebuilt native binaries is friction.
+napi = { version = "2", default-features = false, features = ["napi9", "tokio_rt", "async"] }
+napi-derive = "2"
+
+agentic-core = { path = "../agentic-core" }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ulid = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tempfile = { workspace = true }
+
+[build-dependencies]
+napi-build = "2"

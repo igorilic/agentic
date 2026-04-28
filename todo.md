@@ -1624,7 +1624,7 @@ Legend:
 
 ## Phase 14 — VS Code extension (MVP scaffolding)
 
-### Step 14.1: napi-rs bindings for core (`agentic-node`)
+### [x] Step 14.1: napi-rs bindings for core (`agentic-node`)
 
 **Goal**: A native module exposing `startRun`, `subscribeEvents` (async iterator), `triageFinding` as N-API functions.
 
@@ -2112,3 +2112,10 @@ Cross-cutting reminders:
 - **`syntect` syntax highlighting in diff view**: Step 13.1 ships +/- coloring only (the spec's primary contract). Adding `syntect` for in-line code colouring is the next quality bump — it brings ~20 MB of `.tmTheme` / `.sublime-syntax` data, so wait until the binary's distribution story is settled.
 - **`current_diff` population from `Event::FileChange`**: the event carries only hashes; the diff text lives in `file_changes.diff` (DB BLOB). Wiring the lookup into the TUI binary needs a `Db` handle in the run loop — defer until the binary subscribes to a real bus (12.4-style integration step that didn't make 12.4's scope).
 - **Back-fill 13.2 decision as ADR-001**: the choice between Monaco / `@git-diff-view/react` / in-house was recorded in commit `9fedb98`'s body. When `docs/decisions/` is created (e.g. for the next ADR-worthy decision), promote this rationale to `ADR-001-tauri-diff-viewer.md` so it's discoverable.
+
+## agentic-node (napi-rs) tech-debt
+
+- **`startRun` only supports the scripted backend**: Step 14.1 ships a working bridge but real `claude-code` / `copilot-cli` backends still need agent discovery and workspace setup wiring before they can run from Node. Pick this up alongside Step 14.3 (sidebar) so the VS Code extension can drive a real run.
+- **Cross-platform CI is unverified**: `.github/workflows/agentic-node.yml` was scaffolded from `package.json`'s declared triples but only macOS-arm64 was exercised locally. Expect the first push to surface tweaks (linux libssl, windows MSVC linker).
+- **`list_findings` read API**: the napi smoke test relies on `triageFinding` returning success for triage assertions. A `listFindings(runId)` napi export would let JS callers (and future tests) verify triage state directly. Mirror Tauri's `list_findings` command.
+- **`cancelRun` napi export**: `CANCELS` map is populated by `start_run` but no napi function exposes cancellation yet. ~10 lines once a `cancel_run(runId)` is added.

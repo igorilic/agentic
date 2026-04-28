@@ -1,0 +1,89 @@
+name: agentic-node
+
+# Cross-platform native build for the napi-rs bindings. Matrix matches
+# the `triples` declared in `crates/agentic-node/package.json`.
+#
+# Status: scaffolded but unverified — only the macOS-arm64 leg has been
+# exercised locally. CI is the only place the other targets get
+# validated; expect the first push to surface tweaks (libssl-dev for
+# linux-gnu, MSVC linker flags on windows). When that happens, fix the
+# specific job rather than weakening the matrix.
+
+on:
+  pull_request:
+    paths:
+      - "crates/agentic-node/**"
+      - "crates/agentic-core/**"
+      - ".github/workflows/agentic-node.yml"
+  push:
+    branches: [main]
+    paths:
+      - "crates/agentic-node/**"
+      - "crates/agentic-core/**"
+      - ".github/workflows/agentic-node.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            cross: true
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: agentic-node-${{ matrix.target }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install pnpm deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Install cross-compile tooling (linux-arm64 only)
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build native binary
+        working-directory: crates/agentic-node
+        run: pnpm exec napi build --platform --release --target ${{ matrix.target }}
+
+      - name: Test (host target only)
+        if: matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin' || matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-msvc'
+        working-directory: crates/agentic-node
+        run: pnpm test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentic-node-${{ matrix.target }}
+          path: crates/agentic-node/*.node
+          if-no-files-found: error
