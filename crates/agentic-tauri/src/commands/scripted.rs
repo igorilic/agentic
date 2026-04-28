@@ -329,6 +329,22 @@ pub async fn start_scripted_run<R: Runtime>(
             },
         );
         bus.publish(complete_envelope);
+
+        // CP-9 / #70: project the terminal status back into the typed runs
+        // table. Without this, every scripted run leaves its row stuck on
+        // status='running' forever — misleading any future "list past runs"
+        // surface and breaking parity with CLI ticket runs (which do this
+        // via the orchestrator). `mark_complete` enforces a legal
+        // Running→{Completed,Failed,…} transition; on failure we log and
+        // keep going since the bus already published RunComplete.
+        let runs_repo = RunRepo::new(&db);
+        if let Err(e) = runs_repo.mark_complete(&run_id, status, unix_ms(), duration_ms as i64) {
+            tracing::warn!(
+                error = %e,
+                run_id = %run_id,
+                "scripted_run: failed to project RunComplete into runs.status; continuing",
+            );
+        }
     });
 
     Ok(returned_run_id)

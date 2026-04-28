@@ -524,6 +524,15 @@ Then click **Connect GitHub** again.
 
 `gh` isn't on your PATH. Install it from https://cli.github.com/ (or `brew install gh` on macOS).
 
+### Past runs are listed as `status='running'` forever
+
+Pre-fix: scripted runs from the Tauri shell never updated `runs.status` after RunComplete. Closed in commit (current); now `runs.status` flips to `completed` (or `failed` on cancel) and `completed_at` is set. If you see stuck rows, they're from before the fix — clear them with:
+
+```fish
+sqlite3 ~/Library/Application\ Support/agentic/state.db \
+  "DELETE FROM runs WHERE status='running' AND backend='scripted';"
+```
+
 ### Findings table is empty after a real CLI run
 
 Real CLI ticket runs use a separate DB connection from the Tauri app's bus. The Tauri UI today reads events that the *Tauri-spawned scripted run* persists. Wiring CLI runs into the Tauri cockpit live is on the roadmap — for now, query SQLite directly (Scenario C) or use scripted demos to exercise the UI.

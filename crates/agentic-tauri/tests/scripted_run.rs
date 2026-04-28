@@ -435,6 +435,92 @@ async fn start_scripted_run_persists_findings_to_db() {
     assert!(list[0].triage.is_none(), "fresh findings start untriaged");
 }
 
+// ─── REGRESSION (#70) — RunComplete must flip runs.status off "running" ──────
+#[tokio::test(flavor = "multi_thread")]
+async fn run_complete_projects_back_into_runs_status() {
+    use agentic_core::db::runs::RunRepo;
+    use agentic_core::events::RunStatus as CoreRunStatus;
+
+    let (app, db) = build_app_with_db();
+
+    let events = vec![Event::TextDelta {
+        content: "tiny".to_string(),
+    }];
+    let script = write_script_under_cwd(&events);
+
+    let run_id = start_scripted_run(
+        app.handle().clone(),
+        app.state::<EventBusState>(),
+        app.state::<Db>(),
+        script.path().to_string_lossy().into_owned(),
+        Some(0),
+    )
+    .await
+    .expect("start");
+
+    // Wait for the publish loop + RunComplete + project-back to flush.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let runs = RunRepo::new(&db);
+    let row = runs
+        .get(&run_id)
+        .expect("get run row")
+        .expect("run row should exist after seeding");
+    assert_eq!(
+        row.status,
+        CoreRunStatus::Completed,
+        "happy-path RunComplete must flip runs.status from Running to Completed",
+    );
+    assert!(
+        row.completed_at.is_some(),
+        "completed_at should be set when status flips off Running"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cancel_run_projects_failed_status_back_into_runs_table() {
+    use agentic_core::db::runs::RunRepo;
+    use agentic_core::events::RunStatus as CoreRunStatus;
+
+    let (app, db) = build_app_with_db();
+
+    // 5 events, 200ms apart — slow enough that we can cancel after the first.
+    let events: Vec<Event> = (0..5)
+        .map(|i| Event::TextDelta {
+            content: format!("chunk-{i}"),
+        })
+        .collect();
+    let script = write_script_under_cwd(&events);
+
+    let run_id = start_scripted_run(
+        app.handle().clone(),
+        app.state::<EventBusState>(),
+        app.state::<Db>(),
+        script.path().to_string_lossy().into_owned(),
+        Some(200),
+    )
+    .await
+    .expect("start");
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    cancel_run(app.state::<EventBusState>(), run_id.clone())
+        .await
+        .expect("cancel");
+
+    // Wait for the cancel cascade + RunComplete(Failed) + project-back.
+    tokio::time::sleep(Duration::from_millis(400)).await;
+
+    let row = RunRepo::new(&db)
+        .get(&run_id)
+        .expect("get")
+        .expect("run row");
+    assert_eq!(
+        row.status,
+        CoreRunStatus::Failed,
+        "cancelled run must flip runs.status from Running to Failed",
+    );
+}
+
 // ─── REGRESSION — running the same script twice persists findings both times ─
 #[tokio::test(flavor = "multi_thread")]
 async fn start_scripted_run_persists_findings_across_reruns_with_same_finding_id() {
