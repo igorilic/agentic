@@ -12,23 +12,46 @@ type MentionResult = {
   dispatched: boolean;
 };
 
-const slashServices: SlashServices = {
-  plan: async (_ticket) => {
-    throw new Error("[STUB] /plan is not yet wired to a real backend (Phase 11.4+)");
-  },
-  status: async (_runId) => {
-    throw new Error("[STUB] /status is not yet wired to a real backend (Phase 11.4+)");
-  },
-  cancel: async (_runId) => {
-    throw new Error("[STUB] /cancel is not yet wired to a real backend (Phase 11.4+)");
-  },
+export type ChatPaneProps = {
+  /// Called when `/plan <ticket>` successfully kicks off a real ticket run.
+  /// The cockpit uses this to pin its active-run id so the Stepper /
+  /// EventList / FindingsTable follow the new run.
+  onTicketRunStarted?: (runId: string) => void;
 };
 
-export default function ChatPane() {
+export default function ChatPane({ onTicketRunStarted }: ChatPaneProps = {}) {
   const { messages, send, sending, error } = useChat();
   const [draft, setDraft] = useState("");
   const [systemMessages, setSystemMessages] = useState<string[]>([]);
   const mentionEvents = useMentionEvents();
+
+  // Slash-command services. Defined inside the component so `plan` can close
+  // over the `onTicketRunStarted` callback (which lives in parent state).
+  // `status` and `cancel` remain stubbed for now — Phase 11.7+.
+  const slashServices: SlashServices = useMemo(
+    () => ({
+      plan: async (ticket: string) => {
+        const runId = (await invoke("start_ticket_run", {
+          ticket,
+          backend: "claude-code",
+          model: null,
+        })) as string;
+        onTicketRunStarted?.(runId);
+        return runId;
+      },
+      status: async (_runId) => {
+        throw new Error(
+          "[STUB] /status is not yet wired to a real backend (Phase 11.7+)",
+        );
+      },
+      cancel: async (_runId) => {
+        throw new Error(
+          "[STUB] /cancel is not yet wired to a real backend (Phase 11.7+)",
+        );
+      },
+    }),
+    [onTicketRunStarted],
+  );
 
   // Project mention envelopes into renderable text. Only TextDelta is shown;
   // other envelope kinds (RunStarted, RunComplete, …) are bookkeeping for the

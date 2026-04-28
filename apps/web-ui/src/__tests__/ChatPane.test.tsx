@@ -95,17 +95,29 @@ describe("ChatPane", () => {
     });
   });
 
-  it("typing a /plan command shows a [STUB] system message", async () => {
+  it("typing a /plan command invokes start_ticket_run and notifies the parent", async () => {
+    invokeMock.mockResolvedValueOnce("01abc"); // start_ticket_run returns run_id
+    const onStart = vi.fn();
     const user = userEvent.setup();
-    render(<ChatPane />);
+    render(<ChatPane onTicketRunStarted={onStart} />);
 
     await user.type(screen.getByTestId("chat-input"), "/plan #42");
     await user.click(screen.getByTestId("chat-send"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("chat-message-system")).toBeInTheDocument();
+      expect(invokeMock).toHaveBeenCalledWith("start_ticket_run", {
+        ticket: "#42",
+        backend: "claude-code",
+        model: null,
+      });
     });
-    expect(screen.getByTestId("chat-message-system")).toHaveTextContent("[STUB]");
+    await waitFor(() => {
+      expect(onStart).toHaveBeenCalledWith("01abc");
+    });
+    // System message confirms the run started.
+    expect(screen.getByTestId("chat-message-system")).toHaveTextContent(
+      /started run 01abc/i,
+    );
   });
 
   it("displays error when invoke rejects", async () => {

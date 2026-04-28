@@ -43,9 +43,10 @@ Roughly Phase 11 of 14 is in flight. Quick truth-table:
 | Event persistence (SQLite) | ✅ | | |
 | Tauri shell — scripted run + cockpit + findings triage | ✅ | | |
 | Tauri shell — chat (echo only) | | ✅ | |
-| Tauri shell — `/plan` `/status` `/cancel` slash commands | | ✅ | |
+| Tauri shell — `/plan <ticket>` (real ticket runs) | ✅ | | |
+| Tauri shell — `/status` / `/cancel` slash commands | | ✅ | |
 | Tauri shell — `@architect …` mentions | | ✅ | |
-| Tauri shell — kick off ticket-driven pipeline from chat | | | ❌ |
+| Tauri shell — kick off ticket-driven pipeline from chat | ✅ | | |
 | Tauri shell — connect / disconnect GitHub account (Settings pane) | ✅ | | |
 | GH OAuth via PKCE + keychain storage | ✅ | | |
 | GitLab OAuth in UI | core implemented | | not exposed in UI |
@@ -306,10 +307,10 @@ cargo tauri dev
 
 - **Cockpit / Stepper** — pipeline progress (`architect → tdd-developer → qa → reviewer`), token totals, cost
 - **EventList** — the raw envelope stream (most-recent 500, sliding window)
-- **StartRunForm** — kick off a *scripted* run from a JSON path. Real ticket runs are not exposed here yet.
+- **StartRunForm** — kick off a *scripted* run from a JSON path. (Real ticket runs go through the chat — see below.)
 - **ChatPane** — type a message; assistant echoes it (stub). Slash + mention commands recognised:
-  - `/plan #42` → system message `[STUB] /plan…`
-  - `/status <run-id>`, `/cancel <run-id>` → same stubs
+  - `/plan <ticket>` — **real ticket run** against the cwd. Invokes the `start_ticket_run` IPC (claude-code backend by default), seeds workspace + run rows, returns the run_id, and pins the cockpit to it. Events stream live into the Stepper / EventList / FindingsTable.
+  - `/status <run-id>`, `/cancel <run-id>` → still stubbed (`[STUB] /status…`); Phase 11.7+.
   - `@architect ship it` → routes through `mention_agent` IPC, streams two stub envelopes onto the dedicated `agentic://mention-event` channel which renders as `chat-message-mention` rows
 - **FindingsTable** — for the run shown in the cockpit, lists `Event::Finding` entries with `[Fix] [Tech-debt] [Ignore]` buttons. Triage writes through the IPC and updates `findings.triage` in SQLite. See §8 for what each tag means in practice.
 - **SettingsPane** — bottom of the page, lets you connect/disconnect GitHub OAuth accounts. Token lives in the OS keychain; only metadata (provider/host/username/expiry/timestamps) is in the SQLite `auth_accounts` table. See §3 for the GitHub setup walkthrough.
@@ -451,6 +452,30 @@ sqlite3 -header -column … \
 ```
 
 The DB is the ground truth. The Tauri UI's history is read from `stream_events` via `get_event_history(runId)`.
+
+### Scenario E — drive a real ticket run from the Tauri shell's chat
+
+Replaces the CLI `agentic-cli run --ticket "…"` flow with a UI version. **Important caveat**: the run uses the Tauri binary's *cwd at launch time* as the workspace root, so launch the binary from inside the project you want it to operate on.
+
+```fish
+cd ~/work/my-project
+~/agentic/target/debug/agentic-tauri    # or `cargo tauri dev` from crates/agentic-tauri
+```
+
+In the chat pane, type:
+
+```
+/plan Login race: two concurrent /auth requests can return 500
+```
+
+Behaviour:
+1. The chat shows a system message `Started run 01abc… for ticket: …`.
+2. The cockpit pins to the new run; Stepper turns on, EventList streams envelopes live.
+3. Architect → tdd-developer → qa → reviewer execute against your repo.
+4. Reviewer findings populate the FindingsTable; you triage them with the existing `Fix / Tech-debt / Ignore` buttons.
+5. On completion, `runs.status` flips to `completed` (or `completed_with_tech_debt` / `failed`).
+
+Backend defaults to `claude-code`. To use copilot-cli, the `start_ticket_run` IPC accepts a `backend` arg, but the chat command doesn't expose a switch yet — workaround: the CLI still does (`agentic-cli run --backend copilot-cli --ticket "…"`).
 
 ### Scenario D — iterate on agent prompts without burning tokens
 

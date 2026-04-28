@@ -61,7 +61,7 @@ export default function App() {
       />
       <Stepper state={runState} />
       <section className="p-6">
-        <ChatPane />
+        <ChatPane onTicketRunStarted={setActiveRunId} />
       </section>
       <section className="px-6 pb-6">
         <EventList events={events} />

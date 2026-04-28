@@ -17,6 +17,7 @@
     "allow-list-auth-accounts",
     "allow-delete-auth-account",
     "allow-connect-github",
-    "allow-connect-github-via-gh"
+    "allow-connect-github-via-gh",
+    "allow-start-ticket-run"
   ]
 }

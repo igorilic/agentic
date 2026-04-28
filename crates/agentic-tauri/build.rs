@@ -14,6 +14,7 @@ fn main() {
             "delete_auth_account",
             "connect_github",
             "connect_github_via_gh",
+            "start_ticket_run",
         ]),
     ))
     .expect("failed to run tauri build");

@@ -17,6 +17,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 agentic-core = { path = "../agentic-core" }
+agentic-cli = { path = "../agentic-cli" }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

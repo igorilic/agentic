@@ -90,6 +90,7 @@ fn main() {
             commands::auth::delete_auth_account,
             commands::auth::connect_github,
             commands::auth::connect_github_via_gh,
+            commands::ticket::start_ticket_run,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

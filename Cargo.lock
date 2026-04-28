@@ -79,6 +79,7 @@ dependencies = [
 name = "agentic-tauri"
 version = "0.1.0"
 dependencies = [
+ "agentic-cli",
  "agentic-core",
  "async-trait",
  "reqwest 0.12.28",
