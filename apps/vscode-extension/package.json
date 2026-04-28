@@ -3,7 +3,31 @@
   "version": "0.1.0",
   "private": true,
   "description": "VS Code / VSCodium / Cursor / Windsurf extension entrypoint for Agentic.",
-  "scripts": {},
-  "dependencies": {},
-  "devDependencies": {}
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentic.hello",
+        "title": "Agentic: Hello"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vscode-test",
+    "test:unit": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "typescript": "^5.5.0"
+  }
 }
