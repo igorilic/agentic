@@ -32,6 +32,15 @@ pub(crate) fn build_claude_argv(req: &ExecuteRequest) -> Vec<String> {
         "--output-format".to_string(),
         "stream-json".to_string(),
         "--verbose".to_string(), // REQUIRED when combining -p + stream-json
+        // Headless pipeline invocation: there's no human to approve each
+        // Edit/Write/Bash call. Without this flag, Claude returns
+        // exit_code=1 on every tool that would normally trigger a
+        // permission prompt, which silently breaks the entire pipeline
+        // (architect/tdd-developer "complete" without writing files).
+        // The pipeline IS the permission model here — the user implicitly
+        // approves by invoking /plan, the agent system prompts curate
+        // behaviour, and the workspace_root scopes filesystem access.
+        "--dangerously-skip-permissions".to_string(),
     ];
     if let Some(ref model) = req.model {
         args.push("--model".to_string());
@@ -296,6 +305,22 @@ mod tests {
         assert!(
             argv.iter().any(|a| a == "--verbose"),
             "argv missing --verbose: {argv:?}"
+        );
+    }
+
+    /// Regression: headless `-p` mode can't show a permission prompt, so
+    /// without `--dangerously-skip-permissions` Claude denies every Edit /
+    /// Write / Bash with exit_code=1 and the pipeline silently no-ops
+    /// (agents "complete" without making any changes). User reproduced
+    /// against ~/open-source/small-repo on 2026-04-28: tests passed,
+    /// reviewer found nothing, but `git diff` was empty.
+    #[test]
+    fn argv_includes_skip_permissions_for_headless_invocation() {
+        let req = make_test_request();
+        let argv = build_claude_argv(&req);
+        assert!(
+            argv.iter().any(|a| a == "--dangerously-skip-permissions"),
+            "argv missing --dangerously-skip-permissions: {argv:?}"
         );
     }
 
