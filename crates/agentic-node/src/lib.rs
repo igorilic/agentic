@@ -82,6 +82,79 @@ fn severity_str(s: Severity) -> &'static str {
     }
 }
 
+// ─── listFindings ────────────────────────────────────────────────────────────
+
+/// Plain-data shape of a finding row, suitable for napi serialisation.
+/// Mirrors `agentic_core::db::findings::FindingRow` but with all
+/// fields adjusted to napi-friendly types (no `Option<u32>` collapse).
+#[napi(object)]
+pub struct JsFinding {
+    pub id: String,
+    pub run_id: String,
+    pub step_id: String,
+    pub severity: String,
+    pub file_path: Option<String>,
+    pub line: Option<u32>,
+    pub message: String,
+    pub suggestion: Option<String>,
+    pub triage: Option<String>,
+    pub triaged_at: Option<i64>,
+    pub created_at: i64,
+}
+
+impl From<FindingRow> for JsFinding {
+    fn from(r: FindingRow) -> Self {
+        Self {
+            id: r.id,
+            run_id: r.run_id,
+            step_id: r.step_id,
+            severity: r.severity,
+            file_path: r.file_path,
+            line: r.line,
+            message: r.message,
+            suggestion: r.suggestion,
+            triage: r.triage,
+            triaged_at: r.triaged_at,
+            created_at: r.created_at,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct ListFindingsOptions {
+    pub data_dir: String,
+    pub run_id: String,
+}
+
+/// List all findings persisted for a run. Mirrors Tauri's
+/// `list_findings` command — returns an empty vec for unknown runs.
+#[napi]
+pub async fn list_findings(opts: ListFindingsOptions) -> Result<Vec<JsFinding>> {
+    let ListFindingsOptions { data_dir, run_id } = opts;
+    let db = open_db(&data_dir)?;
+    let rows = FindingsRepo::new(&db)
+        .list_by_run(&run_id)
+        .map_err(|e| Error::from_reason(format!("list_by_run: {e}")))?;
+    Ok(rows.into_iter().map(JsFinding::from).collect())
+}
+
+// ─── cancelRun ───────────────────────────────────────────────────────────────
+
+/// Cancel an in-flight run. Returns `true` if a matching cancel token
+/// was found and triggered, `false` if no such run is active. Idempotent:
+/// calling it twice for the same run on the second call returns `false`
+/// because the first call already removed the entry.
+#[napi]
+pub fn cancel_run(run_id: String) -> bool {
+    let map = CANCELS.lock().expect("CANCELS poisoned");
+    if let Some(token) = map.get(&run_id) {
+        token.cancel();
+        true
+    } else {
+        false
+    }
+}
+
 // ─── triageFinding ───────────────────────────────────────────────────────────
 
 #[napi(object)]

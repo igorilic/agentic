@@ -68,15 +68,61 @@ describe("agentic-node smoke", () => {
     for await (const env of node.iterate(stream)) {
       if (env.event.type === "RunComplete") break;
     }
+
+    // Pre-triage: row exists with triage unset (napi maps Option::None
+    // to undefined, not null).
+    const before = await node.listFindings({ dataDir, runId });
+    expect(before).toHaveLength(1);
+    expect(before[0].id).toBe("smoke-f1");
+    expect(before[0].triage).toBeUndefined();
+
     await node.triageFinding({
       dataDir,
       runId,
       findingId: "smoke-f1",
       triage: "tech-debt",
     });
-    // No exception means it succeeded — invalid triage / unknown
-    // finding both reject. (A list_findings query would be the
-    // tighter assertion; deferred until a future read-side fn lands.)
+
+    // Post-triage: same row, triage updated.
+    const after = await node.listFindings({ dataDir, runId });
+    expect(after).toHaveLength(1);
+    expect(after[0].triage).toBe("tech-debt");
+    expect(after[0].triagedAt).toBeGreaterThan(0);
+  });
+
+  it("listFindings returns an empty array for an unknown run", async () => {
+    const findings = await node.listFindings({
+      dataDir,
+      runId: "nonexistent-run",
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it("cancelRun returns true for an in-flight run, false afterwards", async () => {
+    // Use a longer delay so the run is definitely still in flight
+    // when we cancel — at delay=50ms with 5 events the loop is
+    // alive for ~250ms.
+    const { runId } = await node.startRun({
+      dataDir,
+      scriptPath: FIXTURE,
+      delayMs: 50,
+    });
+    expect(node.cancelRun(runId)).toBe(true);
+
+    // Drain to ensure the run actually winds down (publishes its
+    // RunComplete after observing the cancel) before we re-query.
+    const stream = node.subscribeEvents(runId);
+    for await (const env of node.iterate(stream)) {
+      if (env.event.type === "RunComplete") break;
+    }
+
+    // Map entry has been removed by the loop's cleanup; second
+    // cancel returns false.
+    expect(node.cancelRun(runId)).toBe(false);
+  });
+
+  it("cancelRun returns false for an unknown run id", () => {
+    expect(node.cancelRun("never-existed")).toBe(false);
   });
 
   it("triageFinding rejects an unknown finding id", async () => {

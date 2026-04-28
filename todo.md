@@ -2117,5 +2117,3 @@ Cross-cutting reminders:
 
 - **`startRun` only supports the scripted backend**: Step 14.1 ships a working bridge but real `claude-code` / `copilot-cli` backends still need agent discovery and workspace setup wiring before they can run from Node. Pick this up alongside Step 14.3 (sidebar) so the VS Code extension can drive a real run.
 - **Cross-platform CI is unverified**: `.github/workflows/agentic-node.yml` was scaffolded from `package.json`'s declared triples but only macOS-arm64 was exercised locally. Expect the first push to surface tweaks (linux libssl, windows MSVC linker).
-- **`list_findings` read API**: the napi smoke test relies on `triageFinding` returning success for triage assertions. A `listFindings(runId)` napi export would let JS callers (and future tests) verify triage state directly. Mirror Tauri's `list_findings` command.
-- **`cancelRun` napi export**: `CANCELS` map is populated by `start_run` but no napi function exposes cancellation yet. ~10 lines once a `cancel_run(runId)` is added.
