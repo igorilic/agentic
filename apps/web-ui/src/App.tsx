@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import ChatPane from "./components/ChatPane";
+import DismissableBanner from "./components/DismissableBanner";
 import EventList from "./components/EventList";
 import FindingsTable from "./components/FindingsTable";
 import SettingsPane from "./components/SettingsPane";
@@ -23,6 +24,14 @@ export default function App() {
 
   const { events, historyError } = useTauriEvents(activeRunId);
   const { findings, error: findingsError } = useFindings(findingsRunId, findingsRefetchKey);
+  // Local dismiss state for the findings-error toast — once the user
+  // closes it, don't surface the same error again until a fresh fetch
+  // produces a new error (which resets `findingsError` to null briefly
+  // and then to the new value, both of which clear the dismissed flag).
+  const [findingsErrorDismissed, setFindingsErrorDismissed] = useState(false);
+  useEffect(() => {
+    setFindingsErrorDismissed(false);
+  }, [findingsError]);
 
   useEffect(() => {
     if (activeRunId && activeRunId !== findingsRunId) {
@@ -45,15 +54,21 @@ export default function App() {
       <header className="px-6 py-4 border-b border-gray-200">
         <h1 className="text-2xl font-bold text-gray-900">Agentic</h1>
       </header>
-      {historyError && (
-        <div
-          className="px-6 py-2 bg-yellow-50 border-b border-yellow-200 text-sm text-yellow-800"
-          role="alert"
-          data-testid="history-error-banner"
-        >
-          Could not load event history: {historyError}
-        </div>
-      )}
+      <DismissableBanner
+        testId="history-error-banner"
+        severity="warning"
+        message={historyError ? `Could not load event history: ${historyError}` : null}
+      />
+      <DismissableBanner
+        testId="findings-error-banner"
+        severity="error"
+        message={
+          findingsError && !findingsErrorDismissed
+            ? `Could not load findings: ${findingsError}`
+            : null
+        }
+        onDismiss={() => setFindingsErrorDismissed(true)}
+      />
       <StartRunForm
         events={events}
         activeRunId={activeRunId}
@@ -67,15 +82,6 @@ export default function App() {
         <EventList events={events} />
       </section>
       <section className="px-6 pb-6">
-        {findingsError && (
-          <div
-            className="mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700"
-            role="alert"
-            data-testid="findings-error-banner"
-          >
-            Could not load findings: {findingsError}
-          </div>
-        )}
         <FindingsTable findings={findings} />
       </section>
       <section className="px-6 pb-6">
