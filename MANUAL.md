@@ -140,26 +140,31 @@ If you already have agents in `~/.claude/agents/` from Claude Code, the pipeline
 
 ### (Optional) Connect a GitHub account
 
-Required only for ticket fetch from GitHub Issues / GitLab — `agentic-cli run --ticket "free-text"` works without it. Setup is one-time:
+Required only for ticket fetch from GitHub Issues — `agentic-cli run --ticket "free-text"` works without it.
 
-1. Open the Tauri shell (§7).
-2. Scroll to **Settings — Accounts** at the bottom.
-3. Register an OAuth App at GitHub:
-   - github.com → Settings → Developer settings → OAuth Apps → **New OAuth App**
-   - Set the **callback URL** to `http://127.0.0.1/*` (literal — GitHub expands this to whatever ephemeral port the loopback listener picks)
-   - Copy the **Client ID** (looks like `Iv1.…`)
-4. Paste the Client ID into the Settings form, click **Connect**.
-5. Your default browser opens GitHub's authorize page; sign in + approve.
-6. The browser redirects back to a localhost loopback; the shell receives the code, exchanges it for a token, and stores the token in your OS keychain.
-7. The account row appears in the Settings list.
+**The default flow uses your existing `gh` CLI session — no OAuth-app registration, no browser dance, no Client ID to paste.** Per spec §15.4 ("Always-On Fallback: Delegate to existing CLI session"), Agentic shells out to `gh auth status` + `gh auth token` and stores the captured token in your OS keychain.
+
+1. Make sure `gh` is authenticated:
+   ```fish
+   gh auth status   # should show your username and active token
+   gh auth login    # if not — pick GitHub.com, follow the prompts
+   ```
+2. Open the Tauri shell (§7).
+3. Scroll to **Settings — Accounts** at the bottom.
+4. Click **Connect GitHub**.
+5. The account row appears immediately. Done.
 
 **What's stored where:**
 - DB row in `auth_accounts` (id, provider, host, username, expiry, timestamps) — no secret.
-- Access token in OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret Service) keyed by `github:github.com`.
+- Access token in OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret Service) under service `io.agentic.app`, account `github:github.com`.
 
 **Disconnect** clears both.
 
-GitLab follows the same pattern but the UI doesn't expose it yet (Phase 11.7+).
+If `gh` isn't authenticated, the connect button surfaces an actionable error (`run gh auth login and try again`).
+
+**Advanced — full OAuth flow** (for users without `gh` or who want a separate token): the `connect_github(client_id)` IPC is wired but not exposed in the Settings UI. It runs the spec §15.1 PKCE+loopback flow: register an OAuth App at github.com → Settings → Developer settings → OAuth Apps with callback `http://127.0.0.1/*`, then call the IPC programmatically. UI exposure is deferred (Phase 11.7+).
+
+GitLab follows the same delegate pattern via `glab auth token`; UI exposure also deferred.
 
 ---
 
@@ -503,14 +508,21 @@ It's a timing-based test on a busy CI machine; usually passes on retry. Not yet 
 
 The path validator only allows files under `cwd` or the app's data dir. Move your JSON into the repo root or under `~/Library/Application Support/io.agentic.app/`.
 
-### "Connect" hangs forever in the Settings pane
+### "Connect GitHub" fails with "no existing gh session"
 
-The 5-minute callback timeout has elapsed without the browser redirecting back. Common causes:
-- Your OAuth App's callback URL doesn't include `http://127.0.0.1/*` (GitHub will reject the redirect; the user sees an error in the browser but the shell never receives anything).
-- Your firewall is blocking the loopback listener.
-- You closed the browser tab before completing the flow.
+You haven't run `gh auth login`. The Settings panel default flow reuses your `gh` CLI session — if `gh` isn't authenticated, there's no token to import. Fix:
 
-Fix: re-check the callback URL pattern, click **Connect** again, complete the flow promptly.
+```fish
+gh auth login
+# pick GitHub.com → HTTPS → authenticate via browser
+gh auth status   # confirm
+```
+
+Then click **Connect GitHub** again.
+
+### "Connect GitHub" fails with "gh CLI not available"
+
+`gh` isn't on your PATH. Install it from https://cli.github.com/ (or `brew install gh` on macOS).
 
 ### Findings table is empty after a real CLI run
 

@@ -58,30 +58,26 @@ describe("SettingsPane", () => {
     );
   });
 
-  it("submitting the connect form invokes connect_github with the client_id", async () => {
+  it("clicking the Connect button calls connect_github_via_gh (zero-config)", async () => {
     invokeMock
       .mockResolvedValueOnce([]) // list on mount
-      .mockResolvedValueOnce(makeAccount()) // connect_github
+      .mockResolvedValueOnce(makeAccount()) // connect_github_via_gh
       .mockResolvedValueOnce([makeAccount()]); // list on refetch
 
     const user = userEvent.setup();
     render(<SettingsPane />);
     await waitFor(() => expect(invokeMock).toHaveBeenCalled());
 
-    await user.type(
-      screen.getByTestId("connect-github-client-id"),
-      "Iv1.test_client",
-    );
     await user.click(screen.getByTestId("connect-github-submit"));
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith("connect_github", {
-        clientId: "Iv1.test_client",
-      });
+      expect(invokeMock).toHaveBeenCalledWith("connect_github_via_gh");
     });
     // After success, the account should appear in the list.
     await waitFor(() => {
-      expect(screen.getByTestId("auth-account-row-github:github.com")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("auth-account-row-github:github.com"),
+      ).toBeInTheDocument();
     });
   });
 
@@ -102,25 +98,22 @@ describe("SettingsPane", () => {
     render(<SettingsPane />);
     await waitFor(() => expect(invokeMock).toHaveBeenCalled());
 
-    await user.type(screen.getByTestId("connect-github-client-id"), "Iv1.x");
     await user.click(screen.getByTestId("connect-github-submit"));
 
     await waitFor(() => {
       expect(screen.getByTestId("connect-github-submit")).toBeDisabled();
     });
+    expect(screen.getByTestId("connect-github-submit")).toHaveTextContent(
+      /connecting/i,
+    );
 
     act(() => {
       resolveConnect!(makeAccount());
     });
 
-    // Drain pending promises so the test doesn't leak unhandled rejections.
-    // The input gets cleared on success so the button stays disabled by the
-    // "no client_id" guard — assert the in-flight state cleared instead by
-    // watching the label flip back from "Connecting…".
+    // Drain pending promises so the test doesn't leak.
     await waitFor(() => {
-      expect(screen.getByTestId("connect-github-submit")).toHaveTextContent(
-        /^connect$/i,
-      );
+      expect(screen.getByTestId("connect-github-submit")).not.toBeDisabled();
     });
   });
 
@@ -148,23 +141,24 @@ describe("SettingsPane", () => {
     });
   });
 
-  it("surfaces a connect-error banner when connect_github rejects", async () => {
+  it("surfaces a connect-error banner when connect_github_via_gh rejects", async () => {
     invokeMock
       .mockResolvedValueOnce([]) // list on mount
-      .mockRejectedValueOnce("token exchange failed: 401");
+      .mockRejectedValueOnce(
+        "no existing gh session — run `gh auth login` and try again",
+      );
 
     const user = userEvent.setup();
     render(<SettingsPane />);
     await waitFor(() => expect(invokeMock).toHaveBeenCalled());
 
-    await user.type(screen.getByTestId("connect-github-client-id"), "Iv1.x");
     await user.click(screen.getByTestId("connect-github-submit"));
 
     await waitFor(() => {
       expect(screen.getByTestId("connect-github-error")).toBeInTheDocument();
     });
     expect(screen.getByTestId("connect-github-error")).toHaveTextContent(
-      /token exchange failed/i,
+      /gh auth login/i,
     );
     // Button re-enables for retry.
     expect(screen.getByTestId("connect-github-submit")).not.toBeDisabled();

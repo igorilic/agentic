@@ -66,6 +66,7 @@ fn main() {
                 opener: Arc::new(WebbrowserOpener),
                 github_base_url: "https://github.com".to_string(),
                 callback_timeout_secs: 5 * 60,
+                gh_binary: std::path::PathBuf::from("gh"),
             };
             app.manage(auth_state);
 
@@ -88,6 +89,7 @@ fn main() {
             commands::auth::list_auth_accounts,
             commands::auth::delete_auth_account,
             commands::auth::connect_github,
+            commands::auth::connect_github_via_gh,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -5,7 +5,6 @@ import type { AuthAccount } from "../types/auth";
 export default function SettingsPane() {
   const [accounts, setAccounts] = useState<AuthAccount[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [clientId, setClientId] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
 
@@ -23,14 +22,15 @@ export default function SettingsPane() {
     refresh();
   }, [refresh]);
 
-  const onConnect = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!clientId.trim() || connecting) return;
+  const onConnect = async () => {
+    if (connecting) return;
     setConnecting(true);
     setConnectError(null);
     try {
-      await invoke("connect_github", { clientId: clientId.trim() });
-      setClientId("");
+      // Spec §15.4: zero-config delegate to the user's existing `gh` CLI
+      // session. No browser flow, no OAuth-app registration. If the user
+      // hasn't run `gh auth login`, the IPC returns an actionable error.
+      await invoke("connect_github_via_gh");
       await refresh();
     } catch (err) {
       setConnectError(String(err));
@@ -100,50 +100,31 @@ export default function SettingsPane() {
         ))}
       </ul>
 
-      <form
-        onSubmit={onConnect}
-        className="flex flex-col gap-2 pt-2 border-t border-gray-200"
-        data-testid="connect-github-form"
-      >
-        <label className="text-sm text-gray-700">
-          Connect GitHub — paste your OAuth App's <code>client_id</code>
-        </label>
+      <div className="flex flex-col gap-2 pt-2 border-t border-gray-200">
         <p className="text-xs text-gray-500">
-          Register at{" "}
-          <span className="font-mono">
-            github.com → Settings → Developer settings → OAuth Apps
-          </span>
-          . Set the callback URL to <span className="font-mono">http://127.0.0.1/*</span>.
+          Reuses your existing <span className="font-mono">gh</span> CLI session.
+          Run <span className="font-mono">gh auth login</span> first if you
+          haven't already.
         </p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
-            placeholder="Iv1.…"
-            data-testid="connect-github-client-id"
-            className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm font-mono"
-            disabled={connecting}
-          />
-          <button
-            type="submit"
-            disabled={!clientId.trim() || connecting}
-            data-testid="connect-github-submit"
-            className="px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:bg-gray-400"
-          >
-            {connecting ? "Connecting…" : "Connect"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onConnect}
+          disabled={connecting}
+          data-testid="connect-github-submit"
+          className="self-start px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:bg-gray-400"
+        >
+          {connecting ? "Connecting…" : "Connect GitHub"}
+        </button>
         {connectError && (
           <div
             role="alert"
             data-testid="connect-github-error"
-            className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1"
+            className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 whitespace-pre-wrap"
           >
             {connectError}
           </div>
         )}
-      </form>
+      </div>
     </section>
   );
 }

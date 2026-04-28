@@ -16,6 +16,7 @@
     "allow-list-findings",
     "allow-list-auth-accounts",
     "allow-delete-auth-account",
-    "allow-connect-github"
+    "allow-connect-github",
+    "allow-connect-github-via-gh"
   ]
 }

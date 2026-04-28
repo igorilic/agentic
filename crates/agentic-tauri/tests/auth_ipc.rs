@@ -7,7 +7,8 @@ use agentic_core::auth::SecretStore;
 use agentic_core::auth::secrets::MemSecretStore;
 use agentic_core::db::auth::{AuthAccount, AuthRepo};
 use agentic_tauri::commands::auth::{
-    AuthState, UrlOpener, connect_github, delete_auth_account, list_auth_accounts,
+    AuthState, UrlOpener, connect_github, connect_github_via_gh, delete_auth_account,
+    list_auth_accounts,
 };
 use tauri::Manager;
 use tauri::test::{mock_builder, mock_context, noop_assets};
@@ -44,18 +45,36 @@ fn build_app(
     opener: RecordingOpener,
     github_base_url: String,
 ) -> tauri::App<tauri::test::MockRuntime> {
+    build_app_with_gh(
+        db,
+        secrets,
+        opener,
+        github_base_url,
+        std::path::PathBuf::from("gh"),
+    )
+}
+
+fn build_app_with_gh(
+    db: &Db,
+    secrets: Arc<MemSecretStore>,
+    opener: RecordingOpener,
+    github_base_url: String,
+    gh_binary: std::path::PathBuf,
+) -> tauri::App<tauri::test::MockRuntime> {
     let state = AuthState {
         repo: AuthRepo::new(db),
         secrets,
         opener: Arc::new(opener),
         github_base_url,
         callback_timeout_secs: 5,
+        gh_binary,
     };
     mock_builder()
         .invoke_handler(tauri::generate_handler![
             agentic_tauri::commands::auth::list_auth_accounts,
             agentic_tauri::commands::auth::delete_auth_account,
             agentic_tauri::commands::auth::connect_github,
+            agentic_tauri::commands::auth::connect_github_via_gh,
         ])
         .manage(state)
         .build(mock_context(noop_assets()))
@@ -151,6 +170,84 @@ async fn delete_auth_account_removes_db_row_and_keychain_entry() {
         .await
         .expect("delete");
     assert!(!again);
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn connect_github_via_gh_imports_token_and_persists_account() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Fake `gh` script: `auth status` → exit 0; `auth token` → print fake token.
+    let tmp = tempfile::tempdir().unwrap();
+    let fake_gh = tmp.path().join("fake-gh.sh");
+    std::fs::write(
+        &fake_gh,
+        "#!/bin/sh\n\
+         case \"$1 $2\" in\n\
+           'auth status') exit 0 ;;\n\
+           'auth token') echo 'gho_from_gh_cli'; exit 0 ;;\n\
+           *) exit 99 ;;\n\
+         esac\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake_gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let db = Db::open_in_memory().unwrap();
+    let secrets = Arc::new(MemSecretStore::with_service("test"));
+    let app = build_app_with_gh(
+        &db,
+        secrets.clone(),
+        RecordingOpener::new(),
+        "https://example".to_string(),
+        fake_gh.clone(),
+    );
+
+    let account = connect_github_via_gh(app.state::<AuthState>())
+        .await
+        .expect("connect_github_via_gh");
+
+    assert_eq!(account.id, "github:github.com");
+    assert_eq!(account.provider, "github");
+    assert_eq!(account.host, "github.com");
+
+    // DB row inserted.
+    let rows = AuthRepo::new(&db).list().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, "github:github.com");
+
+    // Token stored in keychain under the account id.
+    assert_eq!(secrets.get(&account.id).unwrap(), "gho_from_gh_cli");
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn connect_github_via_gh_returns_actionable_error_when_no_session() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Fake `gh` script that always reports no session.
+    let tmp = tempfile::tempdir().unwrap();
+    let fake_gh = tmp.path().join("fake-gh.sh");
+    std::fs::write(&fake_gh, "#!/bin/sh\nexit 1\n").unwrap();
+    std::fs::set_permissions(&fake_gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let db = Db::open_in_memory().unwrap();
+    let secrets = Arc::new(MemSecretStore::with_service("test"));
+    let app = build_app_with_gh(
+        &db,
+        secrets,
+        RecordingOpener::new(),
+        "https://example".to_string(),
+        fake_gh,
+    );
+
+    let err = connect_github_via_gh(app.state::<AuthState>())
+        .await
+        .expect_err("must error when no gh session");
+    // Error message should mention `gh auth login` so users know what to do.
+    assert!(
+        err.contains("gh auth login") || err.to_lowercase().contains("session"),
+        "error should be actionable: {err}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

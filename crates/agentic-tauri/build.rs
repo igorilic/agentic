@@ -13,6 +13,7 @@ fn main() {
             "list_auth_accounts",
             "delete_auth_account",
             "connect_github",
+            "connect_github_via_gh",
         ]),
     ))
     .expect("failed to run tauri build");
