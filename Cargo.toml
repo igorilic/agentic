@@ -5,6 +5,7 @@ members = [
     "crates/agentic-core",
     "crates/agentic-cli",
     "crates/agentic-tauri",
+    "crates/agentic-tui",
 ]
 
 [workspace.package]
@@ -47,4 +48,6 @@ nix = { version = "0.30", default-features = false, features = ["signal"] }
 axum = "0.7"
 webbrowser = "1"
 url = "2"
+ratatui = "0.29"
+crossterm = "0.28"
 zeroize = { version = "1", features = ["derive"] }

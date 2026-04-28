@@ -22,7 +22,7 @@ Three shells share one Rust core:
 |---|---|
 | **CLI** (`agentic-cli`) | working — recommended for real work today |
 | **Tauri desktop app** | MVP cockpit — observability + chat stub + scripted demos |
-| **TUI** | not built yet (Phase 12) |
+| **TUI** (`agentic-tui`) | Step 12.1 only — alt-screen "Hello Agentic" with `q` to quit. Layout, events, and chat input are Steps 12.2–12.5. |
 | **VS Code extension** | not built yet (Phase 14) |
 
 > **Realistic expectation**: For driving real pipelines against real tickets, use the CLI. The Tauri app is currently a cockpit for **watching** runs and **demoing** the pipeline shape with scripted JSON; it does not yet kick off real backend pipelines from the UI.

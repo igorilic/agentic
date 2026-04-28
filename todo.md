@@ -1482,7 +1482,7 @@ Legend:
 
 ## Phase 12 — TUI shell (MVP scaffolding through cockpit parity)
 
-### Step 12.1: `agentic-tui` crate scaffolding
+### [x] Step 12.1: `agentic-tui` crate scaffolding
 
 **Goal**: Binary that opens an alt-screen buffer, renders a "Hello Agentic" in ratatui, and exits on `q`.
 

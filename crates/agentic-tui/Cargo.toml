@@ -1,0 +1,20 @@
+[package]
+name = "agentic-tui"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "agentic-tui"
+path = "src/main.rs"
+
+[lib]
+name = "agentic_tui"
+path = "src/lib.rs"
+
+[dependencies]
+crossterm = { workspace = true }
+ratatui = { workspace = true }
+
+[dev-dependencies]
+ratatui = { workspace = true, features = ["all-widgets"] }
