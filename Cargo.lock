@@ -102,6 +102,7 @@ dependencies = [
 name = "agentic-tui"
 version = "0.1.0"
 dependencies = [
+ "agentic-core",
  "crossterm",
  "ratatui",
 ]

@@ -1,9 +1,14 @@
 //! Application state for the TUI shell.
 //!
-//! Step 12.2: focus + resize. The `AppState` is intentionally small —
-//! a `Pane` enum and a `cockpit_ratio: f32`. All state transitions go
-//! through `handle(AppEvent)` so the bin's key-loop and integration
-//! tests share the same dispatch surface.
+//! Step 12.2 added focus + resize. Step 12.3 adds a `RunState` that
+//! the cockpit pane renders. Bus envelopes flow in via
+//! [`AppState::apply_envelope`]; key presses still flow in via
+//! [`AppState::handle`]. Both surfaces are pure mutators so the bin
+//! and tests share them.
+
+use agentic_core::events::EventEnvelope;
+
+use crate::run::RunState;
 
 /// Which pane currently receives input. Pure state — the renderer reads
 /// it to decorate the focused pane's title; future steps (12.5 chat) will
@@ -33,12 +38,14 @@ const RESIZE_STEP: f32 = 0.10;
 const RATIO_MIN: f32 = 0.20;
 const RATIO_MAX: f32 = 0.80;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct AppState {
     pub focus: Pane,
     /// Fraction of the horizontal width occupied by the cockpit pane.
     /// Clamped to [RATIO_MIN, RATIO_MAX] on every mutation.
     pub cockpit_ratio: f32,
+    /// Pipeline run state — renders as the cockpit stepper.
+    pub run: RunState,
 }
 
 impl Default for AppState {
@@ -46,6 +53,7 @@ impl Default for AppState {
         Self {
             focus: Pane::Cockpit,
             cockpit_ratio: 0.50,
+            run: RunState::default(),
         }
     }
 }
@@ -66,5 +74,11 @@ impl AppState {
                 self.cockpit_ratio = (self.cockpit_ratio - RESIZE_STEP).clamp(RATIO_MIN, RATIO_MAX);
             }
         }
+    }
+
+    /// Forward a bus envelope into the run-state machine. The bin's main
+    /// loop will call this for every envelope yielded by `EventBus::subscribe`.
+    pub fn apply_envelope(&mut self, envelope: &EventEnvelope) {
+        self.run.apply_envelope(envelope);
     }
 }

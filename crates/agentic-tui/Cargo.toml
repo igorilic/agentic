@@ -13,6 +13,7 @@ name = "agentic_tui"
 path = "src/lib.rs"
 
 [dependencies]
+agentic-core = { path = "../agentic-core" }
 crossterm = { workspace = true }
 ratatui = { workspace = true }
 

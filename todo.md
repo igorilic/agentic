@@ -1520,7 +1520,7 @@ Legend:
 
 ---
 
-### Step 12.3: Event subscription + cockpit rendering
+### [x] Step 12.3: Event subscription + cockpit rendering
 
 **Goal**: The TUI subscribes to the core bus and renders events in the cockpit pane (mirroring the Tauri event viewer, but ratatui).
 
