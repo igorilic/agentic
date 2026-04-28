@@ -46,7 +46,9 @@ Roughly Phase 11 of 14 is in flight. Quick truth-table:
 | Tauri shell — `/plan` `/status` `/cancel` slash commands | | ✅ | |
 | Tauri shell — `@architect …` mentions | | ✅ | |
 | Tauri shell — kick off ticket-driven pipeline from chat | | | ❌ |
-| GH / GitLab OAuth + ticket fetch | core implemented | | not exposed in UI |
+| Tauri shell — connect / disconnect GitHub account (Settings pane) | ✅ | | |
+| GH OAuth via PKCE + keychain storage | ✅ | | |
+| GitLab OAuth in UI | core implemented | | not exposed in UI |
 | TUI shell | | | ❌ |
 | VS Code extension | | | ❌ |
 
@@ -135,6 +137,29 @@ Plus:
 - `--force` — overwrite existing files (default: refuse, so hand-edits aren't clobbered)
 
 If you already have agents in `~/.claude/agents/` from Claude Code, the pipeline will discover them automatically — `init` is only needed when you want fresh project-local copies.
+
+### (Optional) Connect a GitHub account
+
+Required only for ticket fetch from GitHub Issues / GitLab — `agentic-cli run --ticket "free-text"` works without it. Setup is one-time:
+
+1. Open the Tauri shell (§7).
+2. Scroll to **Settings — Accounts** at the bottom.
+3. Register an OAuth App at GitHub:
+   - github.com → Settings → Developer settings → OAuth Apps → **New OAuth App**
+   - Set the **callback URL** to `http://127.0.0.1/*` (literal — GitHub expands this to whatever ephemeral port the loopback listener picks)
+   - Copy the **Client ID** (looks like `Iv1.…`)
+4. Paste the Client ID into the Settings form, click **Connect**.
+5. Your default browser opens GitHub's authorize page; sign in + approve.
+6. The browser redirects back to a localhost loopback; the shell receives the code, exchanges it for a token, and stores the token in your OS keychain.
+7. The account row appears in the Settings list.
+
+**What's stored where:**
+- DB row in `auth_accounts` (id, provider, host, username, expiry, timestamps) — no secret.
+- Access token in OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret Service) keyed by `github:github.com`.
+
+**Disconnect** clears both.
+
+GitLab follows the same pattern but the UI doesn't expose it yet (Phase 11.7+).
 
 ---
 
@@ -282,6 +307,7 @@ cargo tauri dev
   - `/status <run-id>`, `/cancel <run-id>` → same stubs
   - `@architect ship it` → routes through `mention_agent` IPC, streams two stub envelopes onto the dedicated `agentic://mention-event` channel which renders as `chat-message-mention` rows
 - **FindingsTable** — for the run shown in the cockpit, lists `Event::Finding` entries with `[Fix] [Tech-debt] [Ignore]` buttons. Triage writes through the IPC and updates `findings.triage` in SQLite. See §8 for what each tag means in practice.
+- **SettingsPane** — bottom of the page, lets you connect/disconnect GitHub OAuth accounts. Token lives in the OS keychain; only metadata (provider/host/username/expiry/timestamps) is in the SQLite `auth_accounts` table. See §3 for the GitHub setup walkthrough.
 
 ### The demo loop (CP-9)
 
@@ -356,6 +382,15 @@ sqlite3 ~/Library/Application\ Support/agentic/state.db "
 "
 ```
 
+### Querying connected accounts
+
+```fish
+sqlite3 ~/Library/Application\ Support/agentic/state.db \
+  "SELECT id, provider, host, username, last_used_at FROM auth_accounts;"
+```
+
+The token itself isn't in the DB — query the OS keychain (macOS: `security find-generic-password -s io.agentic.app -a github:github.com -w`).
+
 ---
 
 ## 9. Practical scenarios
@@ -422,8 +457,9 @@ Build a scripted JSON that mimics the events your real run would produce, run it
 
 | What | Path (macOS) |
 |---|---|
-| SQLite database | `~/Library/Application Support/io.agentic.app/agentic.db` |
-| App data dir | `~/Library/Application Support/io.agentic.app/` |
+| SQLite database | `~/Library/Application Support/agentic/state.db` |
+| App data dir | `~/Library/Application Support/agentic/` |
+| OAuth tokens | macOS Keychain (service: `io.agentic.app`, account: `<provider>:<host>`); equivalent on Win/Linux |
 | Logs | stderr (Tauri) / stdout (CLI). Set `RUST_LOG=agentic_core=debug,agentic_tauri=debug`. |
 | Build artifacts | `target/debug/` and `target/release/` at repo root |
 | Web UI source | `apps/web-ui/` |
@@ -466,6 +502,15 @@ It's a timing-based test on a busy CI machine; usually passes on retry. Not yet 
 ### `start_scripted_run` rejects path "outside scope"
 
 The path validator only allows files under `cwd` or the app's data dir. Move your JSON into the repo root or under `~/Library/Application Support/io.agentic.app/`.
+
+### "Connect" hangs forever in the Settings pane
+
+The 5-minute callback timeout has elapsed without the browser redirecting back. Common causes:
+- Your OAuth App's callback URL doesn't include `http://127.0.0.1/*` (GitHub will reject the redirect; the user sees an error in the browser but the shell never receives anything).
+- Your firewall is blocking the loopback listener.
+- You closed the browser tab before completing the flow.
+
+Fix: re-check the callback URL pattern, click **Connect** again, complete the flow promptly.
 
 ### Findings table is empty after a real CLI run
 

@@ -41,4 +41,9 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByTestId("findings-table")).toBeInTheDocument();
   });
+
+  it("renders the settings pane", () => {
+    render(<App />);
+    expect(screen.getByTestId("settings-pane")).toBeInTheDocument();
+  });
 });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ChatPane from "./components/ChatPane";
 import EventList from "./components/EventList";
 import FindingsTable from "./components/FindingsTable";
+import SettingsPane from "./components/SettingsPane";
 import StartRunForm from "./components/StartRunForm";
 import Stepper from "./components/Stepper";
 import { useFindings } from "./hooks/useFindings";
@@ -76,6 +77,9 @@ export default function App() {
           </div>
         )}
         <FindingsTable findings={findings} />
+      </section>
+      <section className="px-6 pb-6">
+        <SettingsPane />
       </section>
     </main>
   );
