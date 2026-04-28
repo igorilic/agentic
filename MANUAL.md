@@ -487,6 +487,16 @@ Behaviour:
 
 Backend defaults to `claude-code`. To use copilot-cli, the `start_ticket_run` IPC accepts a `backend` arg, but the chat command doesn't expose a switch yet — workaround: the CLI still does (`agentic-cli run --backend copilot-cli --ticket "…"`).
 
+**Inspecting what changed**: the tdd-developer agent commits its own work (one commit per RED, one per GREEN, per the agent template's procedure). After a run, your working tree will likely be clean — the changes are in `git log`, not `git diff`. To see what landed:
+
+```fish
+git log --oneline -5     # new commits from the agent
+git show HEAD            # the GREEN commit
+git show HEAD~1          # the RED commit (failing tests)
+```
+
+To re-run a clean test, `git reset --hard <initial-sha>` back to your starting point.
+
 ### Scenario D — iterate on agent prompts without burning tokens
 
 Build a scripted JSON that mimics the events your real run would produce, run it through `agentic-cli run --scripted`, observe the cockpit's response. Tweak the agent system-prompt; rerun. No LLM calls.
