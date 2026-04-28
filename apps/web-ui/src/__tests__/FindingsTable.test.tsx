@@ -136,6 +136,52 @@ describe("FindingsTable", () => {
     expect(screen.queryByTestId("triage-badge-f1")).toBeNull();
   });
 
+  it("shows a suggestion-toggle button only when a row carries a suggestion", () => {
+    render(
+      <FindingsTable
+        findings={[
+          makeFinding({ id: "with-sug", suggestion: "use tower-governor" }),
+          makeFinding({ id: "no-sug", suggestion: null }),
+        ]}
+      />,
+    );
+    expect(screen.getByTestId("suggestion-toggle-with-sug")).toBeInTheDocument();
+    expect(screen.queryByTestId("suggestion-toggle-no-sug")).toBeNull();
+  });
+
+  it("clicking the toggle reveals the suggestion text and clicking again hides it", async () => {
+    const user = userEvent.setup();
+    render(
+      <FindingsTable
+        findings={[makeFinding({ id: "f1", suggestion: "use tower-governor" })]}
+      />,
+    );
+
+    // Initially collapsed: suggestion text not visible.
+    expect(screen.queryByTestId("suggestion-body-f1")).toBeNull();
+
+    await user.click(screen.getByTestId("suggestion-toggle-f1"));
+    expect(screen.getByTestId("suggestion-body-f1")).toHaveTextContent(
+      /use tower-governor/i,
+    );
+
+    await user.click(screen.getByTestId("suggestion-toggle-f1"));
+    expect(screen.queryByTestId("suggestion-body-f1")).toBeNull();
+  });
+
+  it("the toggle has aria-expanded reflecting state for screen readers", async () => {
+    const user = userEvent.setup();
+    render(
+      <FindingsTable
+        findings={[makeFinding({ id: "f1", suggestion: "do x" })]}
+      />,
+    );
+    const toggle = screen.getByTestId("suggestion-toggle-f1");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("disables triage buttons while invoke is in flight", async () => {
     let resolveInvoke: (() => void) | undefined;
     invokeMock.mockImplementationOnce(

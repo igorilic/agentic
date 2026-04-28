@@ -312,7 +312,7 @@ cargo tauri dev
   - `/plan <ticket>` — **real ticket run** against the cwd. Invokes the `start_ticket_run` IPC (claude-code backend by default), seeds workspace + run rows, returns the run_id, and pins the cockpit to it. Events stream live into the Stepper / EventList / FindingsTable.
   - `/status <run-id>`, `/cancel <run-id>` → still stubbed (`[STUB] /status…`); Phase 11.7+.
   - `@architect ship it` → routes through `mention_agent` IPC, streams two stub envelopes onto the dedicated `agentic://mention-event` channel which renders as `chat-message-mention` rows
-- **FindingsTable** — for the run shown in the cockpit, lists `Event::Finding` entries with `[Fix] [Tech-debt] [Ignore]` buttons. Triage writes through the IPC and updates `findings.triage` in SQLite. See §8 for what each tag means in practice.
+- **FindingsTable** — for the run shown in the cockpit, lists `Event::Finding` entries with `[Fix] [Tech-debt] [Ignore]` buttons. Triage writes through the IPC and updates `findings.triage` in SQLite. Rows that include a suggestion show a 💡 button next to the message; click it to expand a blue inline panel with the reviewer's suggested remedy. See §8 for what each tag means in practice.
 - **PastRunsPane** — list of recent runs across all workspaces (most-recent 50, descending by `started_at`). Each row: status badge, truncated id, ticket label, backend, duration, start time. Click a row to pin the FindingsTable to that run for after-the-fact triage.
 - **SettingsPane** — bottom of the page, lets you connect/disconnect GitHub OAuth accounts. Token lives in the OS keychain; only metadata (provider/host/username/expiry/timestamps) is in the SQLite `auth_accounts` table. See §3 for the GitHub setup walkthrough.
 

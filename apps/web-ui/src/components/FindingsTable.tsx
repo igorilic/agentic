@@ -19,6 +19,9 @@ export default function FindingsTable({ findings }: FindingsTableProps) {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [overrides, setOverrides] = useState<Record<string, Triage>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Which rows have their suggestion section expanded. Suggestions can be
+  // long, so default-collapsed; user opts in per-row.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const onTriage = async (runId: string, findingId: string, triage: Triage) => {
     setPending((p) => ({ ...p, [findingId]: true }));
@@ -77,6 +80,23 @@ export default function FindingsTable({ findings }: FindingsTableProps) {
                   {f.severity}
                 </span>
                 <span className="text-sm text-gray-800 flex-1">{f.message}</span>
+                {f.suggestion && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpanded((e) => ({ ...e, [f.id]: !e[f.id] }))
+                    }
+                    aria-expanded={expanded[f.id] ?? false}
+                    aria-label={
+                      expanded[f.id] ? "Hide suggestion" : "Show suggestion"
+                    }
+                    data-testid={`suggestion-toggle-${f.id}`}
+                    className="shrink-0 text-xs px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50"
+                    title="Suggestion"
+                  >
+                    💡
+                  </button>
+                )}
                 {f.file_path && (
                   <span className="text-xs text-gray-400 shrink-0 font-mono">
                     {f.file_path}
@@ -84,6 +104,17 @@ export default function FindingsTable({ findings }: FindingsTableProps) {
                   </span>
                 )}
               </div>
+              {f.suggestion && expanded[f.id] && (
+                <div
+                  data-testid={`suggestion-body-${f.id}`}
+                  className="ml-6 px-3 py-2 bg-blue-50 border-l-2 border-blue-200 text-sm text-gray-700 whitespace-pre-wrap"
+                >
+                  <span className="text-xs uppercase font-semibold text-blue-700 mr-2">
+                    suggestion
+                  </span>
+                  {f.suggestion}
+                </div>
+              )}
               <div className="flex gap-2 items-center">
                 {TRIAGE_OPTIONS.map((opt) => (
                   <button
