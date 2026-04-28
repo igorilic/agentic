@@ -1667,7 +1667,7 @@ Legend:
 
 ---
 
-### Step 14.3: Sidebar view with chat webview
+### [x] Step 14.3: Sidebar view with chat webview
 
 **Goal**: Activity bar icon opens sidebar; webview uses the same `web-ui` build.
 
