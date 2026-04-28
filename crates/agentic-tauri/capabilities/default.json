@@ -18,6 +18,7 @@
     "allow-delete-auth-account",
     "allow-connect-github",
     "allow-connect-github-via-gh",
-    "allow-start-ticket-run"
+    "allow-start-ticket-run",
+    "allow-list-runs"
   ]
 }

@@ -4,6 +4,7 @@ import ChatPane from "./components/ChatPane";
 import DismissableBanner from "./components/DismissableBanner";
 import EventList from "./components/EventList";
 import FindingsTable from "./components/FindingsTable";
+import PastRunsPane from "./components/PastRunsPane";
 import SettingsPane from "./components/SettingsPane";
 import StartRunForm from "./components/StartRunForm";
 import Stepper from "./components/Stepper";
@@ -103,6 +104,9 @@ export default function App() {
       </section>
       <section className="px-6 pb-6">
         <FindingsTable findings={findings} />
+      </section>
+      <section className="px-6 pb-6">
+        <PastRunsPane onSelectRun={setFindingsRunId} />
       </section>
       <section className="px-6 pb-6">
         <SettingsPane />

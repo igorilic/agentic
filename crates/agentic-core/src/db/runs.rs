@@ -83,6 +83,23 @@ impl RunRepo {
         Ok(row)
     }
 
+    /// List recent runs across ALL workspaces, ordered by `started_at` DESC.
+    /// Used by the cockpit's "past runs" pane which doesn't yet scope by
+    /// workspace (#TODO: filter when the UI exposes a workspace switcher).
+    pub fn list_recent(&self, limit: usize) -> Result<Vec<Run>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, workspace_id, pipeline_name, status, ticket_type, ticket_ref, \
+             ticket_title, ticket_body, backend, model, started_at, completed_at, duration_ms, \
+             token_usage, cost_usd, summary, subprocess_pid \
+             FROM runs ORDER BY started_at DESC LIMIT ?1",
+        )?;
+        let rows = stmt
+            .query_map(params![limit as i64], row_to_run)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     pub fn list_by_workspace(&self, workspace_id: &str, limit: usize) -> Result<Vec<Run>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(

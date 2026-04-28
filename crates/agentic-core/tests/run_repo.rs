@@ -113,6 +113,42 @@ fn list_by_workspace_returns_desc_by_started_at() {
 }
 
 #[test]
+fn list_recent_returns_runs_across_all_workspaces_desc_by_started_at() {
+    let tmp = tempfile::tempdir().unwrap();
+    let paths = agentic_core::Paths::for_tests(tmp.path());
+    paths.ensure_dirs().unwrap();
+    let db = Db::open(&paths).unwrap();
+    seed_workspace(&db, "ws1");
+    seed_workspace(&db, "ws2");
+    let runs = RunRepo::new(&db);
+
+    runs.insert(sample_run("r1", "ws1", 100)).unwrap();
+    runs.insert(sample_run("r2", "ws2", 300)).unwrap();
+    runs.insert(sample_run("r3", "ws1", 200)).unwrap();
+
+    let list = runs.list_recent(10).expect("list_recent");
+    let ids: Vec<String> = list.into_iter().map(|r| r.id).collect();
+    // Cross-workspace, descending by started_at: r2 (300) > r3 (200) > r1 (100).
+    assert_eq!(
+        ids,
+        vec!["r2".to_string(), "r3".to_string(), "r1".to_string()]
+    );
+}
+
+#[test]
+fn list_recent_respects_limit() {
+    let (_tmp, _db, runs, _steps) = setup();
+    runs.insert(sample_run("r1", "ws1", 100)).unwrap();
+    runs.insert(sample_run("r2", "ws1", 200)).unwrap();
+    runs.insert(sample_run("r3", "ws1", 300)).unwrap();
+    runs.insert(sample_run("r4", "ws1", 400)).unwrap();
+
+    let list = runs.list_recent(2).expect("list_recent");
+    let ids: Vec<String> = list.into_iter().map(|r| r.id).collect();
+    assert_eq!(ids, vec!["r4".to_string(), "r3".to_string()]);
+}
+
+#[test]
 fn step_full_happy_path_pending_to_running_to_passed() {
     let (_tmp, _db, runs, steps) = setup();
     runs.insert(sample_run("r1", "ws1", 100)).unwrap();

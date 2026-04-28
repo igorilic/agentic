@@ -113,6 +113,7 @@ fn main() {
             commands::auth::connect_github,
             commands::auth::connect_github_via_gh,
             commands::ticket::start_ticket_run,
+            commands::runs::list_runs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -46,4 +46,9 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByTestId("settings-pane")).toBeInTheDocument();
   });
+
+  it("renders the past runs pane", () => {
+    render(<App />);
+    expect(screen.getByTestId("past-runs-pane")).toBeInTheDocument();
+  });
 });

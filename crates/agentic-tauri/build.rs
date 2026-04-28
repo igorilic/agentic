@@ -15,6 +15,7 @@ fn main() {
             "connect_github",
             "connect_github_via_gh",
             "start_ticket_run",
+            "list_runs",
         ]),
     ))
     .expect("failed to run tauri build");
