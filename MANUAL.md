@@ -487,6 +487,8 @@ Behaviour:
 
 Backend defaults to `claude-code`. To use copilot-cli, the `start_ticket_run` IPC accepts a `backend` arg, but the chat command doesn't expose a switch yet — workaround: the CLI still does (`agentic-cli run --backend copilot-cli --ticket "…"`).
 
+**Cancelling a run**: while the pipeline is in flight, the Cancel button in StartRunForm becomes active (it follows `activeRunId`, which `/plan` sets). Click it — the running claude subprocess receives SIGTERM and the run completes with status=Failed and summary="cancelled". Useful when claude goes off the rails; faster than waiting for the timeout.
+
 **Inspecting what changed**: the tdd-developer agent commits its own work (one commit per RED, one per GREEN, per the agent template's procedure). After a run, your working tree will likely be clean — the changes are in `git log`, not `git diff`. To see what landed:
 
 ```fish

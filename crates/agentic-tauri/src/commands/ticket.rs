@@ -150,6 +150,17 @@ pub async fn start_ticket_run(
     let bus: EventBus = (*bus_state.bus).clone();
     let returned_run_id = run_id.clone();
 
+    // Register a CancellationToken in the same registry the existing
+    // cancel_run IPC reads from. Without this, the Cancel button in the
+    // UI is a no-op for chat-driven ticket runs. The token is plumbed into
+    // every per-step ExecuteRequest via execute_pipeline's external_cancel
+    // field, so a cancel_run propagates all the way to the running claude
+    // subprocess (which the backend SIGTERMs via req.cancel).
+    let cancel_token = tokio_util::sync::CancellationToken::new();
+    bus_state
+        .register_cancellation(run_id.clone(), cancel_token.clone())
+        .await;
+
     // Resolve Paths for execute_pipeline (it needs the data dir for various
     // sub-flows like file snapshots).
     let paths = Paths::from_os().map_err(|e| format!("resolve paths: {e}"))?;
@@ -188,6 +199,7 @@ pub async fn start_ticket_run(
                 ticket_text: &ticket_owned,
                 model_override: model_id,
                 paths: &paths,
+                external_cancel: Some(cancel_token.clone()),
             },
             &pipeline,
             factory_fn,

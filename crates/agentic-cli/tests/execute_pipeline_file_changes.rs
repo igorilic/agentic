@@ -263,6 +263,8 @@ async fn execute_pipeline_writes_per_step_diff_file() {
             ticket_text: "create greet.txt",
             model_override: None,
             paths: &paths,
+
+            external_cancel: None,
         },
         &pipeline,
         factory,

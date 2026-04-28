@@ -28,6 +28,12 @@ pub struct PipelineRunContext<'a> {
     pub ticket_text: &'a str,
     pub model_override: Option<ModelId>,
     pub paths: &'a Paths,
+    /// External cancellation token. When fired, every running step's
+    /// ExecuteRequest.cancel (a child token) is also cancelled, which the
+    /// Claude/Copilot backends use to send SIGTERM+SIGKILL to the
+    /// subprocess. `None` means "no external cancel" — the per-step token
+    /// is a fresh root.
+    pub external_cancel: Option<CancellationToken>,
 }
 
 /// Derive a stable workspace id from the canonical absolute path.
@@ -55,6 +61,7 @@ struct SingleStepCtx<'a> {
     model_override: Option<ModelId>,
     paths: &'a Paths,
     steps: &'a StepRepo,
+    external_cancel: Option<&'a CancellationToken>,
 }
 
 /// Execute all steps in `pipeline` against `ctx.ticket_text`.
@@ -81,6 +88,7 @@ pub async fn execute_pipeline<'a>(
         ticket_text,
         model_override,
         paths,
+        external_cancel,
     } = ctx;
     let runs = RunRepo::new(db);
     let steps = StepRepo::new(db);
@@ -116,6 +124,7 @@ pub async fn execute_pipeline<'a>(
                 model_override: model_override.clone(),
                 paths,
                 steps: &steps,
+                external_cancel: external_cancel.as_ref(),
             };
             execute_single_step(step_ctx, pipeline_step, i, &backend_factory).await?;
         }
@@ -173,6 +182,7 @@ async fn execute_single_step<'a>(
         model_override,
         paths,
         steps,
+        external_cancel,
     } = ctx;
 
     let step_id = ulid::Ulid::new().to_string();
@@ -254,7 +264,12 @@ async fn execute_single_step<'a>(
             .collect(),
         cwd: ws_root.to_path_buf(),
         timeout: agent.timeout_seconds.map(std::time::Duration::from_secs),
-        cancel: CancellationToken::new(),
+        // Use a child token of the external cancel when one is supplied, so
+        // a Tauri-side `cancel_run` propagates to the running subprocess
+        // and the backend can SIGTERM/SIGKILL claude cleanly.
+        cancel: external_cancel
+            .map(|t| t.child_token())
+            .unwrap_or_else(CancellationToken::new),
     };
 
     let backend = backend_factory(pipeline_step);
@@ -427,6 +442,8 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
+
+                external_cancel: None,
             },
             pipeline,
             passing_factory(),
@@ -571,6 +588,8 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
+
+                external_cancel: None,
             },
             pipeline,
             factory,
@@ -647,6 +666,8 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
+
+                external_cancel: None,
             },
             pipeline,
             factory,
@@ -836,6 +857,8 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
+
+                external_cancel: None,
             },
             &single_step_pipeline,
             Box::new(move |_step: &PipelineStep| -> Box<dyn Backend> {
@@ -956,6 +979,8 @@ mod tests {
                 // CLI override: opus wins over agent's sonnet
                 model_override: Some(ModelId("claude-opus-4-7".to_string())),
                 paths: &paths,
+
+                external_cancel: None,
             },
             &single_step_pipeline,
             Box::new(move |_step: &PipelineStep| -> Box<dyn Backend> {
@@ -1033,6 +1058,8 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
+
+                external_cancel: None,
             },
             pipeline,
             passing_factory(),
@@ -1118,6 +1145,8 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
+
+                external_cancel: None,
             },
             pipeline,
             factory,

@@ -191,6 +191,36 @@ async fn start_ticket_run_rejects_workspace_root_that_is_not_a_directory() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn start_ticket_run_registers_cancel_token_so_cancel_run_finds_it() {
+    let _g = ENV_LOCK.lock().await;
+    let (app, _db) = build_app();
+
+    let run_id = start_ticket_run(
+        app.state::<EventBusState>(),
+        app.state::<Db>(),
+        "fix it".to_string(),
+        "claude-code".to_string(),
+        None,
+    )
+    .await
+    .expect("start_ticket_run");
+
+    // The existing cancel_run IPC reads from EventBusState's cancellation
+    // registry. start_ticket_run must register the run's token there or
+    // the user-facing Cancel button is a no-op for chat-driven runs.
+    let bus_state = app.state::<EventBusState>();
+    let cancelled = bus_state.cancel(&run_id).await;
+    assert!(
+        cancelled,
+        "cancel_run should find the run's token; \
+         start_ticket_run must register one in EventBusState"
+    );
+
+    // Idempotent: second cancel returns false because token is consumed.
+    assert!(!bus_state.cancel(&run_id).await);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn start_ticket_run_passes_through_the_model_override() {
     let _g = ENV_LOCK.lock().await;
     let (app, db) = build_app();

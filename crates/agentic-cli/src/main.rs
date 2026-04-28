@@ -409,6 +409,7 @@ async fn cmd_run_ticket(
             ticket_text: &ticket_text,
             model_override: model_id,
             paths,
+            external_cancel: None,
         },
         &pipeline,
         factory,
