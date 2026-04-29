@@ -78,7 +78,7 @@ export default function SettingsPane() {
           <li
             key={a.id}
             data-testid={`auth-account-row-${a.id}`}
-            className="px-3 py-2 flex items-center justify-between gap-3"
+            className="px-3 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3"
           >
             <div className="flex flex-col">
               <span className="text-sm font-mono text-gray-800">
