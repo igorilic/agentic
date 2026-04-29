@@ -133,7 +133,7 @@ export default function ChatPane({
 
   return (
     <section
-      className="flex flex-col h-96 border border-gray-200 rounded"
+      className="flex flex-col h-full min-h-0 flex-1 border border-gray-200 rounded"
       data-testid="chat-pane"
     >
       <ul

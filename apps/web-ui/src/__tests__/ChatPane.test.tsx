@@ -170,4 +170,19 @@ describe("ChatPane", () => {
     });
     expect(screen.getByTestId("chat-error")).toHaveTextContent(/content is empty/i);
   });
+
+  // Responsive layout: chat pane should fill its parent column, not impose a fixed height.
+  it("chat-pane fills its parent column (h-full flex-1) instead of using a fixed h-96", () => {
+    render(<ChatPane />);
+    const pane = screen.getByTestId("chat-pane");
+    expect(pane.className).toMatch(/h-full/);
+    expect(pane.className).toMatch(/flex-1/);
+    expect(pane.className).not.toMatch(/h-96/);
+  });
+
+  it("chat-messages scrollback area retains overflow-y-auto after height fix", () => {
+    render(<ChatPane />);
+    const messages = screen.getByTestId("chat-messages");
+    expect(messages.className).toMatch(/overflow-y-auto/);
+  });
 });
