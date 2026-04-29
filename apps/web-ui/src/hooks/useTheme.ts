@@ -10,7 +10,11 @@ export type UseThemeResult = {
 
 export function useTheme(): UseThemeResult {
   const [theme, setThemeState] = useState<Theme>(() => {
-    return localStorage.getItem("agentic.theme") === "dark" ? "dark" : "light";
+    const stored = localStorage.getItem("agentic.theme");
+    if (stored === "dark" || stored === "light") return stored;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
   });
 
   useEffect(() => {
