@@ -1723,7 +1723,7 @@ Legend:
 
 ---
 
-### Step 14.6: Findings → editor decorations
+### [x] Step 14.6: Findings → editor decorations
 
 **Goal**: Reviewer findings render as squiggles + hover tooltip with `[Fix] [Tech-debt] [Ignore]` actions.
 
@@ -2134,3 +2134,8 @@ context changes.
 
 - **Snapshot-store garbage collection** (GH [#82](https://github.com/igorilic/agentic/issues/82)) — content-addressable storage grows unbounded; aligns with future `runs` retention policy.
 - **After-snapshot persistence for FileChange diffs** (GH [#83](https://github.com/igorilic/agentic/issues/83)) — right side of `vscode.diff` is currently the live workspace file; matters when reviewing historical runs after manual edits.
+
+### Findings decorator (Step 14.6)
+
+- **Multi-finding stacking on same line** (GH [#84](https://github.com/igorilic/agentic/issues/84)) — only the last finding is visible when two findings land on the same line; hover should concatenate. Defer until user feedback confirms it's a problem.
+- **Persist findings across extension restarts** (GH [#85](https://github.com/igorilic/agentic/issues/85)) — findings are in-memory; restart clears them. Requires `listFindings(runId)` napi export and run-selection UX (CP-11+).
