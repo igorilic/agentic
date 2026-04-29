@@ -8,7 +8,7 @@ export default tseslint.config(
     ignores: ["dist/", "node_modules/", ".vite/"],
   },
 
-  // Base TypeScript config
+  // Base TypeScript config (includes recommended rules)
   ...tseslint.configs.recommended,
 
   // React + React Hooks rules for source files
@@ -17,6 +17,14 @@ export default tseslint.config(
     plugins: {
       react: reactPlugin,
       "react-hooks": reactHooksPlugin,
+    },
+    languageOptions: {
+      parserOptions: {
+        // Enables type-aware lint rules (no-floating-promises, no-misused-promises).
+        // Uses tsconfig.json auto-resolution — no explicit path needed.
+        project: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     settings: {
       react: {
@@ -43,6 +51,15 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "@typescript-eslint/no-explicit-any": "error",
+      // Type-aware promise safety rules. These require `parserOptions.project`
+      // above and catch fire-and-forget async calls that swallow errors.
+      "@typescript-eslint/no-floating-promises": "error",
+      // checksVoidReturn.attributes=false: allows `onClick={async () => ...}`
+      // patterns without forcing every React event handler to be non-async.
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        { checksVoidReturn: { attributes: false } },
+      ],
     },
   },
 
