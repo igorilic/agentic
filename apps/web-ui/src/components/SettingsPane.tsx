@@ -104,7 +104,7 @@ export default function SettingsPane() {
         <p className="text-xs text-gray-500">
           Reuses your existing <span className="font-mono">gh</span> CLI session.
           Run <span className="font-mono">gh auth login</span> first if you
-          haven't already.
+          haven&apos;t already.
         </p>
         <button
           type="button"
