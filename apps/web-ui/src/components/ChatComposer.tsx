@@ -23,7 +23,7 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
   const handleSend = () => {
     const text = value.trim();
     if (text === "") return;
-    onSend(value);
+    onSend(text);
     setValue("");
   };
 
@@ -44,7 +44,7 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
             type="button"
             data-testid={`chat-composer-chip-${chip.id}`}
             onClick={() => handleChipClick(chip.command)}
-            className="rounded-md border border-border-strong px-2 py-1 text-xs text-fg hover:bg-bg-surface-2"
+            className="rounded-md border border-border px-2 py-1 text-xs text-fg hover:bg-bg-surface-2"
           >
             {chip.label}
           </button>
@@ -66,7 +66,7 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
           data-testid="chat-composer-send"
           onClick={handleSend}
           aria-label="Send"
-          className="h-9 w-9 rounded-md bg-[#18181b] text-white flex items-center justify-center"
+          className="h-9 w-9 rounded-none bg-[#18181b] text-white flex items-center justify-center"
         >
           <svg
             viewBox="0 0 16 16"
