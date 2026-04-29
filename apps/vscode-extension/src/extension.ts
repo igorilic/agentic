@@ -1,12 +1,37 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { registerCommands } from "./commands";
+import { registerCommands, registerTriageCommand } from "./commands";
 import {
   AgenticDiffProvider,
   openDiffForFileChange,
   FileChangeEnvelope,
 } from "./diff";
+import {
+  FindingsDecorator,
+  FindingEnvelope,
+  defaultDecorationTypeFactory,
+} from "./decorations";
 import { AgenticChatViewProvider } from "./views/sidebar";
+
+/** Shape of the @agentic/node exports used by the extension. */
+interface AgenticNode {
+  getFileSnapshot: (opts: { dataDir: string; hash: string }) => Promise<Buffer>;
+  subscribeEvents: (runId: string) => unknown;
+  iterate: (stream: unknown) => AsyncIterable<{
+    event: {
+      type: string;
+      path?: string;
+      before_hash?: string;
+      after_hash?: string;
+    };
+  }>;
+  triageFinding: (args: {
+    dataDir: string;
+    runId: string;
+    findingId: string;
+    triage: string;
+  }) => Promise<void>;
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   registerCommands(context);
@@ -27,56 +52,93 @@ export function activate(context: vscode.ExtensionContext): void {
   // (GH issue tracking this is filed alongside the Step 14.5 review.)
   const dataDir = path.join(context.globalStorageUri.fsPath, "agentic");
 
-  // ── Register agentic:// TextDocumentContentProvider ──────────────────────
-  // The real napi fetcher is loaded lazily so the extension host doesn't fail
-  // to activate when @agentic/node is not installed (e.g. in CI without the
-  // native .node binary). Callers that test the provider pass a stub fetcher
-  // through the constructor; the real fetcher is only loaded here.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const node = require("@agentic/node/lib.js") as {
-    getFileSnapshot: (opts: { dataDir: string; hash: string }) => Promise<Buffer>;
-    subscribeEvents: (runId: string) => unknown;
-    iterate: (stream: unknown) => AsyncIterable<{ event: { type: string; path?: string; before_hash?: string; after_hash?: string } }>;
-  };
+  // ── FindingsDecorator ─────────────────────────────────────────────────────
+  // Manages per-URI finding state and applies squiggle decorations.
+  // Created before the lazy node require so the triage command can be
+  // registered on the context.subscriptions before activate() might throw.
+  // Disposed via context.subscriptions when the extension deactivates.
+  const decorator = new FindingsDecorator(defaultDecorationTypeFactory, dataDir);
+  context.subscriptions.push(decorator);
 
-  const diffProvider = new AgenticDiffProvider(dataDir, node.getFileSnapshot.bind(node));
+  // Re-apply decorations when the user switches editor tabs.
   context.subscriptions.push(
-    vscode.workspace.registerTextDocumentContentProvider("agentic", diffProvider),
+    vscode.window.onDidChangeActiveTextEditor((ed) => {
+      decorator.reapply(ed);
+    }),
   );
 
-  // ── Subscribe to all-runs event stream ───────────────────────────────────
-  // Step 14.6 will narrow this to a specific active run_id via QuickPick /
-  // sidebar state. For now we subscribe to a sentinel run_id that the user
-  // will start from the sidebar; events for unrecognised run_ids are silently
-  // dropped by EventStream.next() because the filter never matches.
-  //
-  // The loop is owned by an AbortController so deactivate() can cancel it
-  // — without that, the napi stream would keep the Node thread alive when
-  // the user disables the extension or VS Code reloads.
-  const workspaceRoot =
-    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ".";
-  const SENTINEL_RUN_ID = "__agentic_active_run__";
-  const stream = node.subscribeEvents(SENTINEL_RUN_ID);
+  // ── Register agentic:// TextDocumentContentProvider ──────────────────────
+  // The real napi module is loaded lazily so the extension host doesn't fail
+  // to activate when @agentic/node is not installed (e.g. in CI without the
+  // native .node binary). If the require fails, napi-dependent features are
+  // silently disabled — the decorator and command surface are already wired up.
+  let node: AgenticNode | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    node = require("@agentic/node/lib.js") as AgenticNode;
+  } catch {
+    // napi binary unavailable (e.g. running tests without a built native module).
+    // Log a warning but don't crash activation.
+    console.warn("agentic: @agentic/node not available — diff and event features disabled");
+  }
 
-  const abort = new AbortController();
-  context.subscriptions.push({ dispose: () => abort.abort() });
+  // Register `agentic.triage` with its real handler (replaces the stub).
+  // We pass a thin wrapper so that if node is unavailable the command still
+  // registers but shows an error message rather than crashing.
+  registerTriageCommand(context, decorator, {
+    triageFinding: async (args) => {
+      if (!node) {
+        throw new Error("@agentic/node is not available");
+      }
+      return node.triageFinding(args);
+    },
+  });
 
-  void (async () => {
-    try {
-      for await (const env of node.iterate(stream)) {
-        if (abort.signal.aborted) return;
-        if (env.event.type === "FileChange") {
-          await openDiffForFileChange(env as unknown as FileChangeEnvelope, workspaceRoot);
+  if (node) {
+    const diffProvider = new AgenticDiffProvider(
+      dataDir,
+      node.getFileSnapshot.bind(node),
+    );
+    context.subscriptions.push(
+      vscode.workspace.registerTextDocumentContentProvider("agentic", diffProvider),
+    );
+
+    // ── Subscribe to all-runs event stream ─────────────────────────────────
+    // The loop is owned by an AbortController so deactivate() can cancel it.
+    const workspaceRoot =
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ".";
+    const SENTINEL_RUN_ID = "__agentic_active_run__";
+    const stream = node.subscribeEvents(SENTINEL_RUN_ID);
+
+    const abort = new AbortController();
+    context.subscriptions.push({ dispose: () => abort.abort() });
+
+    void (async () => {
+      try {
+        for await (const env of node!.iterate(stream)) {
+          if (abort.signal.aborted) return;
+          if (env.event.type === "FileChange") {
+            await openDiffForFileChange(
+              env as unknown as FileChangeEnvelope,
+              workspaceRoot,
+            );
+          } else if (env.event.type === "Finding") {
+            decorator.handleFinding(
+              env as unknown as FindingEnvelope,
+              workspaceRoot,
+              vscode.window.activeTextEditor,
+            );
+          }
+        }
+      } catch (err) {
+        // AbortError on deactivate is expected; anything else is worth logging
+        // but shouldn't crash the extension host.
+        if ((err as { name?: string })?.name !== "AbortError") {
+          console.error("agentic event-loop error:", err);
         }
       }
-    } catch (err) {
-      // AbortError on deactivate is expected; anything else is worth logging
-      // but shouldn't crash the extension host.
-      if ((err as { name?: string })?.name !== "AbortError") {
-        console.error("agentic event-loop error:", err);
-      }
-    }
-  })();
+    })();
+  }
 }
 
 export function deactivate(): void {

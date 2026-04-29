@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { FindingsDecorator } from "../decorations";
 
 /**
  * Single source of truth: every entry drives both the runtime
@@ -8,6 +9,9 @@ import * as vscode from "vscode";
  * `title` matches `package.json#contributes.commands[].title` exactly so
  * the help QuickPick can show user-readable labels and so a parity
  * test can compare the two without a mapping table.
+ *
+ * Note: `agentic.triage` is intentionally excluded from this stub array —
+ * it is registered by `registerTriageCommand` with a real handler (Step 14.6).
  */
 export const COMMANDS: ReadonlyArray<{
   readonly id: string;
@@ -17,7 +21,6 @@ export const COMMANDS: ReadonlyArray<{
   { id: "agentic.plan", title: "Agentic: Plan", stubMessage: "Plan: implementation pending" },
   { id: "agentic.status", title: "Agentic: Show Status", stubMessage: "Status: implementation pending" },
   { id: "agentic.cancel", title: "Agentic: Cancel Run", stubMessage: "Cancel: implementation pending" },
-  { id: "agentic.triage", title: "Agentic: Triage Finding", stubMessage: "Triage: implementation pending" },
   { id: "agentic.answer", title: "Agentic: Answer Clarifying Question", stubMessage: "Answer: implementation pending" },
   { id: "agentic.retry", title: "Agentic: Retry Step", stubMessage: "Retry: implementation pending" },
   { id: "agentic.resume", title: "Agentic: Resume Run", stubMessage: "Resume: implementation pending" },
@@ -34,13 +37,63 @@ const HELP_COMMAND = { id: "agentic.help", title: "Agentic: Help" };
 
 /**
  * Every command id this extension contributes — the stubbed set plus
+ * `agentic.triage` (registered separately with a real handler) and
  * the `agentic.help` meta-command. Tests use this to assert manifest
  * ↔ runtime parity.
  */
 export const ALL_COMMAND_IDS: readonly string[] = [
   ...COMMANDS.map((c) => c.id),
+  "agentic.triage",
   HELP_COMMAND.id,
 ];
+
+/** Shape of the args object passed to the `agentic.triage` command handler. */
+interface TriageArgs {
+  dataDir: string;
+  runId: string;
+  findingId: string;
+  triage: string;
+}
+
+const VALID_TRIAGE_VALUES = new Set(["fix", "tech-debt", "ignore"]);
+
+/**
+ * Register `agentic.triage` with a real handler.
+ *
+ * The command is invoked via command-URI from the hover MarkdownString
+ * (see buildHoverMarkdown in decorations.ts). VS Code passes the JSON-parsed
+ * args object from the URI query string as the first argument.
+ *
+ * On success the decorator's state is updated to remove the decoration.
+ * On failure an error message is shown in the VS Code notification area.
+ */
+export function registerTriageCommand(
+  context: vscode.ExtensionContext,
+  decorator: FindingsDecorator,
+  node: { triageFinding: (args: TriageArgs) => Promise<void> },
+): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand("agentic.triage", async (args: TriageArgs) => {
+      if (!args || !VALID_TRIAGE_VALUES.has(args.triage)) {
+        vscode.window.showErrorMessage(
+          `agentic.triage: invalid triage value "${args?.triage ?? "(missing)"}"`,
+        );
+        return;
+      }
+      try {
+        await node.triageFinding(args);
+        decorator.clearFinding(
+          args.findingId,
+          vscode.window.activeTextEditor,
+        );
+      } catch (err) {
+        vscode.window.showErrorMessage(
+          `Agentic: triage failed — ${(err as Error).message ?? String(err)}`,
+        );
+      }
+    }),
+  );
+}
 
 export function registerCommands(context: vscode.ExtensionContext): void {
   for (const cmd of COMMANDS) {
