@@ -1,0 +1,53 @@
+/* Design tokens — derived from design_handoff_agentic_pipeline/colors_and_type.css */
+
+:root {
+  /* zinc OKLCH scale */
+  --zinc-50:  oklch(0.985 0 0);
+  --zinc-100: oklch(0.967 0.001 286.375);
+  --zinc-200: oklch(0.92  0.004 286.32);
+  --zinc-300: oklch(0.871 0.006 286.286);
+  --zinc-400: oklch(0.705 0.015 286.067);
+  --zinc-500: oklch(0.552 0.016 285.938);
+  --zinc-600: oklch(0.442 0.017 285.786);
+  --zinc-700: oklch(0.37  0.013 285.805);
+  --zinc-800: oklch(0.274 0.006 286.033);
+  --zinc-900: oklch(0.21  0.006 285.885);
+  --zinc-950: oklch(0.141 0.005 285.823);
+
+  /* semantic — light */
+  --bg-page:      var(--zinc-100);
+  --bg-surface:   #ffffff;
+  --bg-surface-2: var(--zinc-50);
+  --fg:           var(--zinc-950);
+  --fg-muted:     var(--zinc-500);
+  --fg-subtle:    var(--zinc-400);
+  --border-soft:  rgb(0 0 0 / 0.05);
+  --border:       rgb(0 0 0 / 0.10);
+  --border-strong: rgb(0 0 0 / 0.15);
+
+  /* typography */
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  /* radii */
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+
+  /* shadows */
+  --shadow-card:    0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-popover: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-modal:   0 25px 50px -12px rgb(0 0 0 / 0.4);
+}
+
+:root[data-theme="dark"] {
+  --bg-page:      var(--zinc-950);
+  --bg-surface:   var(--zinc-900);
+  --bg-surface-2: var(--zinc-800);
+  --fg:           #ffffff;
+  --fg-muted:     var(--zinc-400);
+  --fg-subtle:    var(--zinc-500);
+  --border-soft:  rgb(255 255 255 / 0.05);
+  --border:       rgb(255 255 255 / 0.10);
+  --border-strong: rgb(255 255 255 / 0.15);
+}
