@@ -1687,7 +1687,7 @@ Legend:
 
 ---
 
-### Step 14.4: Slash commands → VS Code commands
+### [x] Step 14.4: Slash commands → VS Code commands
 
 **Goal**: Each slash command becomes a VS Code command (`Agentic: Plan…`, etc.) accessible via `Cmd+Shift+P`.
 
