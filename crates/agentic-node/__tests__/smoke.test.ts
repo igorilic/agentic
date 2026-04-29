@@ -6,7 +6,7 @@
 // extension host.
 
 import { describe, expect, it, beforeEach } from "vitest";
-import { mkdtempSync } from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -158,5 +158,18 @@ describe("agentic-node smoke", () => {
         triage: "bogus",
       }),
     ).rejects.toThrow();
+  });
+
+  it("getFileSnapshot returns bytes written to <dataDir>/snapshots/<hash>", async () => {
+    // Write a known blob under the expected path.
+    const snapshotsDir = join(dataDir, "snapshots");
+    mkdirSync(snapshotsDir, { recursive: true });
+    const hash = "deadbeefdeadbeef";
+    const content = Buffer.from("hello snapshot");
+    writeFileSync(join(snapshotsDir, hash), content);
+
+    const result: Buffer = await node.getFileSnapshot({ dataDir, hash });
+    expect(result).toBeInstanceOf(Buffer);
+    expect(result.toString()).toBe("hello snapshot");
   });
 });

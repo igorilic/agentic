@@ -18,6 +18,7 @@ use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 use std::time::SystemTime;
 
+use agentic_core::backends::file_snapshots::read_snapshot;
 use agentic_core::db::findings::{FindingRow, FindingsRepo};
 use agentic_core::events::{
     DEFAULT_CAPACITY, Event, EventBus, EventEnvelope, RunStatus, Severity, StepStatus,
@@ -136,6 +137,36 @@ pub async fn list_findings(opts: ListFindingsOptions) -> Result<Vec<JsFinding>> 
         .list_by_run(&run_id)
         .map_err(|e| Error::from_reason(format!("list_by_run: {e}")))?;
     Ok(rows.into_iter().map(JsFinding::from).collect())
+}
+
+// ─── getFileSnapshot ─────────────────────────────────────────────────────────
+
+/// Options for [`get_file_snapshot`].
+#[napi(object)]
+pub struct GetFileSnapshotOptions {
+    /// The `data_dir` that was passed to [`FileSnapshotter::with_store`].
+    /// Snapshots live under `<data_dir>/snapshots/<hash>`.
+    pub data_dir: String,
+    /// The blake3 hex hash of the snapshot to fetch. This is the
+    /// `before_hash` from a [`Event::FileChange`] envelope.
+    pub hash: String,
+}
+
+/// Fetch the raw bytes of a before-state snapshot blob.
+///
+/// The extension's `AgenticDiffProvider` calls this to supply content to the
+/// left-hand side of `vscode.diff`. Returns the blob as a Node `Buffer` so
+/// JS callers can pass it directly to `TextDocumentContentProvider`.
+///
+/// Errors with `NotFound` when no blob exists for the given hash (the run
+/// either used `FileSnapshotter::new()` or the GC removed it).
+#[napi]
+pub async fn get_file_snapshot(opts: GetFileSnapshotOptions) -> Result<Buffer> {
+    let path = std::path::Path::new(&opts.data_dir)
+        .join("snapshots");
+    let bytes = read_snapshot(&path, &opts.hash)
+        .map_err(|e| Error::from_reason(format!("get_file_snapshot: {e}")))?;
+    Ok(bytes.into())
 }
 
 // ─── cancelRun ───────────────────────────────────────────────────────────────
