@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, it, expect, vi } from "vitest";
 import PipelineBar from "../components/PipelineBar";
 import type { AgentStatus } from "../types/pipeline";
 
@@ -164,6 +165,205 @@ describe("PipelineBar", () => {
         />
       );
       expect(screen.getByTestId("pipeline-add-agent")).toBeInTheDocument();
+    });
+  });
+
+  describe("insert chips", () => {
+    it("renders 3 insert chips for a 4-agent pipeline", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={vi.fn()}
+        />
+      );
+      const chips = screen.queryAllByTestId(/^pipeline-insert-\d+$/);
+      expect(chips).toHaveLength(3);
+    });
+
+    it("chip at pipeline-insert-1 is present", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={vi.fn()}
+        />
+      );
+      expect(screen.getByTestId("pipeline-insert-1")).toBeInTheDocument();
+    });
+
+    it("chip at pipeline-insert-2 is present", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={vi.fn()}
+        />
+      );
+      expect(screen.getByTestId("pipeline-insert-2")).toBeInTheDocument();
+    });
+
+    it("chip at pipeline-insert-3 is present", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={vi.fn()}
+        />
+      );
+      expect(screen.getByTestId("pipeline-insert-3")).toBeInTheDocument();
+    });
+
+    it("each chip has aria-label 'Insert agent at position {atIndex}'", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={vi.fn()}
+        />
+      );
+      expect(screen.getByTestId("pipeline-insert-1")).toHaveAttribute(
+        "aria-label",
+        "Insert agent at position 1"
+      );
+      expect(screen.getByTestId("pipeline-insert-2")).toHaveAttribute(
+        "aria-label",
+        "Insert agent at position 2"
+      );
+      expect(screen.getByTestId("pipeline-insert-3")).toHaveAttribute(
+        "aria-label",
+        "Insert agent at position 3"
+      );
+    });
+
+    it("each chip contains a + character", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={vi.fn()}
+        />
+      );
+      expect(screen.getByTestId("pipeline-insert-1")).toHaveTextContent("+");
+      expect(screen.getByTestId("pipeline-insert-2")).toHaveTextContent("+");
+      expect(screen.getByTestId("pipeline-insert-3")).toHaveTextContent("+");
+    });
+
+    it("clicking pipeline-insert-1 calls onInsert with 1", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={onInsert}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-insert-1"));
+      expect(onInsert).toHaveBeenCalledWith(1);
+    });
+
+    it("clicking pipeline-insert-2 calls onInsert with 2", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={onInsert}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-insert-2"));
+      expect(onInsert).toHaveBeenCalledWith(2);
+    });
+
+    it("clicking pipeline-insert-3 calls onInsert with 3", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={onInsert}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-insert-3"));
+      expect(onInsert).toHaveBeenCalledWith(3);
+    });
+
+    it("clicking pipeline-add-agent calls onInsert with agents.length (4)", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={onInsert}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-add-agent"));
+      expect(onInsert).toHaveBeenCalledWith(4);
+    });
+
+    it("2-agent pipeline has exactly 1 insert chip at pipeline-insert-1", () => {
+      render(
+        <PipelineBar
+          agents={["architect", "qa"]}
+          statuses={{ architect: "done", qa: "queued" }}
+          activeIndex={0}
+          onInsert={vi.fn()}
+        />
+      );
+      const chips = screen.queryAllByTestId(/^pipeline-insert-\d+$/);
+      expect(chips).toHaveLength(1);
+      expect(screen.getByTestId("pipeline-insert-1")).toBeInTheDocument();
+    });
+
+    it("end cap calls onInsert with 2 for a 2-agent pipeline", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={["architect", "qa"]}
+          statuses={{ architect: "done", qa: "queued" }}
+          activeIndex={0}
+          onInsert={onInsert}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-add-agent"));
+      expect(onInsert).toHaveBeenCalledWith(2);
+    });
+
+    it("empty pipeline renders no insert chips", () => {
+      render(
+        <PipelineBar
+          agents={[]}
+          statuses={{}}
+          activeIndex={-1}
+          onInsert={vi.fn()}
+        />
+      );
+      const chips = screen.queryAllByTestId(/^pipeline-insert-\d+$/);
+      expect(chips).toHaveLength(0);
+    });
+
+    it("end cap calls onInsert with 0 for empty pipeline", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={[]}
+          statuses={{}}
+          activeIndex={-1}
+          onInsert={onInsert}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-add-agent"));
+      expect(onInsert).toHaveBeenCalledWith(0);
     });
   });
 });
