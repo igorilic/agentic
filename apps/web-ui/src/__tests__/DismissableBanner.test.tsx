@@ -73,4 +73,12 @@ describe("DismissableBanner", () => {
     rerender(<DismissableBanner testId="b" severity="warning" message="x" />);
     expect(screen.getByTestId("b").className).toMatch(/yellow/);
   });
+
+  it("uses px-3 horizontal padding to align with sibling sections (EventList, Stepper)", () => {
+    render(
+      <DismissableBanner testId="b" severity="info" message="aligned" />,
+    );
+    expect(screen.getByTestId("b").className).toMatch(/\bpx-3\b/);
+    expect(screen.getByTestId("b").className).not.toMatch(/\bpx-4\b/);
+  });
 });
