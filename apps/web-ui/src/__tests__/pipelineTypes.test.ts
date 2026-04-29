@@ -220,6 +220,15 @@ describe("agentInstanceFromStep", () => {
     expect(result.status).toBe("skipped");
   });
 
+  it("maps needs_triage → errored", () => {
+    const result = agentInstanceFromStep({
+      ...baseStep,
+      agent: "reviewer",
+      status: "needs_triage",
+    });
+    expect(result.status).toBe("errored");
+  });
+
   it("sets id from step agent field", () => {
     const result = agentInstanceFromStep({
       ...baseStep,
