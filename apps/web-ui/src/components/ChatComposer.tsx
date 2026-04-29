@@ -101,6 +101,7 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
           <div
             data-testid="slash-popover"
             role="listbox"
+            aria-label="Slash commands"
             className="absolute bottom-full mb-2 w-[280px] rounded-xl border border-[rgb(0_0_0_/_0.08)] bg-bg-surface shadow-popover"
           >
             {slashMatches.map((cmd, i) => (

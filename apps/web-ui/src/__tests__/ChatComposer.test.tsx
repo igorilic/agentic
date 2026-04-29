@@ -387,5 +387,33 @@ describe("ChatComposer", () => {
       expect(onSend).toHaveBeenCalledWith("/");
       expect(screen.queryByTestId("slash-popover")).toBeNull();
     });
+
+    it("reopens popover when value changes after Esc", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      // type "/pl" — popover opens
+      fireEvent.change(textarea, { target: { value: "/pl" } });
+      expect(screen.getByTestId("slash-popover")).toBeInTheDocument();
+
+      // press Escape — popover closes for the value "/pl"
+      fireEvent.keyDown(textarea, { key: "Escape" });
+      expect(screen.queryByTestId("slash-popover")).toBeNull();
+
+      // type one more char so value becomes "/pla"
+      fireEvent.change(textarea, { target: { value: "/pla" } });
+
+      // popover reopens because escClosedForValue ("/pl") !== current value ("/pla")
+      expect(screen.getByTestId("slash-popover")).toBeInTheDocument();
+    });
+
+    it("popover has aria-label for screen readers", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/" } });
+
+      expect(screen.getByTestId("slash-popover").getAttribute("aria-label")).toBe("Slash commands");
+    });
   });
 });
