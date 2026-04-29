@@ -98,7 +98,10 @@ export default function FindingsTable({ findings }: FindingsTableProps) {
                   </button>
                 )}
                 {f.file_path && (
-                  <span className="text-xs text-gray-400 shrink-0 font-mono">
+                  <span
+                    data-testid={`finding-file-${f.id}`}
+                    className="block text-xs text-gray-400 font-mono sm:shrink-0"
+                  >
                     {f.file_path}
                     {f.line != null ? `:${f.line}` : ""}
                   </span>
@@ -115,7 +118,7 @@ export default function FindingsTable({ findings }: FindingsTableProps) {
                   {f.suggestion}
                 </div>
               )}
-              <div className="flex gap-2 items-center">
+              <div className="flex flex-wrap gap-2 items-center">
                 {TRIAGE_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}

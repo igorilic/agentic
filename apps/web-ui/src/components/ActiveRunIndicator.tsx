@@ -51,7 +51,7 @@ export default function ActiveRunIndicator({
   return (
     <div
       data-testid="active-run-indicator"
-      className="flex items-center gap-3 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900"
+      className="flex flex-wrap items-center gap-3 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900"
     >
       <span className="font-mono opacity-70">run</span>
       <span className="font-mono font-semibold">{runId.slice(0, 8)}</span>
