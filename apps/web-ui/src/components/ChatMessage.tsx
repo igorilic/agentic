@@ -1,3 +1,5 @@
+import React from "react";
+
 export type ChatMessageProps =
   | { kind: "user"; userName: string; timestamp: string; body: string }
   | { kind: "system"; body: string }
@@ -46,7 +48,7 @@ export default function ChatMessage(props: ChatMessageProps) {
             <span className="text-[13px] font-semibold text-fg">{props.userName}</span>
             <span className="text-[11px] text-fg-subtle">{props.timestamp}</span>
           </div>
-          <div className="text-sm text-fg leading-6">{props.body}</div>
+          <div className="text-sm text-fg leading-6">{renderInline(props.body)}</div>
         </div>
       </div>
     );
@@ -86,9 +88,33 @@ export default function ChatMessage(props: ChatMessageProps) {
           className="text-sm text-fg leading-6 px-3 py-2 rounded-md border-l-[3px]"
           style={{ backgroundColor: tintRgba, borderLeftColor: borderColor }}
         >
-          {props.body}
+          {renderInline(props.body)}
         </div>
       </div>
     </div>
   );
+}
+
+// Spec §3.4 line 221 — highlight slash commands and @mentions in message bodies.
+// Regex is lowercase-only per todo §W.4.2. Widening (case-insensitive, hyphens, digits)
+// is a deliberate future decision to avoid unintended matches.
+// System messages render plain text; only user + agent bodies call this helper.
+function renderInline(text: string): React.ReactNode[] {
+  const parts = text.split(/(\/[a-z]+|@[a-z]+)/g);
+  return parts.map((part, i) => {
+    if (part === "") return null;
+    const isToken = /^(\/[a-z]+|@[a-z]+)$/.test(part);
+    if (isToken) {
+      return (
+        <span
+          key={i}
+          data-testid="chat-token"
+          className="bg-[rgba(253,230,138,0.4)] rounded-sm px-0.5"
+        >
+          {part}
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
 }

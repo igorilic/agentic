@@ -200,6 +200,121 @@ describe("ChatMessage", () => {
     });
   });
 
+  describe("inline token highlighter — user variant", () => {
+    it("renders 2 chat-token elements for a body with one slash command and one mention", () => {
+      render(
+        <ChatMessage
+          kind="user"
+          userName="Erica"
+          timestamp="14:02"
+          body="/develop AGT-204 @architect please"
+        />
+      );
+      expect(screen.getAllByTestId("chat-token")).toHaveLength(2);
+    });
+
+    it("first token text is /develop and second token text is @architect", () => {
+      render(
+        <ChatMessage
+          kind="user"
+          userName="Erica"
+          timestamp="14:02"
+          body="/develop AGT-204 @architect please"
+        />
+      );
+      const tokens = screen.getAllByTestId("chat-token");
+      expect(tokens[0].textContent).toBe("/develop");
+      expect(tokens[1].textContent).toBe("@architect");
+    });
+
+    it("message textContent contains the plain text segments ' AGT-204 ' and ' please'", () => {
+      render(
+        <ChatMessage
+          kind="user"
+          userName="Erica"
+          timestamp="14:02"
+          body="/develop AGT-204 @architect please"
+        />
+      );
+      const el = screen.getByTestId("chat-message-user");
+      expect(el.textContent).toContain(" AGT-204 ");
+      expect(el.textContent).toContain(" please");
+    });
+
+    it("body with no slash or mention tokens renders zero chat-token testids", () => {
+      render(
+        <ChatMessage kind="user" userName="Erica" timestamp="14:02" body="hello world" />
+      );
+      expect(screen.queryAllByTestId("chat-token")).toHaveLength(0);
+    });
+
+    it("token at the START of the body is highlighted — body '/plan AGT-99'", () => {
+      render(
+        <ChatMessage kind="user" userName="Erica" timestamp="14:02" body="/plan AGT-99" />
+      );
+      const tokens = screen.getAllByTestId("chat-token");
+      expect(tokens).toHaveLength(1);
+      expect(tokens[0].textContent).toBe("/plan");
+    });
+
+    it("token at the END of the body is highlighted — body 'please /run'", () => {
+      render(
+        <ChatMessage kind="user" userName="Erica" timestamp="14:02" body="please /run" />
+      );
+      const tokens = screen.getAllByTestId("chat-token");
+      expect(tokens).toHaveLength(1);
+      expect(tokens[0].textContent).toBe("/run");
+    });
+
+    it("adjacent tokens '/dev @qa' produce 2 tokens with the space between as plain text", () => {
+      render(
+        <ChatMessage kind="user" userName="Erica" timestamp="14:02" body="/dev @qa" />
+      );
+      const tokens = screen.getAllByTestId("chat-token");
+      expect(tokens).toHaveLength(2);
+      expect(tokens[0].textContent).toBe("/dev");
+      expect(tokens[1].textContent).toBe("@qa");
+      const el = screen.getByTestId("chat-message-user");
+      expect(el.textContent).toContain(" ");
+    });
+
+    it("each chat-token element has className containing bg-[rgba(253,230,138,0.4)] and rounded-sm", () => {
+      render(
+        <ChatMessage
+          kind="user"
+          userName="Erica"
+          timestamp="14:02"
+          body="/develop AGT-204 @architect please"
+        />
+      );
+      const tokens = screen.getAllByTestId("chat-token");
+      for (const token of tokens) {
+        expect(token.className).toContain("bg-[rgba(253,230,138,0.4)]");
+        expect(token.className).toContain("rounded-sm");
+      }
+    });
+  });
+
+  describe("inline token highlighter — agent variant", () => {
+    it("agent variant highlights a single @mention token", () => {
+      render(
+        <ChatMessage kind="agent" agent="developer" timestamp="14:05" body="ok @qa over to you" />
+      );
+      const tokens = screen.getAllByTestId("chat-token");
+      expect(tokens).toHaveLength(1);
+      expect(tokens[0].textContent).toBe("@qa");
+    });
+  });
+
+  describe("inline token highlighter — system variant", () => {
+    it("system messages do NOT highlight tokens even when body contains a slash command", () => {
+      render(
+        <ChatMessage kind="system" body="── /handoff to architect ──" />
+      );
+      expect(screen.queryAllByTestId("chat-token")).toHaveLength(0);
+    });
+  });
+
   describe("agent variant — unknown agent fallback", () => {
     it("does NOT crash when rendering an unknown agent", () => {
       expect(() =>
