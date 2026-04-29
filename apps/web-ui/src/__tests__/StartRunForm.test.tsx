@@ -30,6 +30,25 @@ function ControlledStartRunForm({
   );
 }
 
+describe("StartRunForm — dev-mode gate", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("renders nothing when import.meta.env.DEV is false (production build)", () => {
+    vi.stubEnv("DEV", false);
+    const { container } = render(<ControlledStartRunForm />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByTestId("start-run-form")).toBeNull();
+  });
+
+  it("renders the form when import.meta.env.DEV is true (dev build)", () => {
+    vi.stubEnv("DEV", true);
+    render(<ControlledStartRunForm />);
+    expect(screen.getByTestId("start-run-form")).toBeInTheDocument();
+  });
+});
+
 describe("StartRunForm", () => {
   beforeEach(() => {
     invokeMock.mockReset();
