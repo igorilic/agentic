@@ -20,10 +20,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "agentic.hello",
-        "title": "Agentic: Hello"
-      },
-      {
         "command": "agentic.plan",
         "title": "Agentic: Plan"
       },

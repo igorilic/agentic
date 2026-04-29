@@ -1,26 +1,7 @@
+import * as fs from "fs";
+import * as path from "path";
 import * as vscode from "vscode";
-
-// The full MVP slash-command set that Step 14.4 must register.
-// Keeping the list here as a single source of truth so this test
-// and commands/index.ts can never drift.
-const EXPECTED_COMMAND_IDS = [
-  "agentic.hello",
-  "agentic.plan",
-  "agentic.status",
-  "agentic.cancel",
-  "agentic.triage",
-  "agentic.answer",
-  "agentic.retry",
-  "agentic.resume",
-  "agentic.workspace",
-  "agentic.backend",
-  "agentic.model",
-  "agentic.settings",
-  "agentic.runs",
-  "agentic.pr",
-  "agentic.clear",
-  "agentic.help",
-];
+import { ALL_COMMAND_IDS } from "../commands";
 
 suite("Command Registration", () => {
   async function ensureActivated(): Promise<void> {
@@ -39,9 +20,7 @@ suite("Command Registration", () => {
     await ensureActivated();
 
     const registered = await vscode.commands.getCommands(true);
-    const missing = EXPECTED_COMMAND_IDS.filter(
-      (id) => !registered.includes(id),
-    );
+    const missing = ALL_COMMAND_IDS.filter((id) => !registered.includes(id));
 
     if (missing.length > 0) {
       throw new Error(
@@ -54,8 +33,35 @@ suite("Command Registration", () => {
   test("agentic.plan command executes without throwing", async () => {
     await ensureActivated();
 
-    // The stub handler shows an info message and returns undefined.
-    // We only assert that executeCommand resolves without rejecting.
+    // Stub handler shows an info message and returns undefined. We
+    // only assert that executeCommand resolves without rejecting.
     await vscode.commands.executeCommand("agentic.plan");
+  });
+
+  test("manifest contributes.commands matches runtime registrations exactly", () => {
+    // __dirname at runtime = out/__tests__; package.json sits two up.
+    const pkgPath = path.resolve(__dirname, "..", "..", "package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+    const manifestIds: string[] = pkg.contributes.commands.map(
+      (c: { command: string }) => c.command,
+    );
+
+    const inManifestNotRuntime = manifestIds.filter(
+      (id) => !ALL_COMMAND_IDS.includes(id),
+    );
+    const inRuntimeNotManifest = ALL_COMMAND_IDS.filter(
+      (id) => !manifestIds.includes(id),
+    );
+
+    if (
+      inManifestNotRuntime.length > 0 ||
+      inRuntimeNotManifest.length > 0
+    ) {
+      throw new Error(
+        `package.json contributes.commands and runtime registrations have drifted.\n` +
+          `  In manifest only: ${inManifestNotRuntime.join(", ") || "(none)"}\n` +
+          `  In runtime only:  ${inRuntimeNotManifest.join(", ") || "(none)"}`,
+      );
+    }
   });
 });
