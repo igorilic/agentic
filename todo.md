@@ -14,6 +14,10 @@ Execution contract:
 Legend:
 - Crate shorthand: `core` = `agentic-core`, `tui` = `agentic-tui`, `tauri` = `agentic-tauri`, `node` = `agentic-node`, `web` = `apps/web-ui`, `vsx` = `apps/vscode-extension`, `cli` = `agentic-cli` (dev smoke-test binary, post-MVP-mergeable into a shell).
 
+## Pre-CP-11 polish
+
+- [x] Gate `StartRunForm` behind `import.meta.env.DEV` so the manual-script-path input does not appear in production builds. Tauri commands and tests are unaffected.
+
 ---
 
 ## Phase 0 — Repo scaffolding
