@@ -85,26 +85,28 @@ export default function PastRunsPane({ onSelectRun }: PastRunsPaneProps = {}) {
                 key={r.id}
                 data-testid={`past-run-row-${r.id}`}
                 onClick={() => onSelectRun?.(r.id)}
-                className={`px-3 py-2 flex items-center gap-3 ${
+                className={`px-3 py-2 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 ${
                   onSelectRun ? "cursor-pointer hover:bg-gray-50" : ""
                 }`}
               >
-                <span
-                  className={`px-2 py-0.5 text-xs rounded font-medium shrink-0 ${statusClass}`}
-                >
-                  {r.status}
-                </span>
-                <span className="font-mono text-xs text-gray-500 shrink-0">
-                  {r.id.slice(0, 8)}
-                </span>
-                <span className="text-sm text-gray-800 flex-1 truncate">
+                <span className="text-sm text-gray-800 truncate">
                   {r.ticket_label ?? <em className="text-gray-400">(no ticket)</em>}
                 </span>
-                <span className="text-xs text-gray-400 shrink-0">{r.backend}</span>
-                {duration && (
-                  <span className="text-xs text-gray-400 shrink-0">{duration}</span>
-                )}
-                <span className="text-xs text-gray-400 shrink-0">{startedAt}</span>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 sm:ml-auto">
+                  <span
+                    className={`px-2 py-0.5 text-xs rounded font-medium shrink-0 ${statusClass}`}
+                  >
+                    {r.status}
+                  </span>
+                  <span className="font-mono text-xs text-gray-500 shrink-0">
+                    {r.id.slice(0, 8)}
+                  </span>
+                  <span className="text-xs text-gray-400 shrink-0">{r.backend}</span>
+                  {duration && (
+                    <span className="text-xs text-gray-400 shrink-0">{duration}</span>
+                  )}
+                  <span className="text-xs text-gray-400 shrink-0">{startedAt}</span>
+                </div>
               </li>
             );
           })}

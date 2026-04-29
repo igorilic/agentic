@@ -98,4 +98,25 @@ describe("PastRunsPane", () => {
       expect(invokeMock).toHaveBeenCalledTimes(2);
     });
   });
+
+  // Responsive layout assertions.
+  it("run row has flex-col base layout so content stacks vertically at narrow widths", async () => {
+    invokeMock.mockResolvedValueOnce([makeRun({ id: "01abc1234567" })]);
+    render(<PastRunsPane />);
+    await waitFor(() => {
+      expect(screen.getByTestId("past-run-row-01abc1234567")).toBeInTheDocument();
+    });
+    const row = screen.getByTestId("past-run-row-01abc1234567");
+    expect(row.className).toMatch(/flex-col/);
+  });
+
+  it("run row has sm:flex-row to restore horizontal layout at sm breakpoint", async () => {
+    invokeMock.mockResolvedValueOnce([makeRun({ id: "01abc1234567" })]);
+    render(<PastRunsPane />);
+    await waitFor(() => {
+      expect(screen.getByTestId("past-run-row-01abc1234567")).toBeInTheDocument();
+    });
+    const row = screen.getByTestId("past-run-row-01abc1234567");
+    expect(row.className).toMatch(/sm:flex-row/);
+  });
 });
