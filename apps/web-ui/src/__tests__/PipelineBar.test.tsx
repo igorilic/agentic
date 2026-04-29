@@ -219,7 +219,8 @@ describe("PipelineBar", () => {
       expect(screen.getByTestId("pipeline-insert-3")).toHaveTextContent("+");
     });
 
-    it("clicking pipeline-insert-1 calls onInsert with 1", async () => {
+    // W.2.6: clicking a chip opens AgentPicker (no direct onInsert call yet)
+    it("click pipeline-insert-1 opens AgentPicker", async () => {
       const onInsert = vi.fn();
       render(
         <PipelineBar
@@ -230,10 +231,11 @@ describe("PipelineBar", () => {
         />
       );
       await userEvent.click(screen.getByTestId("pipeline-insert-1"));
-      expect(onInsert).toHaveBeenCalledWith(1);
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      expect(onInsert).not.toHaveBeenCalled();
     });
 
-    it("clicking pipeline-insert-2 calls onInsert with 2", async () => {
+    it("click pipeline-insert-2 opens AgentPicker", async () => {
       const onInsert = vi.fn();
       render(
         <PipelineBar
@@ -244,10 +246,11 @@ describe("PipelineBar", () => {
         />
       );
       await userEvent.click(screen.getByTestId("pipeline-insert-2"));
-      expect(onInsert).toHaveBeenCalledWith(2);
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      expect(onInsert).not.toHaveBeenCalled();
     });
 
-    it("clicking pipeline-insert-3 calls onInsert with 3", async () => {
+    it("click pipeline-insert-3 opens AgentPicker", async () => {
       const onInsert = vi.fn();
       render(
         <PipelineBar
@@ -258,10 +261,11 @@ describe("PipelineBar", () => {
         />
       );
       await userEvent.click(screen.getByTestId("pipeline-insert-3"));
-      expect(onInsert).toHaveBeenCalledWith(3);
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      expect(onInsert).not.toHaveBeenCalled();
     });
 
-    it("clicking pipeline-add-agent calls onInsert with agents.length (4)", async () => {
+    it("click pipeline-add-agent opens AgentPicker", async () => {
       const onInsert = vi.fn();
       render(
         <PipelineBar
@@ -272,7 +276,8 @@ describe("PipelineBar", () => {
         />
       );
       await userEvent.click(screen.getByTestId("pipeline-add-agent"));
-      expect(onInsert).toHaveBeenCalledWith(4);
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      expect(onInsert).not.toHaveBeenCalled();
     });
 
     it("2-agent pipeline has exactly 1 insert chip at pipeline-insert-1", () => {
@@ -289,7 +294,22 @@ describe("PipelineBar", () => {
       expect(screen.getByTestId("pipeline-insert-1")).toBeInTheDocument();
     });
 
-    it("end cap calls onInsert with 2 for a 2-agent pipeline", async () => {
+    it("click pipeline-insert-1 opens AgentPicker for 2-agent pipeline", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={["architect", "qa"]}
+          statuses={{ architect: "done", qa: "queued" }}
+          activeIndex={0}
+          onInsert={onInsert}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-insert-1"));
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      expect(onInsert).not.toHaveBeenCalled();
+    });
+
+    it("click pipeline-add-agent opens AgentPicker for 2-agent pipeline", async () => {
       const onInsert = vi.fn();
       render(
         <PipelineBar
@@ -300,7 +320,8 @@ describe("PipelineBar", () => {
         />
       );
       await userEvent.click(screen.getByTestId("pipeline-add-agent"));
-      expect(onInsert).toHaveBeenCalledWith(2);
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      expect(onInsert).not.toHaveBeenCalled();
     });
 
     it("empty pipeline renders no insert chips", () => {
@@ -316,7 +337,7 @@ describe("PipelineBar", () => {
       expect(chips).toHaveLength(0);
     });
 
-    it("end cap calls onInsert with 0 for empty pipeline", async () => {
+    it("click pipeline-add-agent opens AgentPicker for empty pipeline", async () => {
       const onInsert = vi.fn();
       render(
         <PipelineBar
@@ -327,7 +348,123 @@ describe("PipelineBar", () => {
         />
       );
       await userEvent.click(screen.getByTestId("pipeline-add-agent"));
-      expect(onInsert).toHaveBeenCalledWith(0);
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      expect(onInsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("AgentPicker insert flow", () => {
+    it("click pipeline-insert-2 then pick QA fires onInsert(2, 'qa')", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={onInsert}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-insert-2"));
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      await userEvent.click(screen.getByTestId("agent-picker-row-researcher"));
+      expect(onInsert).toHaveBeenCalledWith(2, "researcher");
+      expect(screen.queryByTestId("agent-picker")).not.toBeInTheDocument();
+    });
+
+    it("click pipeline-add-agent then pick reviewer fires onInsert(4, 'researcher')", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={onInsert}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-add-agent"));
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      await userEvent.click(screen.getByTestId("agent-picker-row-researcher"));
+      expect(onInsert).toHaveBeenCalledWith(4, "researcher");
+      expect(screen.queryByTestId("agent-picker")).not.toBeInTheDocument();
+    });
+
+    it("press Escape closes picker without calling onInsert", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={onInsert}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-insert-2"));
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      await userEvent.keyboard("{Escape}");
+      expect(screen.queryByTestId("agent-picker")).not.toBeInTheDocument();
+      expect(onInsert).not.toHaveBeenCalled();
+    });
+
+    it("click outside the picker closes it without calling onInsert", async () => {
+      const onInsert = vi.fn();
+      render(
+        <div>
+          <div data-testid="outside">Outside</div>
+          <PipelineBar
+            agents={defaultAgents}
+            statuses={defaultStatuses}
+            activeIndex={1}
+            onInsert={onInsert}
+          />
+        </div>
+      );
+      await userEvent.click(screen.getByTestId("pipeline-insert-2"));
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      await userEvent.click(screen.getByTestId("outside"));
+      expect(screen.queryByTestId("agent-picker")).not.toBeInTheDocument();
+      expect(onInsert).not.toHaveBeenCalled();
+    });
+
+    it("clicking a different chip switches the open picker to new index", async () => {
+      const onInsert = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={onInsert}
+        />
+      );
+      // Open at index 1
+      await userEvent.click(screen.getByTestId("pipeline-insert-1"));
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      // Switch to index 3
+      await userEvent.click(screen.getByTestId("pipeline-insert-3"));
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      // Pick agent — must fire with index 3, not 1
+      await userEvent.click(screen.getByTestId("agent-picker-row-researcher"));
+      expect(onInsert).toHaveBeenCalledWith(3, "researcher");
+      expect(onInsert).not.toHaveBeenCalledWith(1, expect.anything());
+    });
+
+    it("AgentPicker excludes already-pipeline agents", async () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onInsert={vi.fn()}
+        />
+      );
+      await userEvent.click(screen.getByTestId("pipeline-insert-1"));
+      expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
+      // Agents already in the pipeline should be excluded
+      expect(screen.queryByTestId("agent-picker-row-architect")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("agent-picker-row-developer")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("agent-picker-row-qa")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("agent-picker-row-reviewer")).not.toBeInTheDocument();
+      // Agents not in the pipeline should be visible
+      expect(screen.getByTestId("agent-picker-row-researcher")).toBeInTheDocument();
     });
   });
 });
