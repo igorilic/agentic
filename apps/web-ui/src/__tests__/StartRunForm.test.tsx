@@ -33,11 +33,19 @@ function ControlledStartRunForm({
 describe("StartRunForm — dev-mode gate", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.resetModules();
   });
 
-  it("renders nothing when import.meta.env.DEV is false (production build)", () => {
+  it("renders nothing when import.meta.env.DEV is false (production build)", async () => {
+    // The DEV ternary is evaluated at module-scope in StartRunForm.tsx.
+    // To test the DEV=false path robustly we must reset the module registry
+    // so the stub takes effect when the module is re-evaluated on re-import.
     vi.stubEnv("DEV", false);
-    const { container } = render(<ControlledStartRunForm />);
+    vi.resetModules();
+    const { default: StartRunFormFresh } = await import(
+      "../components/StartRunForm"
+    );
+    const { container } = render(<StartRunFormFresh events={[]} activeRunId={undefined} onActiveRunIdChange={() => {}} />);
     expect(container).toBeEmptyDOMElement();
     expect(screen.queryByTestId("start-run-form")).toBeNull();
   });
