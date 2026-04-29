@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, it, expect } from "vitest";
 import PipelineBar from "../components/PipelineBar";
 import type { AgentStatus } from "../types/pipeline";
 
@@ -112,7 +112,7 @@ describe("PipelineBar", () => {
       expect(screen.getByTestId("pipeline-add-agent")).toBeInTheDocument();
     });
 
-    it("end cap contains text 'Add agent'", () => {
+    it("end cap contains text '+ Add agent'", () => {
       render(
         <PipelineBar
           agents={defaultAgents}
@@ -121,21 +121,7 @@ describe("PipelineBar", () => {
         />
       );
       const btn = screen.getByTestId("pipeline-add-agent");
-      expect(btn).toHaveTextContent("Add agent");
-    });
-
-    it("calls onAddAgent when end cap is clicked", () => {
-      const handler = vi.fn();
-      render(
-        <PipelineBar
-          agents={defaultAgents}
-          statuses={defaultStatuses}
-          activeIndex={1}
-          onAddAgent={handler}
-        />
-      );
-      fireEvent.click(screen.getByTestId("pipeline-add-agent"));
-      expect(handler).toHaveBeenCalledTimes(1);
+      expect(btn).toHaveTextContent("+ Add agent");
     });
   });
 

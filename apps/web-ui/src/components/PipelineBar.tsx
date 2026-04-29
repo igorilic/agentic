@@ -7,7 +7,6 @@ export type PipelineBarProps = {
   agents: string[];
   statuses: Record<string, AgentStatus>;
   activeIndex: number;
-  onAddAgent?: () => void;
   // Reserved for downstream steps; accepted but not yet consumed:
   onReorder?: (from: number, to: number) => void;
   onInsert?: (atIndex: number, agentId: string) => void;
@@ -15,7 +14,7 @@ export type PipelineBarProps = {
   onSkip?: (atIndex: number) => void;
 };
 
-export default function PipelineBar({ agents, statuses, onAddAgent }: PipelineBarProps) {
+export default function PipelineBar({ agents, statuses }: PipelineBarProps) {
   return (
     <div
       data-testid="pipeline-bar"
@@ -30,7 +29,6 @@ export default function PipelineBar({ agents, statuses, onAddAgent }: PipelineBa
       <button
         type="button"
         data-testid="pipeline-add-agent"
-        onClick={onAddAgent}
         className="rounded-md border border-dashed border-border-strong px-3 py-1.5 text-xs font-semibold text-fg-muted"
       >
         + Add agent
