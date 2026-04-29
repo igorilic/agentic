@@ -71,7 +71,7 @@ blocked.
 
 ---
 
-### Step W.0.2: Extend `tailwind.config.js` with semantic color + token aliases
+### [x] Step W.0.2: Extend `tailwind.config.js` with semantic color + token aliases
 
 **Goal**: Tailwind utilities like `bg-bg-surface`, `text-fg-muted`, `border-border` resolve to the CSS variables from W.0.1.
 
@@ -96,7 +96,7 @@ blocked.
 
 ---
 
-### Step W.0.3: Add `useTheme` hook
+### [x] Step W.0.3: Add `useTheme` hook
 
 **Goal**: Hook that reads `localStorage["agentic.theme"]`, sets `data-theme` on `<html>`, returns `(theme, setTheme, toggle)`. Persists across reloads.
 
@@ -125,7 +125,7 @@ blocked.
 
 ---
 
-### Step W.0.4: Add `pipeline.ts` types module
+### [x] Step W.0.4: Add `pipeline.ts` types module
 
 **Goal**: Centralize the new state shapes (`AgentInstance`, `PermissionRequest`, `ActionItem`, `IssueTicket`) per spec §6.4 so subsequent steps import from one place.
 
@@ -149,7 +149,7 @@ blocked.
 
 ## Phase 1 — Web header + run-state badge
 
-### Step W.1.1: New `HeaderBar` component (idle state)
+### [x] Step W.1.1: New `HeaderBar` component (idle state)
 
 **Goal**: Render the 48 px header bar with brand, slug, settings/theme/avatar, and an idle "Run pipeline" button. No real run state yet — just the chrome.
 
@@ -175,7 +175,7 @@ blocked.
 
 ---
 
-### Step W.1.2: HeaderBar — running and completed badges
+### [x] Step W.1.2: HeaderBar — running and completed badges
 
 **Goal**: Add the two non-idle pill variants per spec §3.1, with elapsed-time formatting and Stop / Re-run buttons.
 
