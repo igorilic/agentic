@@ -88,6 +88,57 @@ export default function PipelineBar({
     };
   }, [pickerOpenAt]);
 
+  function renderInterCardGap(gapIndex: number) {
+    const gapHandlers = getGapHandlers(gapIndex);
+    const isActive = dropGapIndex === gapIndex;
+    return (
+      <div
+        data-testid={`pipeline-gap-${gapIndex}`}
+        data-drop-active={isActive ? "true" : "false"}
+        className="flex items-center gap-1"
+        {...gapHandlers}
+      >
+        {isActive && (
+          <div
+            aria-hidden="true"
+            className="w-0.5 h-11 bg-status-active rounded flex-shrink-0"
+          />
+        )}
+        <button
+          type="button"
+          data-testid={`pipeline-insert-${gapIndex}`}
+          aria-label={`Insert agent at position ${gapIndex}`}
+          onClick={() => setPickerOpenAt(gapIndex)}
+          className="opacity-0 hover:opacity-100 focus:opacity-100 transition-opacity h-4 w-4 rounded-full border border-border-strong text-fg-muted text-[11px] leading-none flex items-center justify-center"
+        >
+          +
+        </button>
+        <Connector active={false} />
+      </div>
+    );
+  }
+
+  function renderEndGap() {
+    const gapIndex = agents.length;
+    const gapHandlers = getGapHandlers(gapIndex);
+    const isActive = dropGapIndex === gapIndex;
+    return (
+      <div
+        data-testid={`pipeline-gap-${gapIndex}`}
+        data-drop-active={isActive ? "true" : "false"}
+        className="flex items-center"
+        {...gapHandlers}
+      >
+        {isActive && (
+          <div
+            aria-hidden="true"
+            className="w-0.5 h-11 bg-status-active rounded flex-shrink-0"
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid="pipeline-bar"
@@ -103,59 +154,11 @@ export default function PipelineBar({
             onDragStart={() => onCardDragStart(i)}
             onDragEnd={() => onCardDragEnd()}
           />
-          {i < agents.length - 1 && (() => {
-            const gapIndex = i + 1;
-            const gapHandlers = getGapHandlers(gapIndex);
-            const isActive = dropGapIndex === gapIndex;
-            return (
-              <div
-                data-testid={`pipeline-gap-${gapIndex}`}
-                data-drop-active={isActive ? "true" : "false"}
-                className="flex items-center gap-1"
-                {...gapHandlers}
-              >
-                {isActive && (
-                  <div
-                    aria-hidden="true"
-                    className="w-0.5 h-11 bg-status-active rounded flex-shrink-0"
-                  />
-                )}
-                <button
-                  type="button"
-                  data-testid={`pipeline-insert-${gapIndex}`}
-                  aria-label={`Insert agent at position ${gapIndex}`}
-                  onClick={() => setPickerOpenAt(gapIndex)}
-                  className="opacity-0 hover:opacity-100 focus:opacity-100 transition-opacity h-4 w-4 rounded-full border border-border-strong text-fg-muted text-[11px] leading-none flex items-center justify-center"
-                >
-                  +
-                </button>
-                <Connector active={false} />
-              </div>
-            );
-          })()}
+          {i < agents.length - 1 && renderInterCardGap(i + 1)}
         </div>
       ))}
       {/* gap-N after the last card, before + Add agent */}
-      {agents.length > 0 && (() => {
-        const gapIndex = agents.length;
-        const gapHandlers = getGapHandlers(gapIndex);
-        const isActive = dropGapIndex === gapIndex;
-        return (
-          <div
-            data-testid={`pipeline-gap-${gapIndex}`}
-            data-drop-active={isActive ? "true" : "false"}
-            className="flex items-center"
-            {...gapHandlers}
-          >
-            {isActive && (
-              <div
-                aria-hidden="true"
-                className="w-0.5 h-11 bg-status-active rounded flex-shrink-0"
-              />
-            )}
-          </div>
-        );
-      })()}
+      {agents.length > 0 && renderEndGap()}
       <button
         type="button"
         data-testid="pipeline-add-agent"

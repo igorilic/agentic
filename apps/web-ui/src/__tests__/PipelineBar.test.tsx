@@ -678,5 +678,25 @@ describe("PipelineBar", () => {
       fireEvent.dragStart(architectCard);
       expect(developerCard).toHaveAttribute("data-dragging", "false");
     });
+
+    // Right-side self-drop: fromIndex >= gapIndex branch.
+    // drag reviewer(3) → gap-3: adjusted = 3 < 3 ? 2 : 3 = 3 → self-drop → no-op.
+    it("drag reviewer(3) to gap-3 (self-adjacent left) does NOT call onReorder", () => {
+      const onReorder = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={onReorder}
+        />
+      );
+      const card = screen.getByTestId("agent-card-reviewer");
+      const gap3 = screen.getByTestId("pipeline-gap-3");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap3);
+      fireEvent.drop(gap3);
+      expect(onReorder).not.toHaveBeenCalled();
+    });
   });
 });
