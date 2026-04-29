@@ -29,7 +29,7 @@ export default function Stepper({ state }: StepperProps) {
       data-testid="cockpit-stepper"
       aria-label="Pipeline progress"
     >
-      <ol className="flex items-center gap-4">
+      <ol className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
         {state.steps.map((step, idx) => (
           <li
             key={step.agent}
@@ -48,7 +48,7 @@ export default function Stepper({ state }: StepperProps) {
               {step.agent}
             </span>
             {idx < state.steps.length - 1 && (
-              <span className="text-gray-300" aria-hidden="true">
+              <span className="hidden sm:inline text-gray-300" aria-hidden="true">
                 →
               </span>
             )}
