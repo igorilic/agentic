@@ -51,16 +51,18 @@ export default function HeaderBar({
       </div>
 
       <div className="flex items-center gap-3.5">
-        {runState === "idle" && (
-          <button
-            type="button"
-            data-testid="header-run"
-            onClick={onRunPipeline}
-            className="rounded-md bg-[#18181b] px-3 py-1.5 text-xs font-semibold text-white"
-          >
-            Run pipeline
-          </button>
-        )}
+        <div role="status" aria-live="polite" data-testid="header-run-state">
+          {runState === "idle" && (
+            <button
+              type="button"
+              data-testid="header-run"
+              onClick={onRunPipeline}
+              className="rounded-md bg-[#18181b] px-3 py-1.5 text-xs font-semibold text-white"
+            >
+              Run pipeline
+            </button>
+          )}
+        </div>
 
         <button
           type="button"
@@ -115,6 +117,7 @@ export default function HeaderBar({
 
         <div
           data-testid="header-avatar"
+          role="img"
           className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-200 text-[11px] font-semibold text-fg-muted"
           aria-label="User"
         >

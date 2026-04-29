@@ -87,4 +87,25 @@ describe("HeaderBar", () => {
     await user.click(screen.getByTestId("header-settings"));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
+
+  // F1 — run-state slot must have role="status" and aria-live="polite"
+  it("run-state wrapper has role=status and aria-live=polite", () => {
+    render(<HeaderBar {...defaultProps} />);
+    const wrapper = screen.getByTestId("header-run-state");
+    expect(wrapper.getAttribute("role")).toBe("status");
+    expect(wrapper.getAttribute("aria-live")).toBe("polite");
+  });
+
+  // F2 — avatar div must carry role="img" so aria-label is reliably exposed
+  it("avatar div has role=img", () => {
+    render(<HeaderBar {...defaultProps} />);
+    const avatar = screen.getByTestId("header-avatar");
+    expect(avatar.getAttribute("role")).toBe("img");
+  });
+
+  // F3 — "Run pipeline" button must not appear when runState is not idle
+  it("does not render Run pipeline button when runState is running", () => {
+    render(<HeaderBar {...defaultProps} runState="running" elapsedMs={1000} />);
+    expect(screen.queryByTestId("header-run")).toBeNull();
+  });
 });
