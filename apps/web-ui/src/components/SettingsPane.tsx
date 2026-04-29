@@ -10,8 +10,8 @@ export default function SettingsPane() {
 
   const refresh = useCallback(async () => {
     try {
-      const rows = (await invoke("list_auth_accounts")) as AuthAccount[];
-      setAccounts(rows);
+      const rows = (await invoke("list_auth_accounts")) as AuthAccount[] | null;
+      setAccounts(rows ?? []);
       setLoadError(null);
     } catch (e) {
       setLoadError(String(e));

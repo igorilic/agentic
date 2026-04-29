@@ -28,8 +28,8 @@ export default function PastRunsPane({ onSelectRun }: PastRunsPaneProps = {}) {
     setLoading(true);
     setError(null);
     try {
-      const rows = (await invoke("list_runs", { limit: 50 })) as RunSummary[];
-      setRuns(rows);
+      const rows = (await invoke("list_runs", { limit: 50 })) as RunSummary[] | null;
+      setRuns(rows ?? []);
     } catch (e) {
       setError(String(e));
     } finally {
