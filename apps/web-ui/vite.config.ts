@@ -4,11 +4,16 @@ import react from "@vitejs/plugin-react";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  // Explicitly fold import.meta.env.DEV so Rollup can tree-shake the
-  // StartRunFormInner lazy chunk in production builds. Without this explicit
-  // define, `@vitejs/plugin-react` still uses the jsxDEV transform when
-  // NODE_ENV is unset — even with `--mode production` — which prevents Rollup
-  // from seeing the branch as dead code.
+  // `@vitejs/plugin-react` emits the jsxDEV (development) transform whenever
+  // import.meta.env.DEV is truthy at build time. With `--mode production` the
+  // flag is eventually replaced in the output, but the plugin has already
+  // chosen the dev transform during the transform phase, before Rollup applies
+  // replacements. The lazy-import branch `if (import.meta.env.DEV) { … }`
+  // therefore never becomes statically-false, so Rollup cannot tree-shake
+  // StartRunFormInner out of the bundle. Explicitly defining the constant to
+  // `false` at transform time forces the jsx runtime path and lets Rollup
+  // eliminate the dead branch (verified: without this, the chunk leaks into
+  // dist/; with it, the grep is empty).
   define:
     mode === "production"
       ? { "import.meta.env.DEV": "false" }
