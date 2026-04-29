@@ -220,6 +220,40 @@ describe("AgentCard", () => {
     }
   });
 
+  describe("SF-1 — kebab button aria-haspopup and aria-expanded", () => {
+    it("kebab button has aria-haspopup='true' and aria-expanded='false' when menu is closed", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      const btn = screen.getByTestId("agent-card-architect-menu");
+      expect(btn.getAttribute("aria-haspopup")).toBe("true");
+      expect(btn.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("aria-expanded flips to 'true' after clicking kebab to open the menu", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      const btn = screen.getByTestId("agent-card-architect-menu");
+      fireEvent.click(btn);
+      expect(btn.getAttribute("aria-expanded")).toBe("true");
+    });
+
+    it("aria-expanded flips back to 'false' after pressing Escape to close the menu", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      const btn = screen.getByTestId("agent-card-architect-menu");
+      fireEvent.click(btn);
+      expect(btn.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.keyDown(screen.getByTestId("agent-card-architect-menu-list"), { key: "Escape" });
+      expect(btn.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("aria-expanded flips back to 'false' after outside mousedown closes the menu", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      const btn = screen.getByTestId("agent-card-architect-menu");
+      fireEvent.click(btn);
+      expect(btn.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.mouseDown(document.body);
+      expect(btn.getAttribute("aria-expanded")).toBe("false");
+    });
+  });
+
   describe("F2 — decorative elements have aria-hidden", () => {
     it("active tint overlay has aria-hidden=true", () => {
       render(<AgentCard agent="architect" status="active" />);

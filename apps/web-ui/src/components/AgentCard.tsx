@@ -118,6 +118,8 @@ export default function AgentCard({
             data-testid={`agent-card-${agent}-menu`}
             onClick={() => setMenuOpen((o) => !o)}
             aria-label="Agent menu"
+            aria-haspopup="true"
+            aria-expanded={menuOpen}
             className="text-fg-muted hover:text-fg text-base leading-none px-0.5"
           >
             ⋯
