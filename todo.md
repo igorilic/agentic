@@ -2105,17 +2105,32 @@ Cross-cutting reminders:
 - **Tauri + keyring on Linux**: the `libsecret` backend requires a running daemon. Document in README before Phase 9 ships.
 - **Feature flags for shell builds**: release builds should not include `scripted` backend; gate behind `#[cfg(any(test, feature = "testing"))]` as noted in Step 4.2.
 
-## TUI tech-debt (logged from Phase 12 review)
+## Tech-debt index
 
-- **TUI test helpers duplicated**: `flatten()` is copy-pasted across `crates/agentic-tui/tests/{cockpit,command_mode,findings}.rs`. Extract to a shared `tests/common/mod.rs` when it reaches a fourth caller or when `TestBackend` API changes.
-- **`render_row -> Line<'static>`**: `crates/agentic-tui/src/views/findings.rs:38` — annotation is satisfied by owned-string allocations, not actual statics. Switch to `Line<'_>` borrowed from the `Finding` input when there's a reason to (e.g. avoiding the per-frame `format!` calls).
-- **`syntect` syntax highlighting in diff view**: Step 13.1 ships +/- coloring only (the spec's primary contract). Adding `syntect` for in-line code colouring is the next quality bump — it brings ~20 MB of `.tmTheme` / `.sublime-syntax` data, so wait until the binary's distribution story is settled.
-- **`current_diff` population from `Event::FileChange`**: the event carries only hashes; the diff text lives in `file_changes.diff` (DB BLOB). Wiring the lookup into the TUI binary needs a `Db` handle in the run loop — defer until the binary subscribes to a real bus (12.4-style integration step that didn't make 12.4's scope).
-- **Back-fill 13.2 decision as ADR-001**: the choice between Monaco / `@git-diff-view/react` / in-house was recorded in commit `9fedb98`'s body. When `docs/decisions/` is created (e.g. for the next ADR-worthy decision), promote this rationale to `ADR-001-tauri-diff-viewer.md` so it's discoverable.
+Each entry is a quick-glance pointer to a tracked GitHub issue. The
+issue body has the full _what_ / _why_ / _trigger_ details — keep
+it as the source of truth and edit the issue (not this file) if
+context changes.
 
-## agentic-node (napi-rs) tech-debt
+### TUI
 
-- **`startRun` only supports the scripted backend**: Step 14.1 ships a working bridge but real `claude-code` / `copilot-cli` backends still need agent discovery and workspace setup wiring before they can run from Node. Pick this up alongside Step 14.3 (sidebar) so the VS Code extension can drive a real run.
-- **Cross-platform CI is unverified**: `.github/workflows/agentic-node.yml` was scaffolded from `package.json`'s declared triples but only macOS-arm64 was exercised locally. Expect the first push to surface tweaks (linux libssl, windows MSVC linker).
-- **Slash command argument-shape mismatch (Step 14.4 → 14.5+)**: VS Code stubs for `agentic.cancel` and `agentic.status` accept zero arguments, but `apps/web-ui/src/slash/types.ts` requires `runId: string` for `cancel` and `runId: string | null` for `status`. When Step 14.5+ wires the real handlers, decide where the argument source lives (active run from extension state? prompt via QuickPick?) — don't paper over by keeping zero-arg handlers.
-- **dataDir misalignment between VS Code extension and agentic-core snapshot store** (GH #73): the extension passes `globalStorageUri/agentic` to `getFileSnapshot`, but the agentic-core run that wrote the snapshots used a different `data_dir` root. These two never coincide in production until Step 14.6 wires workspace-aware data_dir resolution into the sidebar's run picker.
+- **TUI test helpers duplicated** (GH [#74](https://github.com/igorilic/agentic/issues/74)) — `flatten()` copy-pasted across four `crates/agentic-tui/tests/*.rs` files.
+- **`render_row -> Line<'static>` is misleading** (GH [#75](https://github.com/igorilic/agentic/issues/75)) — `crates/agentic-tui/src/views/findings.rs:38`.
+- **`syntect` syntax highlighting in diff view** (GH [#76](https://github.com/igorilic/agentic/issues/76)) — `crates/agentic-tui/src/views/diff.rs`.
+- **`current_diff` population from `Event::FileChange`** (GH [#77](https://github.com/igorilic/agentic/issues/77)) — TUI binary needs real bus subscription before this lands.
+
+### Decision records
+
+- **Back-fill Step 13.2 diff-viewer decision as ADR-001** (GH [#78](https://github.com/igorilic/agentic/issues/78)) — when `docs/decisions/` gets created.
+
+### agentic-node (napi-rs)
+
+- **`startRun` only supports the scripted backend** (GH [#79](https://github.com/igorilic/agentic/issues/79)) — real claude/copilot wiring lands alongside Step 14.3 sidebar.
+- **Cross-platform CI matrix unverified** (GH [#80](https://github.com/igorilic/agentic/issues/80)) — `.github/workflows/agentic-node.yml` only exercised on macOS-arm64.
+- **Slash command argument-shape mismatch** (GH [#81](https://github.com/igorilic/agentic/issues/81)) — `agentic.cancel` / `agentic.status` zero-arg stubs vs typed runId on the web side.
+- **dataDir misalignment between VS Code extension and agentic-core snapshot store** (GH [#73](https://github.com/igorilic/agentic/issues/73)) — extension's `globalStorageUri/agentic` ≠ run-side `data_dir/snapshots`. Resolves in Step 14.6.
+
+### Snapshot store (Step 14.5)
+
+- **Snapshot-store garbage collection** (GH [#82](https://github.com/igorilic/agentic/issues/82)) — content-addressable storage grows unbounded; aligns with future `runs` retention policy.
+- **After-snapshot persistence for FileChange diffs** (GH [#83](https://github.com/igorilic/agentic/issues/83)) — right side of `vscode.diff` is currently the live workspace file; matters when reviewing historical runs after manual edits.
