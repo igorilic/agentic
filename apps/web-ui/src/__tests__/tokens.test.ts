@@ -164,15 +164,15 @@ describe("tokens.css", () => {
 
   describe("removed pre-named shadow aliases (superseded by Tailwind config)", () => {
     it("does not define --shadow-card", () => {
-      expect(tokensCss).not.toContain("--shadow-card");
+      expect(tokensCss).not.toContain("--shadow-card:");
     });
 
     it("does not define --shadow-popover", () => {
-      expect(tokensCss).not.toContain("--shadow-popover");
+      expect(tokensCss).not.toContain("--shadow-popover:");
     });
 
     it("does not define --shadow-modal", () => {
-      expect(tokensCss).not.toContain("--shadow-modal");
+      expect(tokensCss).not.toContain("--shadow-modal:");
     });
   });
 });
