@@ -25,7 +25,7 @@ describe("tailwind.config.js theme.extend", () => {
 
     for (const key of colorKeys) {
       it(`colors["${key}"] is a var(--…) reference pointing to --${key}`, () => {
-        const colors = config.theme.extend.colors as Record<string, string>;
+        const colors = config.theme!.extend!.colors as Record<string, string>;
         const value = colors[key];
         expect(value).toMatch(/^var\(--[a-z0-9-]+\)$/);
         expect(value).toBe(`var(--${key})`);
@@ -35,7 +35,7 @@ describe("tailwind.config.js theme.extend", () => {
 
   describe("fontFamily", () => {
     it('fontFamily.sans[0] is "Inter"', () => {
-      const fontFamily = config.theme.extend.fontFamily as Record<
+      const fontFamily = config.theme!.extend!.fontFamily as Record<
         string,
         string[]
       >;
@@ -44,17 +44,23 @@ describe("tailwind.config.js theme.extend", () => {
   });
 
   describe("boxShadow — semantic aliases", () => {
-    const shadowKeys = ["card", "popover", "modal"] as const;
+    it("defines card, popover, and modal keys", () => {
+      const boxShadow = config.theme!.extend!.boxShadow as Record<string, string>;
+      expect(boxShadow).toHaveProperty("card");
+      expect(boxShadow).toHaveProperty("popover");
+      expect(boxShadow).toHaveProperty("modal");
+    });
 
-    for (const key of shadowKeys) {
-      it(`boxShadow["${key}"] is a var(--…) reference`, () => {
-        const boxShadow = config.theme.extend.boxShadow as Record<
-          string,
-          string
-        >;
-        const value = boxShadow[key];
-        expect(value).toMatch(/^var\(--[a-z0-9-]+\)$/);
-      });
-    }
+    it("maps each key to the correct shadow tier", () => {
+      const boxShadow = config.theme!.extend!.boxShadow as Record<string, string>;
+      const expectedShadowMapping = {
+        card: "var(--shadow-xs)",
+        popover: "var(--shadow-md)",
+        modal: "var(--shadow-lg)",
+      };
+      for (const [key, expected] of Object.entries(expectedShadowMapping)) {
+        expect(boxShadow[key]).toBe(expected);
+      }
+    });
   });
 });

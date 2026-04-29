@@ -32,9 +32,6 @@ describe("tokens.css", () => {
       "--radius-md",
       "--radius-lg",
       "--radius-xl",
-      "--shadow-card",
-      "--shadow-popover",
-      "--shadow-modal",
     ];
 
     for (const token of requiredTokens) {
@@ -162,6 +159,20 @@ describe("tokens.css", () => {
     it("defines --focus-ring referencing --blue-500", () => {
       expect(tokensCss).toContain("--focus-ring");
       expect(tokensCss).toContain("--blue-500");
+    });
+  });
+
+  describe("removed pre-named shadow aliases (superseded by Tailwind config)", () => {
+    it("does not define --shadow-card", () => {
+      expect(tokensCss).not.toContain("--shadow-card");
+    });
+
+    it("does not define --shadow-popover", () => {
+      expect(tokensCss).not.toContain("--shadow-popover");
+    });
+
+    it("does not define --shadow-modal", () => {
+      expect(tokensCss).not.toContain("--shadow-modal");
     });
   });
 });
