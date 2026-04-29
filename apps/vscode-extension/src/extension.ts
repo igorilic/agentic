@@ -67,6 +67,22 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // Cover the cold-open case: VS Code only fires
+  // `onDidChangeActiveTextEditor` when an editor *switches* — opening a
+  // file from the Explorer in a fresh window (no prior active editor)
+  // fires `onDidOpenTextDocument` only. Match the opened doc against
+  // visibleTextEditors and reapply for each that points at the same
+  // URI. `reapply` is a no-op when the URI has no findings.
+  context.subscriptions.push(
+    vscode.workspace.onDidOpenTextDocument((doc) => {
+      for (const ed of vscode.window.visibleTextEditors) {
+        if (ed.document.uri.toString() === doc.uri.toString()) {
+          decorator.reapply(ed);
+        }
+      }
+    }),
+  );
+
   // ── Register agentic:// TextDocumentContentProvider ──────────────────────
   // The real napi module is loaded lazily so the extension host doesn't fail
   // to activate when @agentic/node is not installed (e.g. in CI without the

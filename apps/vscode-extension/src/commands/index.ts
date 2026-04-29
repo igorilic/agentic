@@ -67,31 +67,67 @@ const VALID_TRIAGE_VALUES = new Set(["fix", "tech-debt", "ignore"]);
  * On success the decorator's state is updated to remove the decoration.
  * On failure an error message is shown in the VS Code notification area.
  */
+/**
+ * External dependencies for the triage handler. Extracted so unit tests
+ * can stub each one without registering a real command into the host.
+ */
+export interface TriageDeps {
+  readonly node: { triageFinding: (args: TriageArgs) => Promise<void> };
+  readonly decorator: FindingsDecorator;
+  readonly getActiveEditor: () => vscode.TextEditor | undefined;
+  readonly showError: (msg: string) => void;
+}
+
+/**
+ * Pure factory for the triage handler. Holds the in-flight finding-id
+ * set as closure state so two consecutive clicks share the same map.
+ */
+export function makeTriageHandler(
+  deps: TriageDeps,
+): (args: TriageArgs) => Promise<void> {
+  const inflight = new Set<string>();
+  return async (args: TriageArgs) => {
+    if (!args || !VALID_TRIAGE_VALUES.has(args.triage)) {
+      deps.showError(
+        `agentic.triage: invalid triage value "${args?.triage ?? "(missing)"}"`,
+      );
+      return;
+    }
+    if (inflight.has(args.findingId)) {
+      // Silently no-op the second click; the first call's promise is
+      // still pending and its outcome will fire showError or clear
+      // the decoration.
+      return;
+    }
+    inflight.add(args.findingId);
+    try {
+      await deps.node.triageFinding(args);
+      deps.decorator.clearFinding(args.findingId, deps.getActiveEditor());
+    } catch (err) {
+      deps.showError(
+        `Agentic: triage failed — ${(err as Error).message ?? String(err)}`,
+      );
+    } finally {
+      inflight.delete(args.findingId);
+    }
+  };
+}
+
 export function registerTriageCommand(
   context: vscode.ExtensionContext,
   decorator: FindingsDecorator,
   node: { triageFinding: (args: TriageArgs) => Promise<void> },
 ): void {
+  const handler = makeTriageHandler({
+    node,
+    decorator,
+    getActiveEditor: () => vscode.window.activeTextEditor,
+    showError: (msg) => {
+      void vscode.window.showErrorMessage(msg);
+    },
+  });
   context.subscriptions.push(
-    vscode.commands.registerCommand("agentic.triage", async (args: TriageArgs) => {
-      if (!args || !VALID_TRIAGE_VALUES.has(args.triage)) {
-        vscode.window.showErrorMessage(
-          `agentic.triage: invalid triage value "${args?.triage ?? "(missing)"}"`,
-        );
-        return;
-      }
-      try {
-        await node.triageFinding(args);
-        decorator.clearFinding(
-          args.findingId,
-          vscode.window.activeTextEditor,
-        );
-      } catch (err) {
-        vscode.window.showErrorMessage(
-          `Agentic: triage failed — ${(err as Error).message ?? String(err)}`,
-        );
-      }
-    }),
+    vscode.commands.registerCommand("agentic.triage", handler),
   );
 }
 

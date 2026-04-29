@@ -73,9 +73,18 @@ fn app_package_jsons_exist_with_expected_names() {
         "apps/web-ui/package.json does not contain '@agentic/web-ui'.\ncontent:\n{}",
         web_ui_content
     );
+    // The vscode-extension package was renamed in Step 14.2 to align with
+    // the marketplace ID `agentic.agentic` (spec §20.2). Both `name` and
+    // `publisher` MUST stay `agentic` for `getExtension("agentic.agentic")`
+    // to resolve the activation test target.
     assert!(
-        vscode_ext_content.contains("\"@agentic/vscode-extension\""),
-        "apps/vscode-extension/package.json does not contain '@agentic/vscode-extension'.\ncontent:\n{}",
+        vscode_ext_content.contains("\"name\": \"agentic\""),
+        "apps/vscode-extension/package.json must declare 'name: \"agentic\"' to match marketplace id 'agentic.agentic'.\ncontent:\n{}",
+        vscode_ext_content
+    );
+    assert!(
+        vscode_ext_content.contains("\"publisher\": \"agentic\""),
+        "apps/vscode-extension/package.json must declare 'publisher: \"agentic\"' to match marketplace id 'agentic.agentic'.\ncontent:\n{}",
         vscode_ext_content
     );
     assert!(

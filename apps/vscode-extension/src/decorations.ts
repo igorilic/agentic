@@ -171,6 +171,13 @@ export class FindingsDecorator {
     };
 
     const list = this.findings.get(uriKey) ?? [];
+    // Dedup by id — bus replay (retry, re-subscription) can re-emit the
+    // same finding. Without this guard the line would render two
+    // overlapping squiggles. GH #84 covers stacking *distinct* findings
+    // on the same line; this is the same-id-twice case.
+    if (list.some((f) => f.id === finding.id)) {
+      return;
+    }
     list.push(finding);
     this.findings.set(uriKey, list);
 

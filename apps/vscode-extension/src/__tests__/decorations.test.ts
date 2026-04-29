@@ -459,6 +459,28 @@ suite("FindingsDecorator", () => {
     decorator.dispose();
   });
 
+  test("handleFinding dedups by id — re-emitted finding does not double the squiggle", () => {
+    const { factory } = makeStubFactory();
+    const decorator = new FindingsDecorator(factory, dataDir);
+    const filePath = "/workspace/dup.rs";
+    const finding = makeFinding({ id: "dup-1", file: filePath, line: 5 });
+    const { editor } = makeStubEditor(vscode.Uri.file(filePath));
+
+    decorator.handleFinding(makeFindingEnvelope(finding), workspaceRoot, editor);
+    // Same id, same file — bus replay on a re-subscription would do this.
+    decorator.handleFinding(makeFindingEnvelope(finding), workspaceRoot, editor);
+
+    const stored =
+      decorator.getFindingsForUri(vscode.Uri.file(filePath).toString()) ?? [];
+    if (stored.length !== 1) {
+      throw new Error(
+        `Expected dedup to keep exactly one finding for id 'dup-1', got ${stored.length}`,
+      );
+    }
+
+    decorator.dispose();
+  });
+
   test("dispose calls dispose on all three decoration types", () => {
     const { factory, error, warning, info } = makeStubFactory();
     const decorator = new FindingsDecorator(factory, dataDir);
