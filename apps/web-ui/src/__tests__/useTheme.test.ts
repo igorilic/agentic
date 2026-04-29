@@ -1,13 +1,31 @@
 import { renderHook, act } from "@testing-library/react";
 import { useTheme } from "../hooks/useTheme";
 
+function stubMatchMedia(matches: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: query === "(prefers-color-scheme: dark)" ? matches : false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
 describe("useTheme", () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute("data-theme");
+    stubMatchMedia(false);
   });
 
-  it("defaults to light when localStorage is unset", () => {
+  it("defaults to light when localStorage is unset and system pref is light", () => {
     const { result } = renderHook(() => useTheme());
     expect(result.current.theme).toBe("light");
   });
@@ -57,5 +75,17 @@ describe("useTheme", () => {
     });
     expect(result.current.theme).toBe("light");
     expect(document.documentElement.getAttribute("data-theme")).toBeNull();
+  });
+
+  it("falls back to dark when localStorage is unset and prefers-color-scheme is dark", () => {
+    stubMatchMedia(true);
+    const { result } = renderHook(() => useTheme());
+    expect(result.current.theme).toBe("dark");
+  });
+
+  it("falls back to light when localStorage is unset and prefers-color-scheme is light", () => {
+    stubMatchMedia(false);
+    const { result } = renderHook(() => useTheme());
+    expect(result.current.theme).toBe("light");
   });
 });
