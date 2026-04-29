@@ -223,7 +223,7 @@ The 28 × 28 avatar is a placeholder div (initials, bg `--zinc-200`) — no real
   - Quick-pick chip row: `Plan` `Brainstorm` `Develop` `Spec` (1 px border, 6 px radius, 12 px text). Click inserts the slash and focuses the textarea.
   - Textarea: 1 px border `rgb(0 0 0 / 0.1)`, radius 12, padding 10 / 14, focus ring 2 px `#18181b` offset 2 px.
   - Right-aligned 36 × 36 black square Send button with white arrow icon.
-  - **Slash popover**: typing `/` opens a 280 px popover above the textarea showing matching commands; arrow keys + Enter select; Esc dismisses. Reuses `parseSlashCommand` from `slash/parser.ts`.
+  - **Slash popover**: typing `/` opens a 280 px popover above the textarea showing matching commands; arrow keys + Enter select; Esc dismisses. Uses `SLASH_COMMAND_LIBRARY` from `slash/library.ts` for prefix matching; `parseSlashCommand` from `slash/parser.ts` is the syntax parser invoked on submission, not by the popover.
   - **Mention popover**: typing `@` opens a 240 px popover with the agent picker shape. Reuses `parseMention` from `mention/parser.ts`.
 
 **Component shape (rewires existing `ChatPane`)**
