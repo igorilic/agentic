@@ -1,4 +1,4 @@
-import React from "react";
+import type { ReactNode } from "react";
 
 export type ChatMessageProps =
   | { kind: "user"; userName: string; timestamp: string; body: string }
@@ -99,7 +99,7 @@ export default function ChatMessage(props: ChatMessageProps) {
 // Regex is lowercase-only per todo §W.4.2. Widening (case-insensitive, hyphens, digits)
 // is a deliberate future decision to avoid unintended matches.
 // System messages render plain text; only user + agent bodies call this helper.
-function renderInline(text: string): React.ReactNode[] {
+function renderInline(text: string): ReactNode[] {
   const parts = text.split(/(\/[a-z]+|@[a-z]+)/g);
   return parts.map((part, i) => {
     if (part === "") return null;
