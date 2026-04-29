@@ -150,8 +150,10 @@ describe("Stepper", () => {
     const state = makeRunState();
     render(<Stepper state={state} />);
     // There are 3 separators (between 4 steps). Each must carry `hidden`.
-    const separators = document
-      .querySelectorAll('[aria-hidden="true"]');
+    // Scoped to the stepper <ol> to avoid matching aria-hidden elements from
+    // other components that may render in the same document.
+    const list = screen.getByRole("list");
+    const separators = list.querySelectorAll('[aria-hidden="true"]');
     expect(separators.length).toBeGreaterThan(0);
     separators.forEach((sep) => {
       expect(sep.className).toMatch(/hidden/);
@@ -161,7 +163,9 @@ describe("Stepper", () => {
   it("arrow separator has sm:inline class to reappear in the horizontal layout", () => {
     const state = makeRunState();
     render(<Stepper state={state} />);
-    const separators = document.querySelectorAll('[aria-hidden="true"]');
+    // Scoped to the stepper <ol> to avoid false positives from sibling elements.
+    const list = screen.getByRole("list");
+    const separators = list.querySelectorAll('[aria-hidden="true"]');
     separators.forEach((sep) => {
       expect(sep.className).toMatch(/sm:inline/);
     });

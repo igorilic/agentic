@@ -206,11 +206,31 @@ describe("FindingsTable", () => {
   // Responsive layout assertions.
   it("triage button row has flex-wrap so buttons wrap at narrow widths", () => {
     render(<FindingsTable findings={[makeFinding({ id: "f1" })]} />);
-    const row = screen.getByTestId("finding-row-f1");
-    // The triage button container div is the last child div inside the row li.
-    const triageDiv = row.querySelector("div:last-child");
+    const triageDiv = screen.getByTestId("triage-actions-f1");
     expect(triageDiv).not.toBeNull();
-    expect(triageDiv!.className).toMatch(/flex-wrap/);
+    expect(triageDiv.className).toMatch(/flex-wrap/);
+  });
+
+  it("triage-actions testid resolves to the button container, not the error alert, when a triage error is shown", async () => {
+    invokeMock.mockRejectedValueOnce("network error");
+    const user = userEvent.setup();
+    render(<FindingsTable findings={[makeFinding({ id: "f1" })]} />);
+
+    await user.click(screen.getByTestId("triage-fix-f1"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("triage-error-f1")).toBeInTheDocument();
+    });
+
+    // The triage-actions testid must point to the button container, not the error alert.
+    const triageActionsDiv = screen.getByTestId("triage-actions-f1");
+    expect(triageActionsDiv).not.toBe(screen.getByTestId("triage-error-f1"));
+    expect(triageActionsDiv.className).toMatch(/flex-wrap/);
+    // The error alert should NOT have the triage-actions testid.
+    expect(screen.getByTestId("triage-error-f1")).not.toHaveAttribute(
+      "data-testid",
+      "triage-actions-f1",
+    );
   });
 
   it("file:line span has block class to stack below message at base width", () => {

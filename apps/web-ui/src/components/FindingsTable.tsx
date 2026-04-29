@@ -118,7 +118,10 @@ export default function FindingsTable({ findings }: FindingsTableProps) {
                   {f.suggestion}
                 </div>
               )}
-              <div className="flex flex-wrap gap-2 items-center">
+              <div
+                data-testid={`triage-actions-${f.id}`}
+                className="flex flex-wrap gap-2 items-center"
+              >
                 {TRIAGE_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
