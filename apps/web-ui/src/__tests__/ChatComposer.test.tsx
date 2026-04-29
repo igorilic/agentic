@@ -217,4 +217,175 @@ describe("ChatComposer", () => {
       expect(chip.className).toContain("border-border");
     });
   });
+
+  describe("slash popover", () => {
+    it("typing / opens the slash popover", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/" } });
+
+      expect(screen.getByTestId("slash-popover")).toBeInTheDocument();
+    });
+
+    it("typing /pl shows only the plan row", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/pl" } });
+
+      expect(screen.getByTestId("slash-popover-row-plan")).toBeInTheDocument();
+      expect(screen.queryByTestId("slash-popover-row-brainstorm")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-develop")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-spec")).toBeNull();
+    });
+
+    it("typing /p shows only plan (only command starting with p)", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/p" } });
+
+      expect(screen.getByTestId("slash-popover-row-plan")).toBeInTheDocument();
+      expect(screen.queryByTestId("slash-popover-row-brainstorm")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-develop")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-spec")).toBeNull();
+    });
+
+    it("typing /b shows only brainstorm", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/b" } });
+
+      expect(screen.getByTestId("slash-popover-row-brainstorm")).toBeInTheDocument();
+      expect(screen.queryByTestId("slash-popover-row-plan")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-develop")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-spec")).toBeNull();
+    });
+
+    it("typing /d shows only develop", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/d" } });
+
+      expect(screen.getByTestId("slash-popover-row-develop")).toBeInTheDocument();
+      expect(screen.queryByTestId("slash-popover-row-plan")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-brainstorm")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-spec")).toBeNull();
+    });
+
+    it("typing /s shows only spec", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/s" } });
+
+      expect(screen.getByTestId("slash-popover-row-spec")).toBeInTheDocument();
+      expect(screen.queryByTestId("slash-popover-row-plan")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-brainstorm")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-develop")).toBeNull();
+    });
+
+    it("typing /x shows popover with no rows (empty match)", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/x" } });
+
+      expect(screen.getByTestId("slash-popover")).toBeInTheDocument();
+      expect(screen.queryByTestId("slash-popover-row-plan")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-brainstorm")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-develop")).toBeNull();
+      expect(screen.queryByTestId("slash-popover-row-spec")).toBeNull();
+    });
+
+    it("ArrowDown then Enter selects the second command (brainstorm)", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/" } });
+      fireEvent.keyDown(textarea, { key: "ArrowDown" });
+      fireEvent.keyDown(textarea, { key: "Enter" });
+
+      expect(textarea).toHaveValue("/brainstorm ");
+    });
+
+    it("Enter with no ArrowDown selects the first command (plan)", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/" } });
+      fireEvent.keyDown(textarea, { key: "Enter" });
+
+      expect(textarea).toHaveValue("/plan ");
+    });
+
+    it("Esc dismisses the popover", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/" } });
+      expect(screen.getByTestId("slash-popover")).toBeInTheDocument();
+
+      fireEvent.keyDown(textarea, { key: "Escape" });
+
+      expect(screen.queryByTestId("slash-popover")).toBeNull();
+    });
+
+    it("Esc dismisses popover but preserves textarea text", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/pl" } });
+      fireEvent.keyDown(textarea, { key: "Escape" });
+
+      expect(screen.queryByTestId("slash-popover")).toBeNull();
+      expect(textarea).toHaveValue("/pl");
+    });
+
+    it("ArrowUp from index 0 wraps to last command (spec)", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/" } });
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      fireEvent.keyDown(textarea, { key: "Enter" });
+
+      expect(textarea).toHaveValue("/spec ");
+    });
+
+    it("popover does NOT open when input contains a space (/plan AGT-99)", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/plan AGT-99" } });
+
+      expect(screen.queryByTestId("slash-popover")).toBeNull();
+    });
+
+    it("popover does NOT open when slash is not at the start (hello /)", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "hello /" } });
+
+      expect(screen.queryByTestId("slash-popover")).toBeNull();
+    });
+
+    it("Cmd+Enter when popover is open sends the current value and closes popover", () => {
+      const onSend = vi.fn();
+      render(<ChatComposer onSend={onSend} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/" } });
+      expect(screen.getByTestId("slash-popover")).toBeInTheDocument();
+
+      fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+
+      expect(onSend).toHaveBeenCalledWith("/");
+      expect(screen.queryByTestId("slash-popover")).toBeNull();
+    });
+  });
 });
