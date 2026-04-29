@@ -66,19 +66,137 @@ describe("AgentCard", () => {
     });
   });
 
-  describe("kebab button interaction", () => {
-    it("calls onMenuClick when kebab button is clicked", () => {
-      const handler = vi.fn();
-      render(<AgentCard agent="architect" status="queued" onMenuClick={handler} />);
+  describe("kebab menu interaction", () => {
+    it("clicking kebab opens menu with Remove, Skip this run, Configure… buttons", () => {
+      render(<AgentCard agent="architect" status="queued" />);
       fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
-      expect(handler).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("agent-card-architect-menu-remove")).toBeInTheDocument();
+      expect(screen.getByTestId("agent-card-architect-menu-skip")).toBeInTheDocument();
+      expect(screen.getByTestId("agent-card-architect-menu-configure")).toBeInTheDocument();
     });
 
-    it("does not throw when kebab is clicked and no onMenuClick is provided", () => {
+    it("menu items have correct visible text labels", () => {
       render(<AgentCard agent="architect" status="queued" />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      expect(screen.getByTestId("agent-card-architect-menu-remove").textContent).toBe("Remove");
+      expect(screen.getByTestId("agent-card-architect-menu-skip").textContent).toBe("Skip this run");
+      // U+2026 ellipsis character — single char, not three dots
+      expect(screen.getByTestId("agent-card-architect-menu-configure").textContent).toBe("Configure…");
+    });
+
+    it("menu uses correct agent name in testids for developer", () => {
+      render(<AgentCard agent="developer" status="queued" />);
+      fireEvent.click(screen.getByTestId("agent-card-developer-menu"));
+      expect(screen.getByTestId("agent-card-developer-menu-remove")).toBeInTheDocument();
+      expect(screen.getByTestId("agent-card-developer-menu-skip")).toBeInTheDocument();
+      expect(screen.getByTestId("agent-card-developer-menu-configure")).toBeInTheDocument();
+    });
+
+    it("menu is not visible before kebab is clicked", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      expect(screen.queryByTestId("agent-card-architect-menu-remove")).toBeNull();
+    });
+
+    it("clicking Remove fires onRemove once and closes the menu", () => {
+      const onRemove = vi.fn();
+      render(<AgentCard agent="architect" status="queued" onRemove={onRemove} />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu-remove"));
+      expect(onRemove).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("agent-card-architect-menu-remove")).toBeNull();
+    });
+
+    it("clicking Skip fires onSkip once and closes the menu", () => {
+      const onSkip = vi.fn();
+      render(<AgentCard agent="architect" status="queued" onSkip={onSkip} />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu-skip"));
+      expect(onSkip).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("agent-card-architect-menu-skip")).toBeNull();
+    });
+
+    it("clicking Remove when no onRemove provided does not throw", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
       expect(() => {
-        fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+        fireEvent.click(screen.getByTestId("agent-card-architect-menu-remove"));
       }).not.toThrow();
+    });
+
+    it("clicking Skip when no onSkip provided does not throw", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      expect(() => {
+        fireEvent.click(screen.getByTestId("agent-card-architect-menu-skip"));
+      }).not.toThrow();
+    });
+
+    it("clicking Configure… opens the placeholder modal and closes the menu", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu-configure"));
+      expect(screen.getByTestId("agent-configure-modal")).toBeInTheDocument();
+      expect(screen.queryByTestId("agent-card-architect-menu-remove")).toBeNull();
+    });
+
+    it("modal header text is exactly 'Configure agent — not yet implemented'", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu-configure"));
+      const modal = screen.getByTestId("agent-configure-modal");
+      expect(modal.textContent).toContain("Configure agent — not yet implemented");
+    });
+
+    it("clicking agent-configure-backdrop closes the modal", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu-configure"));
+      expect(screen.getByTestId("agent-configure-modal")).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("agent-configure-backdrop"));
+      expect(screen.queryByTestId("agent-configure-modal")).toBeNull();
+    });
+
+    it("clicking agent-configure-close closes the modal", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu-configure"));
+      expect(screen.getByTestId("agent-configure-modal")).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("agent-configure-close"));
+      expect(screen.queryByTestId("agent-configure-modal")).toBeNull();
+    });
+
+    it("clicking inside the modal panel does NOT close the modal", () => {
+      render(<AgentCard agent="architect" status="queued" />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu-configure"));
+      // Click on the modal panel itself (not the backdrop)
+      fireEvent.click(screen.getByTestId("agent-configure-modal"));
+      expect(screen.getByTestId("agent-configure-modal")).toBeInTheDocument();
+    });
+
+    it("outside-click closes the menu without firing onRemove or onSkip", () => {
+      const onRemove = vi.fn();
+      const onSkip = vi.fn();
+      render(<AgentCard agent="architect" status="queued" onRemove={onRemove} onSkip={onSkip} />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      expect(screen.getByTestId("agent-card-architect-menu-remove")).toBeInTheDocument();
+      // Simulate outside mousedown
+      fireEvent.mouseDown(document.body);
+      expect(screen.queryByTestId("agent-card-architect-menu-remove")).toBeNull();
+      expect(onRemove).not.toHaveBeenCalled();
+      expect(onSkip).not.toHaveBeenCalled();
+    });
+
+    it("Escape key closes the menu without firing callbacks", () => {
+      const onRemove = vi.fn();
+      const onSkip = vi.fn();
+      render(<AgentCard agent="architect" status="queued" onRemove={onRemove} onSkip={onSkip} />);
+      fireEvent.click(screen.getByTestId("agent-card-architect-menu"));
+      expect(screen.getByTestId("agent-card-architect-menu-remove")).toBeInTheDocument();
+      fireEvent.keyDown(screen.getByTestId("agent-card-architect-menu-list"), { key: "Escape" });
+      expect(screen.queryByTestId("agent-card-architect-menu-remove")).toBeNull();
+      expect(onRemove).not.toHaveBeenCalled();
+      expect(onSkip).not.toHaveBeenCalled();
     });
   });
 

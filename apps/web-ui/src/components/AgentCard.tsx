@@ -1,9 +1,11 @@
+import { useState, useRef, useEffect } from "react";
 import type { AgentStatus } from "../types/pipeline";
 
 export type AgentCardProps = {
   agent: string;
   status: AgentStatus;
-  onMenuClick?: () => void;
+  onRemove?: () => void;
+  onSkip?: () => void;
   draggable?: boolean;
   dragging?: boolean;
   onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
@@ -37,7 +39,8 @@ const STATUS_BORDER_CLASS: Record<AgentStatus, string> = {
 export default function AgentCard({
   agent,
   status,
-  onMenuClick,
+  onRemove,
+  onSkip,
   draggable: isDraggable = false,
   dragging = false,
   onDragStart,
@@ -45,6 +48,21 @@ export default function AgentCard({
 }: AgentCardProps) {
   const borderClass = STATUS_BORDER_CLASS[status] ?? "border-border";
   const avatarBgClass = AGENT_BG_CLASS[agent] ?? "bg-bg-surface-2";
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [menuOpen]);
 
   return (
     <div
@@ -94,16 +112,85 @@ export default function AgentCard({
           </span>
         </div>
 
-        <button
-          type="button"
-          data-testid={`agent-card-${agent}-menu`}
-          onClick={onMenuClick}
-          aria-label="Agent menu"
-          className="flex-shrink-0 text-fg-muted hover:text-fg text-base leading-none px-0.5"
-        >
-          ⋯
-        </button>
+        <div className="relative flex-shrink-0">
+          <button
+            type="button"
+            data-testid={`agent-card-${agent}-menu`}
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label="Agent menu"
+            className="text-fg-muted hover:text-fg text-base leading-none px-0.5"
+          >
+            ⋯
+          </button>
+
+          {menuOpen && (
+            <div
+              ref={menuRef}
+              data-testid={`agent-card-${agent}-menu-list`}
+              role="menu"
+              className="absolute right-0 top-full mt-1 z-10 w-44 rounded-lg border border-border-strong bg-bg-surface shadow-popover py-1"
+              onKeyDown={(e) => { if (e.key === "Escape") setMenuOpen(false); }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                data-testid={`agent-card-${agent}-menu-remove`}
+                onClick={() => { onRemove?.(); setMenuOpen(false); }}
+                className="w-full px-3 py-1.5 text-left text-[13px] text-fg hover:bg-bg-surface-2"
+              >
+                Remove
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid={`agent-card-${agent}-menu-skip`}
+                onClick={() => { onSkip?.(); setMenuOpen(false); }}
+                className="w-full px-3 py-1.5 text-left text-[13px] text-fg hover:bg-bg-surface-2"
+              >
+                Skip this run
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid={`agent-card-${agent}-menu-configure`}
+                onClick={() => { setModalOpen(true); setMenuOpen(false); }}
+                className="w-full px-3 py-1.5 text-left text-[13px] text-fg hover:bg-bg-surface-2"
+              >
+                Configure…
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {modalOpen && (
+        <div
+          data-testid="agent-configure-backdrop"
+          className="fixed inset-0 z-20 bg-black/40 flex items-center justify-center"
+          onClick={() => setModalOpen(false)}
+        >
+          <div
+            data-testid="agent-configure-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Configure agent"
+            className="w-[420px] rounded-xl border border-border bg-bg-surface shadow-modal p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="text-[14px] font-semibold text-fg mb-2">
+              Configure agent — not yet implemented
+            </header>
+            <button
+              type="button"
+              data-testid="agent-configure-close"
+              onClick={() => setModalOpen(false)}
+              className="rounded-md border border-border-strong px-3 py-1.5 text-xs font-semibold text-fg"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
