@@ -58,42 +58,51 @@ export function useTauriEvents(runId?: string): UseTauriEventsResult {
     }
 
     void (async () => {
-      // Fetch history first if a runId is known.
-      if (runId) {
-        try {
-          const history = (await invoke("get_event_history", { runId })) as EventEnvelope[];
-          if (!cancelled) {
-            setEvents((prev) => {
-              const seen = new Set(prev.map((e) => e.event_id));
-              const fresh = history.filter((e) => !seen.has(e.event_id));
-              const next = [...prev, ...fresh];
-              return next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
-            });
-          }
-        } catch (e) {
-          if (!cancelled) {
-            setHistoryError(String(e));
+      try {
+        // Fetch history first if a runId is known.
+        if (runId) {
+          try {
+            const history = (await invoke("get_event_history", { runId })) as EventEnvelope[];
+            if (!cancelled) {
+              setEvents((prev) => {
+                const seen = new Set(prev.map((e) => e.event_id));
+                const fresh = history.filter((e) => !seen.has(e.event_id));
+                const next = [...prev, ...fresh];
+                return next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
+              });
+            }
+          } catch (e) {
+            if (!cancelled) {
+              setHistoryError(String(e));
+            }
           }
         }
-      }
 
-      const stop = await listen<EventEnvelope>(EVENT_CHANNEL, (event) => {
-        setEvents((prev) => {
-          // Dedupe by event_id (handles overlap with history fetch).
-          if (prev.some((e) => e.event_id === event.payload.event_id)) {
-            return prev;
-          }
-          const next = [...prev, event.payload];
-          return next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
+        const stop = await listen<EventEnvelope>(EVENT_CHANNEL, (event) => {
+          setEvents((prev) => {
+            // Dedupe by event_id (handles overlap with history fetch).
+            if (prev.some((e) => e.event_id === event.payload.event_id)) {
+              return prev;
+            }
+            const next = [...prev, event.payload];
+            return next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
+          });
         });
-      });
-      if (cancelled) {
-        stop();
-        return;
+        if (cancelled) {
+          stop();
+          return;
+        }
+        unlisten = stop;
+        // Listener attached — now ask the backend to start forwarding.
+        await invoke("subscribe_events");
+      } catch (e) {
+        // listen() or subscribe_events failed — surface to the user instead
+        // of turning into an unhandled promise rejection (the old `void` IIFE
+        // without an outer try/catch would silently discard these errors).
+        if (!cancelled) {
+          setHistoryError(String(e));
+        }
       }
-      unlisten = stop;
-      // Listener attached — now ask the backend to start forwarding.
-      await invoke("subscribe_events");
     })();
 
     return () => {
