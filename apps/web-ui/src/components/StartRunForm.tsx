@@ -14,6 +14,8 @@ type StartRunFormProps = {
 //   start-button, cancel-button, active-run-id, error-message
 
 export default function StartRunForm({ events, activeRunId, onActiveRunIdChange }: StartRunFormProps) {
+  if (!import.meta.env.DEV) return null;
+
   const [scriptPath, setScriptPath] = useState("");
   const [delayMsRaw, setDelayMsRaw] = useState("100");
   const [error, setError] = useState<string | null>(null);
