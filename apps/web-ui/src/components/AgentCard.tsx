@@ -4,6 +4,10 @@ export type AgentCardProps = {
   agent: string;
   status: AgentStatus;
   onMenuClick?: () => void;
+  draggable?: boolean;
+  dragging?: boolean;
+  onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: (e: React.DragEvent<HTMLDivElement>) => void;
 };
 
 const AGENT_BG_CLASS: Record<string, string> = {
@@ -30,7 +34,15 @@ const STATUS_BORDER_CLASS: Record<AgentStatus, string> = {
   errored: "border-border",
 };
 
-export default function AgentCard({ agent, status, onMenuClick }: AgentCardProps) {
+export default function AgentCard({
+  agent,
+  status,
+  onMenuClick,
+  draggable: isDraggable = false,
+  dragging = false,
+  onDragStart,
+  onDragEnd,
+}: AgentCardProps) {
   const borderClass = STATUS_BORDER_CLASS[status] ?? "border-border";
   const avatarBgClass = AGENT_BG_CLASS[agent] ?? "bg-bg-surface-2";
 
@@ -38,9 +50,13 @@ export default function AgentCard({ agent, status, onMenuClick }: AgentCardProps
     <div
       data-testid={`agent-card-${agent}`}
       data-status={status}
+      data-dragging={dragging ? "true" : "false"}
       role="button"
       tabIndex={0}
       aria-label={`${agent} — ${status}`}
+      draggable={isDraggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       className={`relative border ${borderClass} rounded-[10px] bg-bg-surface px-3 py-2 flex flex-col gap-1`}
     >
       {status === "active" && (

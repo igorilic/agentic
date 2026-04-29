@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { AgentStatus } from "../types/pipeline";
 import AgentCard from "./AgentCard";
 import Connector from "./Connector";
@@ -8,20 +8,67 @@ export type PipelineBarProps = {
   agents: string[];
   statuses: Record<string, AgentStatus>;
   activeIndex: number;
-  // Reserved for downstream steps; accepted but not yet consumed:
   onReorder?: (from: number, to: number) => void;
   onInsert?: (atIndex: number, agentId: string) => void;
   onRemove?: (atIndex: number) => void;
   onSkip?: (atIndex: number) => void;
 };
 
+function useDragReorder(onReorder?: (from: number, to: number) => void) {
+  const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
+  const [dropGapIndex, setDropGapIndex] = useState<number | null>(null);
+
+  function onCardDragStart(index: number) {
+    setDragFromIndex(index);
+  }
+
+  function onCardDragEnd() {
+    setDragFromIndex(null);
+    setDropGapIndex(null);
+  }
+
+  function getGapHandlers(rightIndex: number) {
+    return {
+      onDragOver(e: React.DragEvent) {
+        e.preventDefault();
+        setDropGapIndex(rightIndex);
+      },
+      onDragLeave() {
+        setDropGapIndex((prev) => (prev === rightIndex ? null : prev));
+      },
+      onDrop() {
+        if (dragFromIndex !== null) {
+          const adjusted =
+            dragFromIndex < rightIndex ? rightIndex - 1 : rightIndex;
+          if (adjusted !== dragFromIndex) {
+            onReorder?.(dragFromIndex, adjusted);
+          }
+        }
+        setDragFromIndex(null);
+        setDropGapIndex(null);
+      },
+    };
+  }
+
+  return { dragFromIndex, dropGapIndex, onCardDragStart, onCardDragEnd, getGapHandlers };
+}
+
 export default function PipelineBar({
   agents,
   statuses,
+  onReorder,
   onInsert,
 }: PipelineBarProps) {
   const [pickerOpenAt, setPickerOpenAt] = useState<number | "end" | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
+
+  const {
+    dragFromIndex,
+    dropGapIndex,
+    onCardDragStart,
+    onCardDragEnd,
+    getGapHandlers,
+  } = useDragReorder(onReorder);
 
   useEffect(() => {
     if (pickerOpenAt === null) return;
@@ -47,24 +94,68 @@ export default function PipelineBar({
       className="relative flex h-[84px] items-center gap-3 bg-bg-surface border-b border-border-soft px-[18px]"
     >
       {agents.map((agent, i) => (
-        <Fragment key={agent}>
-          <AgentCard agent={agent} status={statuses[agent] ?? "queued"} />
-          {i < agents.length - 1 && (
-            <>
-              <button
-                type="button"
-                data-testid={`pipeline-insert-${i + 1}`}
-                aria-label={`Insert agent at position ${i + 1}`}
-                onClick={() => setPickerOpenAt(i + 1)}
-                className="opacity-0 hover:opacity-100 focus:opacity-100 transition-opacity h-4 w-4 rounded-full border border-border-strong text-fg-muted text-[11px] leading-none flex items-center justify-center"
+        <div key={agent} className="contents">
+          <AgentCard
+            agent={agent}
+            status={statuses[agent] ?? "queued"}
+            draggable={true}
+            dragging={dragFromIndex === i}
+            onDragStart={() => onCardDragStart(i)}
+            onDragEnd={() => onCardDragEnd()}
+          />
+          {i < agents.length - 1 && (() => {
+            const gapIndex = i + 1;
+            const gapHandlers = getGapHandlers(gapIndex);
+            const isActive = dropGapIndex === gapIndex;
+            return (
+              <div
+                data-testid={`pipeline-gap-${gapIndex}`}
+                data-drop-active={isActive ? "true" : "false"}
+                className="flex items-center gap-1"
+                {...gapHandlers}
               >
-                +
-              </button>
-              <Connector active={false} />
-            </>
-          )}
-        </Fragment>
+                {isActive && (
+                  <div
+                    aria-hidden="true"
+                    className="w-0.5 h-11 bg-status-active rounded flex-shrink-0"
+                  />
+                )}
+                <button
+                  type="button"
+                  data-testid={`pipeline-insert-${gapIndex}`}
+                  aria-label={`Insert agent at position ${gapIndex}`}
+                  onClick={() => setPickerOpenAt(gapIndex)}
+                  className="opacity-0 hover:opacity-100 focus:opacity-100 transition-opacity h-4 w-4 rounded-full border border-border-strong text-fg-muted text-[11px] leading-none flex items-center justify-center"
+                >
+                  +
+                </button>
+                <Connector active={false} />
+              </div>
+            );
+          })()}
+        </div>
       ))}
+      {/* gap-N after the last card, before + Add agent */}
+      {agents.length > 0 && (() => {
+        const gapIndex = agents.length;
+        const gapHandlers = getGapHandlers(gapIndex);
+        const isActive = dropGapIndex === gapIndex;
+        return (
+          <div
+            data-testid={`pipeline-gap-${gapIndex}`}
+            data-drop-active={isActive ? "true" : "false"}
+            className="flex items-center"
+            {...gapHandlers}
+          >
+            {isActive && (
+              <div
+                aria-hidden="true"
+                className="w-0.5 h-11 bg-status-active rounded flex-shrink-0"
+              />
+            )}
+          </div>
+        );
+      })()}
       <button
         type="button"
         data-testid="pipeline-add-agent"
