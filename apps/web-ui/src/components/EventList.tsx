@@ -12,7 +12,7 @@ type EventListProps = {
 export default function EventList({ events }: EventListProps) {
   if (events.length === 0) {
     return (
-      <div className="p-4 text-gray-500 italic">No events yet.</div>
+      <div className="px-3 py-4 text-gray-500 italic">No events yet.</div>
     );
   }
 
@@ -27,7 +27,7 @@ export default function EventList({ events }: EventListProps) {
       {events.map((env) => (
         <li
           key={env.event_id}
-          className="px-4 py-2 font-mono text-sm flex gap-4"
+          className="px-3 py-2 font-mono text-sm flex gap-4"
           data-testid="event-row"
         >
           <span className="text-gray-400 shrink-0">
