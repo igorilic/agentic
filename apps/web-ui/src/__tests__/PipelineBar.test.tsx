@@ -182,42 +182,6 @@ describe("PipelineBar", () => {
       expect(chips).toHaveLength(3);
     });
 
-    it("chip at pipeline-insert-1 is present", () => {
-      render(
-        <PipelineBar
-          agents={defaultAgents}
-          statuses={defaultStatuses}
-          activeIndex={1}
-          onInsert={vi.fn()}
-        />
-      );
-      expect(screen.getByTestId("pipeline-insert-1")).toBeInTheDocument();
-    });
-
-    it("chip at pipeline-insert-2 is present", () => {
-      render(
-        <PipelineBar
-          agents={defaultAgents}
-          statuses={defaultStatuses}
-          activeIndex={1}
-          onInsert={vi.fn()}
-        />
-      );
-      expect(screen.getByTestId("pipeline-insert-2")).toBeInTheDocument();
-    });
-
-    it("chip at pipeline-insert-3 is present", () => {
-      render(
-        <PipelineBar
-          agents={defaultAgents}
-          statuses={defaultStatuses}
-          activeIndex={1}
-          onInsert={vi.fn()}
-        />
-      );
-      expect(screen.getByTestId("pipeline-insert-3")).toBeInTheDocument();
-    });
-
     it("each chip has aria-label 'Insert agent at position {atIndex}'", () => {
       render(
         <PipelineBar
