@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import HeaderBar from "../components/HeaderBar";
+import HeaderBar, { formatMmSs } from "../components/HeaderBar";
 
 const defaultProps = {
   brand: "Agentic",
@@ -107,5 +107,90 @@ describe("HeaderBar", () => {
   it("does not render Run pipeline button when runState is running", () => {
     render(<HeaderBar {...defaultProps} runState="running" elapsedMs={1000} />);
     expect(screen.queryByTestId("header-run")).toBeNull();
+  });
+
+  // W.1.2 — running pill and Stop button
+  it("shows running pill with formatted elapsed time when runState is running", () => {
+    render(<HeaderBar {...defaultProps} runState="running" elapsedMs={154000} />);
+    const runState = screen.getByTestId("header-run-state");
+    expect(runState).toHaveTextContent(/Pipeline running · 02:34/);
+  });
+
+  it("shows Stop button when runState is running", () => {
+    render(<HeaderBar {...defaultProps} runState="running" elapsedMs={154000} />);
+    expect(screen.getByTestId("header-stop")).toBeInTheDocument();
+  });
+
+  // W.1.2 — completed pill and Re-run button
+  it("shows completed pill with formatted elapsed time when runState is completed", () => {
+    render(<HeaderBar {...defaultProps} runState="completed" elapsedMs={258000} />);
+    const runState = screen.getByTestId("header-run-state");
+    expect(runState).toHaveTextContent(/Completed · 04:18/);
+  });
+
+  it("shows Re-run button when runState is completed", () => {
+    render(<HeaderBar {...defaultProps} runState="completed" elapsedMs={258000} />);
+    expect(screen.getByTestId("header-rerun")).toBeInTheDocument();
+  });
+
+  // W.1.2 — callback wiring
+  it("clicking Stop fires onStopRun once", async () => {
+    const user = userEvent.setup();
+    const onStopRun = vi.fn();
+    render(<HeaderBar {...defaultProps} runState="running" elapsedMs={1000} onStopRun={onStopRun} />);
+    await user.click(screen.getByTestId("header-stop"));
+    expect(onStopRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("clicking Re-run fires onRerun once", async () => {
+    const user = userEvent.setup();
+    const onRerun = vi.fn();
+    render(<HeaderBar {...defaultProps} runState="completed" elapsedMs={1000} onRerun={onRerun} />);
+    await user.click(screen.getByTestId("header-rerun"));
+    expect(onRerun).toHaveBeenCalledTimes(1);
+  });
+
+  // W.1.2 — idle button absent when non-idle
+  it("does not render Run pipeline button when runState is running (explicit symmetry check)", () => {
+    render(<HeaderBar {...defaultProps} runState="running" elapsedMs={5000} />);
+    expect(screen.queryByTestId("header-run")).toBeNull();
+  });
+
+  // W.1.2 — completed: only Re-run shown, Run and Stop absent
+  it("does not render Run pipeline or Stop button when runState is completed", () => {
+    render(<HeaderBar {...defaultProps} runState="completed" elapsedMs={5000} />);
+    expect(screen.queryByTestId("header-run")).toBeNull();
+    expect(screen.queryByTestId("header-stop")).toBeNull();
+  });
+
+  // W.1.2 — formatMmSs unit tests
+  describe("formatMmSs", () => {
+    it("formats 0ms as 00:00", () => {
+      expect(formatMmSs(0)).toBe("00:00");
+    });
+
+    it("formats 59000ms as 00:59", () => {
+      expect(formatMmSs(59000)).toBe("00:59");
+    });
+
+    it("formats 60000ms as 01:00", () => {
+      expect(formatMmSs(60000)).toBe("01:00");
+    });
+
+    it("formats 154000ms as 02:34", () => {
+      expect(formatMmSs(154000)).toBe("02:34");
+    });
+
+    it("formats 3599000ms as 59:59", () => {
+      expect(formatMmSs(3599000)).toBe("59:59");
+    });
+
+    it("formats 3600000ms as 60:00 (no hour rollover — MM keeps counting)", () => {
+      expect(formatMmSs(3600000)).toBe("60:00");
+    });
+
+    it("clamps negative values to 00:00", () => {
+      expect(formatMmSs(-5)).toBe("00:00");
+    });
   });
 });
