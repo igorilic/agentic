@@ -57,7 +57,7 @@ export function useTauriEvents(runId?: string): UseTauriEventsResult {
       setHistoryError(null);
     }
 
-    (async () => {
+    void (async () => {
       // Fetch history first if a runId is known.
       if (runId) {
         try {

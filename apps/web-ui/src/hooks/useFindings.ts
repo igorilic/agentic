@@ -31,7 +31,7 @@ export function useFindings(runId?: string, refetchKey?: unknown): UseFindingsRe
     setError(null);
     if (!runId) return;
 
-    (async () => {
+    void (async () => {
       try {
         const rows = (await invoke("list_findings", { runId })) as Finding[];
         if (!cancelled) setFindings(rows);

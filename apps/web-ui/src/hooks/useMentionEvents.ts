@@ -31,7 +31,7 @@ export function useMentionEvents(): EventEnvelope[] {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       const stop = await listen<EventEnvelope>(MENTION_EVENT_CHANNEL, (event) => {
         setEvents((prev) => {
           if (prev.some((e) => e.event_id === event.payload.event_id)) {
