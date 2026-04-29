@@ -130,7 +130,7 @@ describe("ChatMessage", () => {
     });
 
     it("bubble backgroundColor for architect contains the blue tint rgb values", () => {
-      // AGENT_TINT_RGBA architect = "rgb(59 130 246 / 0.06)" — assert component parts
+      // AGENT_TINT_RGBA architect = "rgb(59 130 246 / 0.04)" — assert component parts
       render(
         <ChatMessage kind="agent" agent="architect" timestamp="14:03" body="speccing now" />
       );
@@ -138,6 +138,15 @@ describe("ChatMessage", () => {
       expect(bubble.style.backgroundColor).toContain("59");
       expect(bubble.style.backgroundColor).toContain("130");
       expect(bubble.style.backgroundColor).toContain("246");
+    });
+
+    it("bubble backgroundColor alpha for architect is 0.04 per spec §3.4", () => {
+      // Spec §3.4 line 219 — agent bubble: rgba(<accent>, 0.04)
+      render(
+        <ChatMessage kind="agent" agent="architect" timestamp="14:03" body="speccing now" />
+      );
+      const bubble = screen.getByTestId("chat-message-agent-bubble");
+      expect(bubble.style.backgroundColor).toContain("0.04");
     });
   });
 
@@ -172,6 +181,22 @@ describe("ChatMessage", () => {
       );
       const bubble = screen.getByTestId("chat-message-agent-bubble");
       expect(bubble.style.borderLeftColor).toContain("--agent-qa");
+    });
+
+    it("reviewer variant: agent name has class text-agent-reviewer", () => {
+      render(
+        <ChatMessage kind="agent" agent="reviewer" timestamp="14:06" body="reviewing" />
+      );
+      const nameEl = screen.getByTestId("chat-message-agent-name");
+      expect(nameEl.className).toContain("text-agent-reviewer");
+    });
+
+    it("reviewer variant: bubble borderLeftColor references --agent-reviewer", () => {
+      render(
+        <ChatMessage kind="agent" agent="reviewer" timestamp="14:06" body="reviewing" />
+      );
+      const bubble = screen.getByTestId("chat-message-agent-bubble");
+      expect(bubble.style.borderLeftColor).toContain("--agent-reviewer");
     });
   });
 
