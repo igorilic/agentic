@@ -169,4 +169,52 @@ describe("ChatComposer", () => {
       expect(textarea).toHaveValue("");
     });
   });
+
+  describe("R2 — trimmed value on send", () => {
+    it("chip click then immediate send fires onSend with trimmed value (no trailing space)", async () => {
+      const onSend = vi.fn();
+      render(<ChatComposer onSend={onSend} />);
+      const chip = screen.getByTestId("chat-composer-chip-plan");
+      const sendBtn = screen.getByTestId("chat-composer-send");
+
+      await userEvent.click(chip);
+      await userEvent.click(sendBtn);
+
+      expect(onSend).toHaveBeenCalledWith("/plan");
+    });
+  });
+
+  describe("C — whitespace-only input guard", () => {
+    it("typing only spaces and clicking send does NOT fire onSend", async () => {
+      const onSend = vi.fn();
+      render(<ChatComposer onSend={onSend} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+      const sendBtn = screen.getByTestId("chat-composer-send");
+
+      fireEvent.change(textarea, { target: { value: "   " } });
+      await userEvent.click(sendBtn);
+
+      expect(onSend).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("A — send button shape", () => {
+    it("send button has rounded-none class (square, not rounded)", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const sendBtn = screen.getByTestId("chat-composer-send");
+
+      expect(sendBtn.className).not.toContain("rounded-md");
+      expect(sendBtn.className).toContain("rounded-none");
+    });
+  });
+
+  describe("R1 — chip border token", () => {
+    it("Plan chip uses border-border token, not border-border-strong", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const chip = screen.getByTestId("chat-composer-chip-plan");
+
+      expect(chip.className).not.toContain("border-border-strong");
+      expect(chip.className).toContain("border-border");
+    });
+  });
 });
