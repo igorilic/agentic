@@ -10,6 +10,16 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 describe("App", () => {
+  beforeEach(() => {
+    // StartRunForm is only rendered in DEV mode — make the assumption explicit
+    // so these tests survive a future global env change.
+    vi.stubEnv("DEV", true);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("renders the Agentic heading", () => {
     render(<App />);
     expect(
@@ -22,9 +32,10 @@ describe("App", () => {
     expect(screen.getByText(/no events yet/i)).toBeInTheDocument();
   });
 
-  it("renders the StartRunForm above the EventList", () => {
+  it("renders the StartRunForm above the EventList", async () => {
     render(<App />);
-    expect(screen.getByTestId("start-run-form")).toBeInTheDocument();
+    // StartRunForm is lazy-loaded inside a Suspense boundary — use findBy* (async).
+    expect(await screen.findByTestId("start-run-form")).toBeInTheDocument();
   });
 
   it("renders the cockpit stepper", () => {

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import StartRunForm from "../components/StartRunForm";
@@ -42,21 +42,29 @@ describe("StartRunForm — dev-mode gate", () => {
     expect(screen.queryByTestId("start-run-form")).toBeNull();
   });
 
-  it("renders the form when import.meta.env.DEV is true (dev build)", () => {
+  it("renders the form when import.meta.env.DEV is true (dev build)", async () => {
     vi.stubEnv("DEV", true);
     render(<ControlledStartRunForm />);
-    expect(screen.getByTestId("start-run-form")).toBeInTheDocument();
+    // Lazy-loaded inner component resolves in a microtask — use findBy* (async).
+    expect(await screen.findByTestId("start-run-form")).toBeInTheDocument();
   });
 });
 
 describe("StartRunForm", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    // Make DEV flag explicit so these tests don't rely on vitest's default env.
+    vi.stubEnv("DEV", true);
   });
 
-  it("renders inputs and buttons", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("renders inputs and buttons", async () => {
     render(<ControlledStartRunForm />);
-    expect(screen.getByTestId("script-path-input")).toBeInTheDocument();
+    // Wait for the lazy-loaded inner component to mount via Suspense.
+    expect(await screen.findByTestId("script-path-input")).toBeInTheDocument();
     expect(screen.getByTestId("delay-ms-input")).toBeInTheDocument();
     expect(screen.getByTestId("start-button")).not.toBeDisabled();
     expect(screen.getByTestId("cancel-button")).toBeDisabled();
@@ -65,6 +73,8 @@ describe("StartRunForm", () => {
   it("blocks Start when script path is empty", async () => {
     const user = userEvent.setup();
     render(<ControlledStartRunForm />);
+    // Wait for lazy inner component to mount.
+    await screen.findByTestId("start-button");
     await user.click(screen.getByTestId("start-button"));
     expect(invokeMock).not.toHaveBeenCalled();
     expect(screen.getByTestId("error-message")).toHaveTextContent(/required/i);
@@ -75,6 +85,8 @@ describe("StartRunForm", () => {
     const user = userEvent.setup();
     render(<ControlledStartRunForm />);
 
+    // Wait for lazy inner component to mount.
+    await screen.findByTestId("script-path-input");
     await user.type(screen.getByTestId("script-path-input"), "/tmp/script.json");
     await user.clear(screen.getByTestId("delay-ms-input"));
     await user.type(screen.getByTestId("delay-ms-input"), "50");
@@ -94,6 +106,8 @@ describe("StartRunForm", () => {
     invokeMock.mockRejectedValueOnce("script path outside allowed scope: /etc/passwd");
     const user = userEvent.setup();
     render(<ControlledStartRunForm />);
+    // Wait for lazy inner component to mount.
+    await screen.findByTestId("script-path-input");
     await user.type(screen.getByTestId("script-path-input"), "/etc/passwd");
     await user.click(screen.getByTestId("start-button"));
 
@@ -108,6 +122,8 @@ describe("StartRunForm", () => {
     const user = userEvent.setup();
     render(<ControlledStartRunForm />);
 
+    // Wait for lazy inner component to mount.
+    await screen.findByTestId("script-path-input");
     await user.type(screen.getByTestId("script-path-input"), "/x/script.json");
     await user.click(screen.getByTestId("start-button"));
     expect(await screen.findByTestId("active-run-id")).toHaveTextContent(/run-123/);
@@ -124,6 +140,8 @@ describe("StartRunForm", () => {
     const user = userEvent.setup();
     const { rerender } = render(<ControlledStartRunForm events={[]} />);
 
+    // Wait for lazy inner component to mount.
+    await screen.findByTestId("script-path-input");
     await user.type(screen.getByTestId("script-path-input"), "/p");
     await user.click(screen.getByTestId("start-button"));
     expect(await screen.findByTestId("active-run-id")).toHaveTextContent("run-xyz");
@@ -167,7 +185,7 @@ describe("StartRunForm", () => {
         onActiveRunIdChange={onActiveRunIdChange}
       />,
     );
-    expect(onActiveRunIdChange).toHaveBeenCalledWith(undefined);
+    await waitFor(() => expect(onActiveRunIdChange).toHaveBeenCalledWith(undefined));
   });
 
   it("ignores RunComplete for a different run_id", async () => {
@@ -187,6 +205,8 @@ describe("StartRunForm", () => {
       />,
     );
 
+    // Wait for lazy inner component to mount.
+    await screen.findByTestId("active-run-id");
     // RunComplete for a different run should not call onActiveRunIdChange.
     expect(onActiveRunIdChange).not.toHaveBeenCalled();
     expect(screen.getByTestId("active-run-id")).toHaveTextContent("run-xyz");
@@ -200,6 +220,8 @@ describe("StartRunForm", () => {
     const user = userEvent.setup();
     render(<ControlledStartRunForm />);
 
+    // Wait for lazy inner component to mount.
+    await screen.findByTestId("script-path-input");
     await user.type(screen.getByTestId("script-path-input"), "/p");
     await user.click(screen.getByTestId("start-button"));
 
@@ -216,6 +238,8 @@ describe("StartRunForm", () => {
     const user = userEvent.setup();
     render(<ControlledStartRunForm />);
 
+    // Wait for lazy inner component to mount.
+    await screen.findByTestId("script-path-input");
     await user.type(screen.getByTestId("script-path-input"), "/p");
     await user.clear(screen.getByTestId("delay-ms-input"));
     await user.type(screen.getByTestId("delay-ms-input"), "-500");
@@ -232,6 +256,8 @@ describe("StartRunForm", () => {
     const user = userEvent.setup();
     render(<ControlledStartRunForm />);
 
+    // Wait for lazy inner component to mount.
+    await screen.findByTestId("script-path-input");
     await user.type(screen.getByTestId("script-path-input"), "/p");
     await user.click(screen.getByTestId("start-button"));
 
