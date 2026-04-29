@@ -66,51 +66,57 @@ export default function App() {
   }, [activeRunId]);
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <header className="px-6 py-4 border-b border-gray-200">
-        <h1 className="text-2xl font-bold text-gray-900">Agentic</h1>
-      </header>
-      <DismissableBanner
-        testId="history-error-banner"
-        severity="warning"
-        message={historyError ? `Could not load event history: ${historyError}` : null}
-      />
-      <DismissableBanner
-        testId="findings-error-banner"
-        severity="error"
-        message={
-          findingsError && !findingsErrorDismissed
-            ? `Could not load findings: ${findingsError}`
-            : null
-        }
-        onDismiss={() => setFindingsErrorDismissed(true)}
-      />
-      <StartRunForm
-        events={events}
-        activeRunId={activeRunId}
-        onActiveRunIdChange={setActiveRunId}
-      />
-      <Stepper state={runState} />
-      <section className="p-6">
-        <ChatPane
-          onTicketRunStarted={setActiveRunId}
-          activeRunId={activeRunId ?? null}
-          activeRunStartedAtMs={startedAtMs}
-          onCancelActiveRun={cancelActiveRun}
+    <main className="min-h-screen bg-gray-50 flex flex-col md:flex-row md:items-start">
+      {/* Cockpit column — top at narrow viewports, left column at md+ */}
+      <div className="flex flex-col md:w-1/2 md:min-h-screen md:border-r md:border-gray-200">
+        <header className="px-4 sm:px-6 py-4 border-b border-gray-200">
+          <h1 className="text-2xl font-bold text-gray-900">Agentic</h1>
+        </header>
+        <DismissableBanner
+          testId="history-error-banner"
+          severity="warning"
+          message={historyError ? `Could not load event history: ${historyError}` : null}
         />
-      </section>
-      <section className="px-6 pb-6">
-        <EventList events={events} />
-      </section>
-      <section className="px-6 pb-6">
-        <FindingsTable findings={findings} />
-      </section>
-      <section className="px-6 pb-6">
-        <PastRunsPane onSelectRun={setFindingsRunId} />
-      </section>
-      <section className="px-6 pb-6">
-        <SettingsPane />
-      </section>
+        <DismissableBanner
+          testId="findings-error-banner"
+          severity="error"
+          message={
+            findingsError && !findingsErrorDismissed
+              ? `Could not load findings: ${findingsError}`
+              : null
+          }
+          onDismiss={() => setFindingsErrorDismissed(true)}
+        />
+        <StartRunForm
+          events={events}
+          activeRunId={activeRunId}
+          onActiveRunIdChange={setActiveRunId}
+        />
+        <Stepper state={runState} />
+        <section className="px-3 sm:px-6 pb-6">
+          <EventList events={events} />
+        </section>
+        <section className="px-3 sm:px-6 pb-6">
+          <FindingsTable findings={findings} />
+        </section>
+        <section className="px-3 sm:px-6 pb-6">
+          <PastRunsPane onSelectRun={setFindingsRunId} />
+        </section>
+        <section className="px-3 sm:px-6 pb-6">
+          <SettingsPane />
+        </section>
+      </div>
+      {/* Chat column — bottom at narrow viewports, right column at md+ */}
+      <div className="flex flex-col md:w-1/2 md:sticky md:top-0 md:min-h-screen">
+        <section className="p-3 sm:p-6">
+          <ChatPane
+            onTicketRunStarted={setActiveRunId}
+            activeRunId={activeRunId ?? null}
+            activeRunStartedAtMs={startedAtMs}
+            onCancelActiveRun={cancelActiveRun}
+          />
+        </section>
+      </div>
     </main>
   );
 }
