@@ -1,5 +1,82 @@
 import type { RunStateOverall } from "../types/pipeline";
 
+export function formatMmSs(ms: number): string {
+  if (ms < 0) ms = 0;
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+type RunStateBadgeProps = {
+  runState: RunStateOverall;
+  elapsedMs: number | null;
+  onRunPipeline: () => void;
+  onStopRun: () => void;
+  onRerun: () => void;
+};
+
+function RunStateBadge({ runState, elapsedMs, onRunPipeline, onStopRun, onRerun }: RunStateBadgeProps) {
+  if (runState === "idle") {
+    return (
+      <button
+        type="button"
+        data-testid="header-run"
+        onClick={onRunPipeline}
+        className="rounded-md bg-[#18181b] px-3 py-1.5 text-xs font-semibold text-white"
+      >
+        Run pipeline
+      </button>
+    );
+  }
+
+  if (runState === "running" && elapsedMs !== null) {
+    return (
+      <div className="flex items-center gap-2.5">
+        <div
+          data-testid="header-running-pill"
+          className="flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-blue-700 animate-pulse" aria-hidden="true" />
+          Pipeline running · {formatMmSs(elapsedMs)}
+        </div>
+        <button
+          type="button"
+          data-testid="header-stop"
+          onClick={onStopRun}
+          className="rounded-md border border-border-strong px-2.5 py-1 text-xs font-semibold text-fg"
+        >
+          Stop
+        </button>
+      </div>
+    );
+  }
+
+  if (runState === "completed" && elapsedMs !== null) {
+    return (
+      <div className="flex items-center gap-2.5">
+        <div
+          data-testid="header-completed-pill"
+          className="flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-green-700" aria-hidden="true" />
+          Completed · {formatMmSs(elapsedMs)}
+        </div>
+        <button
+          type="button"
+          data-testid="header-rerun"
+          onClick={onRerun}
+          className="rounded-md border border-border-strong px-2.5 py-1 text-xs font-semibold text-fg"
+        >
+          Re-run
+        </button>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export type HeaderBarProps = {
   brand: string;
   ticketSlug: string | null;
@@ -17,10 +94,13 @@ export default function HeaderBar({
   brand,
   ticketSlug,
   runState,
+  elapsedMs,
   theme,
   onThemeToggle,
   onOpenSettings,
   onRunPipeline,
+  onStopRun,
+  onRerun,
 }: HeaderBarProps) {
   return (
     <header
@@ -52,16 +132,13 @@ export default function HeaderBar({
 
       <div className="flex items-center gap-3.5">
         <div role="status" aria-live="polite" data-testid="header-run-state">
-          {runState === "idle" && (
-            <button
-              type="button"
-              data-testid="header-run"
-              onClick={onRunPipeline}
-              className="rounded-md bg-[#18181b] px-3 py-1.5 text-xs font-semibold text-white"
-            >
-              Run pipeline
-            </button>
-          )}
+          <RunStateBadge
+            runState={runState}
+            elapsedMs={elapsedMs}
+            onRunPipeline={onRunPipeline}
+            onStopRun={onStopRun}
+            onRerun={onRerun}
+          />
         </div>
 
         <button
