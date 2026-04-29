@@ -1,5 +1,27 @@
 import type { StepInfo, StepStatus } from "./run";
 
+export type AgentLibraryEntry = {
+  id: string;
+  name: string;
+  icon: string;
+  desc: string;
+};
+
+export const AGENT_LIBRARY: readonly AgentLibraryEntry[] = [
+  { id: "architect",  name: "Architect",     icon: "blueprint", desc: "Designs system & breaks down work" },
+  { id: "developer",  name: "Developer",     icon: "code",      desc: "Writes code & tests" },
+  { id: "qa",         name: "QA",            icon: "check",     desc: "Runs tests, checks edge cases" },
+  { id: "reviewer",   name: "Reviewer",      icon: "eye",       desc: "Code review & feedback" },
+  { id: "researcher", name: "Researcher",    icon: "book",      desc: "Gathers context, reads docs" },
+  { id: "security",   name: "Security",      icon: "shield",    desc: "Audits for vulnerabilities" },
+  { id: "perf",       name: "Performance",   icon: "gauge",     desc: "Profiles & optimizes hot paths" },
+  { id: "docs",       name: "Doc Writer",    icon: "doc",       desc: "Updates README, API docs" },
+  { id: "designer",   name: "Designer",      icon: "palette",   desc: "UX & visual review" },
+  { id: "db",         name: "DB Migrator",   icon: "database",  desc: "Schema migrations & data" },
+  { id: "devops",     name: "DevOps",        icon: "cloud",     desc: "CI/CD & deploy config" },
+  { id: "a11y",       name: "Accessibility", icon: "a11y",      desc: "WCAG compliance pass" },
+] as const;
+
 export type RunStateOverall = "idle" | "running" | "completed" | "failed";
 export type AgentStatus = "queued" | "active" | "done" | "skipped" | "errored" | "failed";
 
