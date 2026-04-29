@@ -163,4 +163,29 @@ describe("SettingsPane", () => {
     // Button re-enables for retry.
     expect(screen.getByTestId("connect-github-submit")).not.toBeDisabled();
   });
+
+  // Responsive layout assertions.
+  it("account row has flex-col base layout so actions stack at narrow widths", async () => {
+    invokeMock.mockResolvedValueOnce([
+      makeAccount({ id: "github:github.com" }),
+    ]);
+    render(<SettingsPane />);
+    await waitFor(() =>
+      expect(screen.getByTestId("auth-account-row-github:github.com")).toBeInTheDocument(),
+    );
+    const row = screen.getByTestId("auth-account-row-github:github.com");
+    expect(row.className).toMatch(/flex-col/);
+  });
+
+  it("account row has sm:flex-row class to restore inline layout at sm breakpoint", async () => {
+    invokeMock.mockResolvedValueOnce([
+      makeAccount({ id: "github:github.com" }),
+    ]);
+    render(<SettingsPane />);
+    await waitFor(() =>
+      expect(screen.getByTestId("auth-account-row-github:github.com")).toBeInTheDocument(),
+    );
+    const row = screen.getByTestId("auth-account-row-github:github.com");
+    expect(row.className).toMatch(/sm:flex-row/);
+  });
 });

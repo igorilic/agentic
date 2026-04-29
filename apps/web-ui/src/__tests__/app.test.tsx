@@ -65,4 +65,19 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByTestId("past-runs-pane")).toBeInTheDocument();
   });
+
+  // Responsive layout assertions.
+  it("main content area has flex-col base layout for single-column on narrow viewports", () => {
+    render(<App />);
+    const main = document.querySelector("main");
+    expect(main).not.toBeNull();
+    expect(main!.className).toMatch(/flex-col/);
+  });
+
+  it("main content area has md:flex-row to restore side-by-side at md breakpoint", () => {
+    render(<App />);
+    const main = document.querySelector("main");
+    expect(main).not.toBeNull();
+    expect(main!.className).toMatch(/md:flex-row/);
+  });
 });

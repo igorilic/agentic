@@ -202,4 +202,22 @@ describe("FindingsTable", () => {
 
     resolveInvoke!();
   });
+
+  // Responsive layout assertions.
+  it("triage button row has flex-wrap so buttons wrap at narrow widths", () => {
+    render(<FindingsTable findings={[makeFinding({ id: "f1" })]} />);
+    const row = screen.getByTestId("finding-row-f1");
+    // The triage button container div is the last child div inside the row li.
+    const triageDiv = row.querySelector("div:last-child");
+    expect(triageDiv).not.toBeNull();
+    expect(triageDiv!.className).toMatch(/flex-wrap/);
+  });
+
+  it("file:line span has block class to stack below message at base width", () => {
+    render(<FindingsTable findings={[makeFinding({ id: "f1", file_path: "src/main.rs", line: 42 })]} />);
+    const row = screen.getByTestId("finding-row-f1");
+    const fileSpan = row.querySelector("[data-testid='finding-file-f1']");
+    expect(fileSpan).not.toBeNull();
+    expect(fileSpan!.className).toMatch(/block/);
+  });
 });

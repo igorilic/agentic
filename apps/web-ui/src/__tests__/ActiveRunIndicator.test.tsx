@@ -106,4 +106,13 @@ describe("ActiveRunIndicator", () => {
       expect(screen.getByTestId("active-run-cancel")).not.toBeDisabled();
     });
   });
+
+  // Responsive layout assertions.
+  it("indicator container has flex-wrap so content wraps at narrow widths", () => {
+    render(
+      <ActiveRunIndicator runId="01abc" startedAtMs={Date.now()} onCancel={vi.fn()} />,
+    );
+    const indicator = screen.getByTestId("active-run-indicator");
+    expect(indicator.className).toMatch(/flex-wrap/);
+  });
 });
