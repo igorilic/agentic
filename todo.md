@@ -1705,7 +1705,7 @@ Legend:
 
 ---
 
-### Step 14.5: Native diff editor for `FileChange`
+### [x] Step 14.5: Native diff editor for `FileChange`
 
 **Goal**: On `FileChange`, open the workspace file in `vscode.diff` against a virtual URI showing the `before_hash` snapshot content.
 
