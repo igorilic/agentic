@@ -162,8 +162,7 @@ pub struct GetFileSnapshotOptions {
 /// either used `FileSnapshotter::new()` or the GC removed it).
 #[napi]
 pub async fn get_file_snapshot(opts: GetFileSnapshotOptions) -> Result<Buffer> {
-    let path = std::path::Path::new(&opts.data_dir)
-        .join("snapshots");
+    let path = std::path::Path::new(&opts.data_dir).join("snapshots");
     let bytes = read_snapshot(&path, &opts.hash)
         .map_err(|e| Error::from_reason(format!("get_file_snapshot: {e}")))?;
     Ok(bytes.into())
