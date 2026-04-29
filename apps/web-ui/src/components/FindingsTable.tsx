@@ -120,7 +120,7 @@ export default function FindingsTable({ findings }: FindingsTableProps) {
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => onTriage(f.run_id, f.id, opt.value)}
+                    onClick={() => void onTriage(f.run_id, f.id, opt.value)}
                     disabled={isPending}
                     data-testid={`triage-${opt.value}-${f.id}`}
                     className={`px-2 py-0.5 text-xs rounded border transition ${

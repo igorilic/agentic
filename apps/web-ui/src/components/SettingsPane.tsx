@@ -90,7 +90,7 @@ export default function SettingsPane() {
             </div>
             <button
               type="button"
-              onClick={() => onDisconnect(a.id)}
+              onClick={() => void onDisconnect(a.id)}
               data-testid={`disconnect-${a.id}`}
               className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
             >
@@ -108,7 +108,7 @@ export default function SettingsPane() {
         </p>
         <button
           type="button"
-          onClick={onConnect}
+          onClick={() => void onConnect()}
           disabled={connecting}
           data-testid="connect-github-submit"
           className="self-start px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:bg-gray-400"

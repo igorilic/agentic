@@ -69,7 +69,7 @@ export default function StartRunFormInner({ events, activeRunId, onActiveRunIdCh
     <form
       className="px-6 py-4 border-b border-gray-200 flex flex-col gap-3"
       data-testid="start-run-form"
-      onSubmit={onStart}
+      onSubmit={(e) => void onStart(e)}
     >
       <div className="flex gap-3 items-center">
         <label className="flex flex-col gap-1 flex-1">
@@ -106,7 +106,7 @@ export default function StartRunFormInner({ events, activeRunId, onActiveRunIdCh
         {/* stable test selector — do not rename without updating StartRunForm.test.tsx */}
         <button
           type="button"
-          onClick={onCancel}
+          onClick={() => void onCancel()}
           disabled={!activeRunId || isStarting}
           className="px-4 py-2 bg-red-600 text-white rounded font-medium hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed self-end"
           data-testid="cancel-button"

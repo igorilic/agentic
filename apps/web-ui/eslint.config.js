@@ -54,12 +54,10 @@ export default tseslint.config(
       // Type-aware promise safety rules. These require `parserOptions.project`
       // above and catch fire-and-forget async calls that swallow errors.
       "@typescript-eslint/no-floating-promises": "error",
-      // checksVoidReturn.attributes=false: allows `onClick={async () => ...}`
-      // patterns without forcing every React event handler to be non-async.
-      "@typescript-eslint/no-misused-promises": [
-        "error",
-        { checksVoidReturn: { attributes: false } },
-      ],
+      // no-misused-promises with full checks — JSX event handlers that pass
+      // an async function must use `() => void asyncFn()` to make the ignored
+      // promise explicit and prevent unhandled rejection surprises.
+      "@typescript-eslint/no-misused-promises": "error",
     },
   },
 

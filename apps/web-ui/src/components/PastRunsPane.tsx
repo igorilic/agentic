@@ -50,7 +50,7 @@ export default function PastRunsPane({ onSelectRun }: PastRunsPaneProps = {}) {
         <h2 className="text-lg font-semibold text-gray-900">Past runs</h2>
         <button
           type="button"
-          onClick={refresh}
+          onClick={() => void refresh()}
           disabled={loading}
           data-testid="past-runs-refresh"
           className="text-xs text-blue-600 hover:underline disabled:opacity-50"

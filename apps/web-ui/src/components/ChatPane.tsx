@@ -206,7 +206,7 @@ export default function ChatPane({
         </div>
       )}
       <form
-        onSubmit={onSubmit}
+        onSubmit={(e) => void onSubmit(e)}
         className="px-3 py-2 border-t border-gray-200 flex gap-2"
         data-testid="chat-form"
       >

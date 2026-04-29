@@ -60,7 +60,7 @@ export default function ActiveRunIndicator({
       </span>
       <button
         type="button"
-        onClick={handleCancel}
+        onClick={() => void handleCancel()}
         disabled={cancelling}
         data-testid="active-run-cancel"
         className="px-2 py-0.5 text-xs rounded border border-blue-300 hover:bg-blue-100 disabled:opacity-50"
