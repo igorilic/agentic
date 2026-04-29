@@ -27,7 +27,7 @@ export default function AgentPicker({ excludeIds, onPick, onClose }: AgentPicker
       }}
       role="dialog"
       aria-label="Pick an agent"
-      className="w-80 rounded-xl border border-[rgb(0_0_0_/_0.08)] bg-bg-surface shadow-lg"
+      className="w-80 rounded-xl border border-[rgb(0_0_0_/_0.08)] bg-bg-surface shadow-modal"
     >
       <div className="border-b border-border-soft p-2">
         <input
