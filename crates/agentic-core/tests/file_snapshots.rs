@@ -607,6 +607,35 @@ fn read_snapshot_missing_hash_errors() {
     );
 }
 
+/// read_snapshot rejects any non-hex hash with InvalidInput so a
+/// path-traversal attempt (`hash = "../../etc/passwd"`) can't escape
+/// the snapshot dir. Defence-in-depth — callers come across the napi
+/// boundary where the value is user-controlled.
+#[test]
+fn read_snapshot_rejects_path_traversal_hashes() {
+    let dir = TempDir::new().unwrap();
+    let snapshot_dir = dir.path().join("snapshots");
+    fs::create_dir_all(&snapshot_dir).unwrap();
+
+    for bogus in [
+        "../../etc/passwd",
+        "..",
+        "/absolute",
+        "snap/with/slash",
+        "UPPERCASE",
+        "g0t-non-hex",
+        "",
+    ] {
+        let err = read_snapshot(&snapshot_dir, bogus)
+            .expect_err(&format!("should reject hash {bogus:?}"));
+        assert_eq!(
+            err.kind(),
+            std::io::ErrorKind::InvalidInput,
+            "expected InvalidInput for {bogus:?}, got: {err}"
+        );
+    }
+}
+
 /// default_constructor_does_not_persist — FileSnapshotter::new() (no
 /// store) captures + finalizes without writing anything to disk;
 /// read_snapshot of the captured hash returns NotFound.

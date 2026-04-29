@@ -24,6 +24,7 @@ export function activate(context: vscode.ExtensionContext): void {
   //
   // TODO(14.6+): use the active workspace's data_dir instead so the extension
   // and the agentic-core run that created the snapshots share the same dir.
+  // (GH issue tracking this is filed alongside the Step 14.5 review.)
   const dataDir = path.join(context.globalStorageUri.fsPath, "agentic");
 
   // ── Register agentic:// TextDocumentContentProvider ──────────────────────
@@ -49,26 +50,37 @@ export function activate(context: vscode.ExtensionContext): void {
   // will start from the sidebar; events for unrecognised run_ids are silently
   // dropped by EventStream.next() because the filter never matches.
   //
-  // The subscription is a no-op at runtime until the user kicks off a run
-  // from the sidebar that emits FileChange events. The openDiffForFileChange
-  // path is exercised by the unit test that stubs executeCommand directly.
+  // The loop is owned by an AbortController so deactivate() can cancel it
+  // — without that, the napi stream would keep the Node thread alive when
+  // the user disables the extension or VS Code reloads.
   const workspaceRoot =
     vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ".";
-
-  // Subscribe using a well-known sentinel; 14.6 replaces this with the
-  // actual run_id returned by startRun.
   const SENTINEL_RUN_ID = "__agentic_active_run__";
   const stream = node.subscribeEvents(SENTINEL_RUN_ID);
 
+  const abort = new AbortController();
+  context.subscriptions.push({ dispose: () => abort.abort() });
+
   void (async () => {
-    for await (const env of node.iterate(stream)) {
-      if (env.event.type === "FileChange") {
-        await openDiffForFileChange(env as unknown as FileChangeEnvelope, workspaceRoot);
+    try {
+      for await (const env of node.iterate(stream)) {
+        if (abort.signal.aborted) return;
+        if (env.event.type === "FileChange") {
+          await openDiffForFileChange(env as unknown as FileChangeEnvelope, workspaceRoot);
+        }
+      }
+    } catch (err) {
+      // AbortError on deactivate is expected; anything else is worth logging
+      // but shouldn't crash the extension host.
+      if ((err as { name?: string })?.name !== "AbortError") {
+        console.error("agentic event-loop error:", err);
       }
     }
   })();
 }
 
 export function deactivate(): void {
-  // nothing to clean up
+  // AbortController disposer pushed onto context.subscriptions in activate()
+  // tears the event loop down — VS Code calls dispose() on each subscription
+  // automatically, so this hook can stay empty.
 }

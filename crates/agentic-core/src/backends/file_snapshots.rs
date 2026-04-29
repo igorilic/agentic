@@ -340,6 +340,7 @@ fn persist_snapshot(snapshot_dir: &Path, state: &FileState) -> std::io::Result<(
         _ => return Ok(()),
     };
 
+    validate_hash(hash)?;
     fs::create_dir_all(snapshot_dir)?;
     let dest = snapshot_dir.join(hash);
     if dest.exists() {
@@ -352,8 +353,33 @@ fn persist_snapshot(snapshot_dir: &Path, state: &FileState) -> std::io::Result<(
 ///
 /// `snapshot_dir` is the directory passed to
 /// [`FileSnapshotter::with_store`]. Returns an `Err` with
-/// `ErrorKind::NotFound` when no blob exists for the given `hash`.
+/// `ErrorKind::NotFound` when no blob exists for the given `hash`,
+/// or `ErrorKind::InvalidInput` if `hash` contains non-hex characters
+/// (defence-in-depth: callers come across the napi boundary so an
+/// attacker-controlled `hash = "../../etc/passwd"` must not traverse).
 pub fn read_snapshot(snapshot_dir: &Path, hash: &str) -> std::io::Result<Vec<u8>> {
+    validate_hash(hash)?;
     let path = snapshot_dir.join(hash);
     fs::read(&path)
+}
+
+/// Reject any `hash` that contains characters outside `[0-9a-f]` or
+/// that exceeds the longest hash length we'd ever expect (256 hex
+/// chars = 1024 bits, far above blake3's 256-bit output). The set is
+/// deliberately tighter than "no path separators" — the storage
+/// contract is "blake3 hex" and anything else is a bug or attack.
+fn validate_hash(hash: &str) -> std::io::Result<()> {
+    if hash.is_empty() || hash.len() > 256 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "snapshot hash has invalid length",
+        ));
+    }
+    if !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "snapshot hash must be lowercase hex",
+        ));
+    }
+    Ok(())
 }

@@ -66,6 +66,12 @@ When deferring, write the tech-debt entry with: **what's missing**,
 **why it's deferred** (concrete reason, not "future work"), and a
 **trigger** for when it should be picked up.
 
+**Always file a GitHub issue for the deferred item** (`gh issue create`
+in the active repo). Use a `tech-debt` label. The issue body mirrors
+the todo.md entry: what's missing, why deferred, the trigger. Link the
+issue back from the todo.md tech-debt entry as `(GH #N)`. The issue
+is the durable tracker; the todo.md entry is a quick-glance index.
+
 ## 5. Commits + push
 
 The `tdd-developer` agent's commits use Conventional Commits with a

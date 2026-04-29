@@ -172,4 +172,22 @@ describe("agentic-node smoke", () => {
     expect(result).toBeInstanceOf(Buffer);
     expect(result.toString()).toBe("hello snapshot");
   });
+
+  it("getFileSnapshot rejects unknown hashes with a clean error message", async () => {
+    // No snapshots dir exists at all under this fresh data dir.
+    await expect(
+      node.getFileSnapshot({ dataDir, hash: "abc123def456" }),
+    ).rejects.toThrow(/snapshot not found: abc123def456/);
+    // Crucially: the error must NOT leak the on-disk path of the
+    // snapshot store. Users see this in extension logs.
+    await expect(
+      node.getFileSnapshot({ dataDir, hash: "abc123def456" }),
+    ).rejects.toThrow(/^(?!.*\/snapshots\/).*$/);
+  });
+
+  it("getFileSnapshot rejects path-traversal hashes with InvalidInput", async () => {
+    await expect(
+      node.getFileSnapshot({ dataDir, hash: "../../etc/passwd" }),
+    ).rejects.toThrow(/invalid snapshot hash/);
+  });
 });

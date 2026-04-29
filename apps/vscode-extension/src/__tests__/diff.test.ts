@@ -48,6 +48,42 @@ suite("AgenticDiffProvider", () => {
     }
   });
 
+  test("provideTextDocumentContent rejects non-`before` authorities", async () => {
+    let fetcherCalls = 0;
+    const fetcher = async (): Promise<Buffer> => {
+      fetcherCalls++;
+      return Buffer.from("");
+    };
+    const provider = new AgenticDiffProvider("/fake/data-dir", fetcher);
+
+    for (const bad of [
+      "agentic://after/abc",
+      "agentic://junk/abc",
+      "agentic:///abc",
+    ]) {
+      let threw = false;
+      try {
+        await provider.provideTextDocumentContent(vscode.Uri.parse(bad));
+      } catch (err) {
+        threw = true;
+        const msg = (err as Error).message ?? "";
+        if (!/expected.*before/i.test(msg)) {
+          throw new Error(
+            `Rejection for ${bad} should mention "expected ... before"; got: ${msg}`,
+          );
+        }
+      }
+      if (!threw) {
+        throw new Error(`Expected ${bad} to be rejected, but it resolved`);
+      }
+    }
+    if (fetcherCalls !== 0) {
+      throw new Error(
+        `Fetcher should not be called for non-before authorities, but was called ${fetcherCalls} times`,
+      );
+    }
+  });
+
   test("provideTextDocumentContent passes the correct hash and dataDir to fetcher", async () => {
     const calls: Array<{ dataDir: string; hash: string }> = [];
 

@@ -163,8 +163,20 @@ pub struct GetFileSnapshotOptions {
 #[napi]
 pub async fn get_file_snapshot(opts: GetFileSnapshotOptions) -> Result<Buffer> {
     let path = std::path::Path::new(&opts.data_dir).join("snapshots");
-    let bytes = read_snapshot(&path, &opts.hash)
-        .map_err(|e| Error::from_reason(format!("get_file_snapshot: {e}")))?;
+    let bytes = read_snapshot(&path, &opts.hash).map_err(|e| {
+        // Don't leak the full storage path on NotFound — it shows up in
+        // user-visible extension logs. Other error kinds keep the OS
+        // message for debuggability since they signal real disk issues.
+        match e.kind() {
+            std::io::ErrorKind::NotFound => {
+                Error::from_reason(format!("snapshot not found: {}", opts.hash))
+            }
+            std::io::ErrorKind::InvalidInput => {
+                Error::from_reason(format!("invalid snapshot hash: {}", opts.hash))
+            }
+            _ => Error::from_reason(format!("get_file_snapshot: {e}")),
+        }
+    })?;
     Ok(bytes.into())
 }
 

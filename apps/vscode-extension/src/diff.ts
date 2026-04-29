@@ -61,6 +61,14 @@ export class AgenticDiffProvider
   ) {}
 
   async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
+    // Only `agentic://before/<hash>` is recognised today. A future
+    // step may add `agentic://after/...` — when it does, route here
+    // rather than silently calling the fetcher with whatever hash.
+    if (uri.authority !== "before") {
+      throw new Error(
+        `Unsupported agentic:// URI authority "${uri.authority}" — expected "before"`,
+      );
+    }
     // URI path is "/<hash>" — strip the leading slash.
     const hash = uri.path.replace(/^\//, "");
     const bytes = await this.fetcher({ dataDir: this.dataDir, hash });
