@@ -5,8 +5,11 @@ import App from "../App";
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
 }));
+// Default invoke mock returns [] for all IPC commands that fetch lists.
+// Commands like list_runs, list_auth_accounts, and list_findings all return
+// Vec<T> on the backend which serialises to [] (never null/undefined).
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn().mockResolvedValue(undefined),
+  invoke: vi.fn().mockResolvedValue([]),
 }));
 
 describe("App", () => {
