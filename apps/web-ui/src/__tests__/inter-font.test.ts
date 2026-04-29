@@ -20,13 +20,22 @@ describe("index.html Inter font links", () => {
     );
   });
 
-  it("contains Google Fonts stylesheet link for Inter with display=swap", () => {
-    // Verify we have a stylesheet link that points to the Inter family and has display=swap
-    const stylesheetPattern =
-      /href="https:\/\/fonts\.googleapis\.com\/css2\?family=Inter[^"]*display=swap"/;
-    expect(html).toMatch(stylesheetPattern);
+  it("contains a single <link> with rel=stylesheet, href starting with Google Fonts Inter, and display=swap", () => {
+    // Match a single <link> element that contains BOTH rel="stylesheet" and
+    // the Inter Google Fonts href with display=swap.
+    // Allow either attribute order (rel first or href first).
+    const linkWithRelFirst =
+      /<link[^>]*rel="stylesheet"[^>]*href="https:\/\/fonts\.googleapis\.com\/css2\?family=Inter[^"]*display=swap"[^>]*>/;
+    const linkWithHrefFirst =
+      /<link[^>]*href="https:\/\/fonts\.googleapis\.com\/css2\?family=Inter[^"]*display=swap"[^>]*rel="stylesheet"[^>]*>/;
 
-    // Also verify it is a rel="stylesheet" link
-    expect(html).toContain('rel="stylesheet"');
+    const matchesRelFirst = html.match(linkWithRelFirst);
+    const matchesHrefFirst = html.match(linkWithHrefFirst);
+
+    const totalMatches =
+      (matchesRelFirst ? matchesRelFirst.length : 0) +
+      (matchesHrefFirst ? matchesHrefFirst.length : 0);
+
+    expect(totalMatches).toBe(1);
   });
 });
