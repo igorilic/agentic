@@ -199,7 +199,7 @@ blocked.
 
 ---
 
-### Step W.1.3: HeaderBar — theme toggle wires `useTheme`
+### [x] Step W.1.3: HeaderBar — theme toggle wires `useTheme`
 
 **Goal**: Click the theme toggle and the document attribute flips. Existing tests in W.0.3 verified the hook; this step verifies integration.
 
@@ -225,7 +225,7 @@ blocked.
 
 ## Phase 2 — Web pipeline bar
 
-### Step W.2.1: `AgentCard` component
+### [x] Step W.2.1: `AgentCard` component
 
 **Goal**: Render one agent card with avatar, name, status pill, and the kebab menu placeholder. Pure presentation.
 
@@ -251,7 +251,7 @@ blocked.
 
 ---
 
-### Step W.2.2: `Connector` between agent cards
+### [x] Step W.2.2: `Connector` between agent cards
 
 **Goal**: Render a horizontal line + chevron between cards. Active hand-off uses an animated dashed line.
 
@@ -299,7 +299,7 @@ blocked.
 
 ---
 
-### Step W.2.4: Insert `+` chip between cards
+### [x] Step W.2.4: Insert `+` chip between cards
 
 **Goal**: Add the 16 × 16 `+` chip in each gap. Click invokes `onInsert(atIndex)`. Hover affordance is opacity-based.
 
@@ -323,7 +323,7 @@ blocked.
 
 ---
 
-### Step W.2.5: `AgentPicker` popover (search + select)
+### [x] Step W.2.5: `AgentPicker` popover (search + select)
 
 **Goal**: Standalone popover with search input and a scrollable list of agents not already in the pipeline.
 
@@ -1695,11 +1695,11 @@ Phase 1 — Web header
 Phase 2 — Web pipeline bar
 - [ ] W.2.1 AgentCard
 - [ ] W.2.2 Connector
-- [ ] W.2.3 PipelineBar shell
+- [x] W.2.3 PipelineBar shell
 - [ ] W.2.4 Insert chips
 - [ ] W.2.5 AgentPicker popover
 - [ ] W.2.6 PipelineBar + AgentPicker integration
-- [ ] W.2.7 Drag-reorder
+- [x] W.2.7 Drag-reorder
 - [ ] W.2.8 AgentCard kebab menu
 
 Phase 3 — Web 3-column shell
