@@ -132,4 +132,38 @@ describe("Stepper", () => {
     const tddIcon = screen.getByTestId("stepper-icon-tdd-developer");
     expect(tddIcon).toHaveTextContent("⊘");
   });
+
+  // Responsive layout assertions: class strings lock in the mobile-first intent.
+  it("step list has flex-col base layout for vertical stacking at narrow widths", () => {
+    render(<Stepper state={makeRunState()} />);
+    const ol = screen.getByRole("list");
+    expect(ol.className).toMatch(/flex-col/);
+  });
+
+  it("step list has sm:flex-row class to restore horizontal layout at sm breakpoint", () => {
+    render(<Stepper state={makeRunState()} />);
+    const ol = screen.getByRole("list");
+    expect(ol.className).toMatch(/sm:flex-row/);
+  });
+
+  it("arrow separator has hidden class so it is invisible in the vertical stack", () => {
+    const state = makeRunState();
+    render(<Stepper state={state} />);
+    // There are 3 separators (between 4 steps). Each must carry `hidden`.
+    const separators = document
+      .querySelectorAll('[aria-hidden="true"]');
+    expect(separators.length).toBeGreaterThan(0);
+    separators.forEach((sep) => {
+      expect(sep.className).toMatch(/hidden/);
+    });
+  });
+
+  it("arrow separator has sm:inline class to reappear in the horizontal layout", () => {
+    const state = makeRunState();
+    render(<Stepper state={state} />);
+    const separators = document.querySelectorAll('[aria-hidden="true"]');
+    separators.forEach((sep) => {
+      expect(sep.className).toMatch(/sm:inline/);
+    });
+  });
 });
