@@ -31,17 +31,22 @@ function ControlledStartRunForm({
 }
 
 describe("StartRunForm — dev-mode gate", () => {
+  beforeEach(() => {
+    // Reset module registry before each test so env stubs applied via
+    // vi.stubEnv take effect when the module is re-evaluated on re-import.
+    // This prevents test-order coupling: every test starts with a clean slate.
+    vi.resetModules();
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
-    vi.resetModules();
   });
 
   it("renders nothing when import.meta.env.DEV is false (production build)", async () => {
     // The DEV ternary is evaluated at module-scope in StartRunForm.tsx.
-    // To test the DEV=false path robustly we must reset the module registry
-    // so the stub takes effect when the module is re-evaluated on re-import.
+    // resetModules() in beforeEach guarantees the stub below is picked up
+    // when the module is re-evaluated on re-import (no inline call needed).
     vi.stubEnv("DEV", false);
-    vi.resetModules();
     const { default: StartRunFormFresh } = await import(
       "../components/StartRunForm"
     );
