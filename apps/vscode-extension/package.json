@@ -22,6 +22,66 @@
       {
         "command": "agentic.hello",
         "title": "Agentic: Hello"
+      },
+      {
+        "command": "agentic.plan",
+        "title": "Agentic: Plan"
+      },
+      {
+        "command": "agentic.status",
+        "title": "Agentic: Show Status"
+      },
+      {
+        "command": "agentic.cancel",
+        "title": "Agentic: Cancel Run"
+      },
+      {
+        "command": "agentic.triage",
+        "title": "Agentic: Triage Finding"
+      },
+      {
+        "command": "agentic.answer",
+        "title": "Agentic: Answer Clarifying Question"
+      },
+      {
+        "command": "agentic.retry",
+        "title": "Agentic: Retry Step"
+      },
+      {
+        "command": "agentic.resume",
+        "title": "Agentic: Resume Run"
+      },
+      {
+        "command": "agentic.workspace",
+        "title": "Agentic: Switch Workspace"
+      },
+      {
+        "command": "agentic.backend",
+        "title": "Agentic: Switch Backend"
+      },
+      {
+        "command": "agentic.model",
+        "title": "Agentic: Switch Model"
+      },
+      {
+        "command": "agentic.settings",
+        "title": "Agentic: Open Settings"
+      },
+      {
+        "command": "agentic.runs",
+        "title": "Agentic: Past Runs"
+      },
+      {
+        "command": "agentic.pr",
+        "title": "Agentic: Open PR"
+      },
+      {
+        "command": "agentic.clear",
+        "title": "Agentic: Clear Chat"
+      },
+      {
+        "command": "agentic.help",
+        "title": "Agentic: Help"
       }
     ],
     "viewsContainers": {

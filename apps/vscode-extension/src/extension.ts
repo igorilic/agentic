@@ -1,11 +1,9 @@
 import * as vscode from "vscode";
+import { registerCommands } from "./commands";
 import { AgenticChatViewProvider } from "./views/sidebar";
 
 export function activate(context: vscode.ExtensionContext): void {
-  const disposable = vscode.commands.registerCommand("agentic.hello", () => {
-    vscode.window.showInformationMessage("Hello from Agentic!");
-  });
-  context.subscriptions.push(disposable);
+  registerCommands(context);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
