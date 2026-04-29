@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import PipelineBar from "../components/PipelineBar";
@@ -465,6 +465,218 @@ describe("PipelineBar", () => {
       expect(screen.queryByTestId("agent-picker-row-reviewer")).not.toBeInTheDocument();
       // Agents not in the pipeline should be visible
       expect(screen.getByTestId("agent-picker-row-researcher")).toBeInTheDocument();
+    });
+  });
+
+  describe("drag-reorder", () => {
+    // Gap index N = "before card at position N".
+    // Gaps 1-3 are between cards; gap 4 is after the last card (before + Add agent).
+    // onReorder(fromIndex, finalToIndex) — consumer does a plain splice without adjustment.
+    // Adjusted-index contract: finalToIndex = (fromIndex < gapN) ? gapN - 1 : gapN.
+    // Self-drop (adjusted === fromIndex) is a no-op; onReorder must NOT be called.
+
+    it("renders gap drop targets pipeline-gap-1 through pipeline-gap-4", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      expect(screen.getByTestId("pipeline-gap-1")).toBeInTheDocument();
+      expect(screen.getByTestId("pipeline-gap-2")).toBeInTheDocument();
+      expect(screen.getByTestId("pipeline-gap-3")).toBeInTheDocument();
+      expect(screen.getByTestId("pipeline-gap-4")).toBeInTheDocument();
+    });
+
+    it("gaps initially have data-drop-active='false'", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      for (let n = 1; n <= 4; n++) {
+        expect(screen.getByTestId(`pipeline-gap-${n}`)).toHaveAttribute(
+          "data-drop-active",
+          "false"
+        );
+      }
+    });
+
+    it("drag architect(0) to gap-2 sets data-drop-active='true' on gap-2", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      const card = screen.getByTestId("agent-card-architect");
+      const gap2 = screen.getByTestId("pipeline-gap-2");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap2);
+      expect(gap2).toHaveAttribute("data-drop-active", "true");
+    });
+
+    it("drag architect(0) to gap-2 and drop calls onReorder(0, 1)", () => {
+      const onReorder = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={onReorder}
+        />
+      );
+      const card = screen.getByTestId("agent-card-architect");
+      const gap2 = screen.getByTestId("pipeline-gap-2");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap2);
+      fireEvent.drop(gap2);
+      expect(onReorder).toHaveBeenCalledTimes(1);
+      expect(onReorder).toHaveBeenCalledWith(0, 1);
+    });
+
+    it("gap data-drop-active resets to 'false' after drop", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      const card = screen.getByTestId("agent-card-architect");
+      const gap2 = screen.getByTestId("pipeline-gap-2");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap2);
+      expect(gap2).toHaveAttribute("data-drop-active", "true");
+      fireEvent.drop(gap2);
+      expect(gap2).toHaveAttribute("data-drop-active", "false");
+    });
+
+    it("drag reviewer(3) to gap-1 calls onReorder(3, 1)", () => {
+      const onReorder = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={onReorder}
+        />
+      );
+      const card = screen.getByTestId("agent-card-reviewer");
+      const gap1 = screen.getByTestId("pipeline-gap-1");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap1);
+      fireEvent.drop(gap1);
+      expect(onReorder).toHaveBeenCalledTimes(1);
+      expect(onReorder).toHaveBeenCalledWith(3, 1);
+    });
+
+    it("drag architect(0) to gap-4 (end) calls onReorder(0, 3)", () => {
+      const onReorder = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={onReorder}
+        />
+      );
+      const card = screen.getByTestId("agent-card-architect");
+      const gap4 = screen.getByTestId("pipeline-gap-4");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap4);
+      fireEvent.drop(gap4);
+      expect(onReorder).toHaveBeenCalledTimes(1);
+      expect(onReorder).toHaveBeenCalledWith(0, 3);
+    });
+
+    it("drag architect(0) to gap-1 (self-adjacent) does NOT call onReorder", () => {
+      const onReorder = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={onReorder}
+        />
+      );
+      const card = screen.getByTestId("agent-card-architect");
+      const gap1 = screen.getByTestId("pipeline-gap-1");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap1);
+      fireEvent.drop(gap1);
+      expect(onReorder).not.toHaveBeenCalled();
+    });
+
+    it("dragLeave on a gap clears data-drop-active to 'false'", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      const card = screen.getByTestId("agent-card-architect");
+      const gap2 = screen.getByTestId("pipeline-gap-2");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap2);
+      expect(gap2).toHaveAttribute("data-drop-active", "true");
+      fireEvent.dragLeave(gap2);
+      expect(gap2).toHaveAttribute("data-drop-active", "false");
+    });
+
+    it("dragged card gets data-dragging='true' on dragStart", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      const card = screen.getByTestId("agent-card-architect");
+      fireEvent.dragStart(card);
+      expect(card).toHaveAttribute("data-dragging", "true");
+    });
+
+    it("dragged card loses data-dragging='true' after dragEnd", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      const card = screen.getByTestId("agent-card-architect");
+      fireEvent.dragStart(card);
+      expect(card).toHaveAttribute("data-dragging", "true");
+      fireEvent.dragEnd(card);
+      expect(card).toHaveAttribute("data-dragging", "false");
+    });
+
+    it("non-dragged cards do not get data-dragging='true' during drag", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      const architectCard = screen.getByTestId("agent-card-architect");
+      const developerCard = screen.getByTestId("agent-card-developer");
+      fireEvent.dragStart(architectCard);
+      expect(developerCard).toHaveAttribute("data-dragging", "false");
     });
   });
 });
