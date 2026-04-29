@@ -1,13 +1,28 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import HeaderBar, { formatMmSs } from "../components/HeaderBar";
+
+function stubMatchMedia(matches: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: query === "(prefers-color-scheme: dark)" ? matches : false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+}
 
 const defaultProps = {
   brand: "Agentic",
   ticketSlug: null as string | null,
   runState: "idle" as const,
-  theme: "light" as const,
-  onThemeToggle: vi.fn(),
   onOpenSettings: vi.fn(),
   onRunPipeline: vi.fn(),
   onStopRun: vi.fn(),
@@ -18,6 +33,9 @@ const defaultProps = {
 describe("HeaderBar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    document.documentElement.removeAttribute("data-theme");
+    stubMatchMedia(false);
   });
 
   it("renders the header bar with h-12 class", () => {
@@ -45,7 +63,8 @@ describe("HeaderBar", () => {
   });
 
   it("renders theme toggle with aria-pressed=false when theme is light", () => {
-    render(<HeaderBar {...defaultProps} theme="light" />);
+    // localStorage is empty and matchMedia returns false (light) — hook defaults to light
+    render(<HeaderBar {...defaultProps} />);
     const toggle = screen.getByTestId("header-theme-toggle");
     expect(toggle).toBeInTheDocument();
     expect(toggle).toHaveAttribute("aria-pressed", "false");
@@ -59,7 +78,9 @@ describe("HeaderBar", () => {
   });
 
   it("renders theme toggle with aria-pressed=true when theme is dark", () => {
-    render(<HeaderBar {...defaultProps} theme="dark" />);
+    // Seed localStorage so the hook initialises to dark
+    localStorage.setItem("agentic.theme", "dark");
+    render(<HeaderBar {...defaultProps} />);
     const toggle = screen.getByTestId("header-theme-toggle");
     expect(toggle).toHaveAttribute("aria-pressed", "true");
   });
@@ -70,14 +91,6 @@ describe("HeaderBar", () => {
     render(<HeaderBar {...defaultProps} onRunPipeline={onRunPipeline} />);
     await user.click(screen.getByTestId("header-run"));
     expect(onRunPipeline).toHaveBeenCalledTimes(1);
-  });
-
-  it("calls onThemeToggle when theme toggle is clicked", async () => {
-    const user = userEvent.setup();
-    const onThemeToggle = vi.fn();
-    render(<HeaderBar {...defaultProps} onThemeToggle={onThemeToggle} />);
-    await user.click(screen.getByTestId("header-theme-toggle"));
-    expect(onThemeToggle).toHaveBeenCalledTimes(1);
   });
 
   it("calls onOpenSettings when settings icon is clicked", async () => {
@@ -174,6 +187,52 @@ describe("HeaderBar", () => {
     render(<HeaderBar {...defaultProps} runState="running" elapsedMs={null} />);
     expect(screen.queryByTestId("header-running-pill")).toBeNull();
     expect(screen.queryByTestId("header-stop")).toBeNull();
+  });
+
+  // W.1.3 — theme toggle integration tests
+  it("clicking theme toggle from light flips data-theme to dark and aria-pressed to true", () => {
+    render(<HeaderBar {...defaultProps} />);
+    const toggle = screen.getByTestId("header-theme-toggle");
+    // Initially light: no data-theme attribute and aria-pressed=false
+    expect(document.documentElement.getAttribute("data-theme")).toBeNull();
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(toggle);
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("clicking theme toggle from dark back to light removes data-theme and sets aria-pressed to false", () => {
+    render(<HeaderBar {...defaultProps} />);
+    const toggle = screen.getByTestId("header-theme-toggle");
+
+    // First click: light → dark
+    fireEvent.click(toggle);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+
+    // Second click: dark → light
+    fireEvent.click(toggle);
+    expect(document.documentElement.getAttribute("data-theme")).toBeNull();
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("theme persists to localStorage and a fresh instance reads dark from it", () => {
+    const { unmount } = render(<HeaderBar {...defaultProps} />);
+    const toggle = screen.getByTestId("header-theme-toggle");
+
+    // Toggle to dark
+    fireEvent.click(toggle);
+    expect(localStorage.getItem("agentic.theme")).toBe("dark");
+
+    unmount();
+    cleanup();
+
+    // Mount a fresh instance — should read dark from localStorage
+    render(<HeaderBar {...defaultProps} />);
+    const freshToggle = screen.getByTestId("header-theme-toggle");
+    expect(freshToggle).toHaveAttribute("aria-pressed", "true");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
   // W.1.2 — formatMmSs unit tests

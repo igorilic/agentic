@@ -1,4 +1,5 @@
 import type { RunStateOverall } from "../types/pipeline";
+import { useTheme } from "../hooks/useTheme";
 
 export function formatMmSs(ms: number): string {
   if (ms < 0) ms = 0;
@@ -82,8 +83,6 @@ export type HeaderBarProps = {
   ticketSlug: string | null;
   runState: RunStateOverall;
   elapsedMs: number | null;
-  theme: "light" | "dark";
-  onThemeToggle: () => void;
   onOpenSettings: () => void;
   onRunPipeline: () => void;
   onStopRun: () => void;
@@ -95,13 +94,12 @@ export default function HeaderBar({
   ticketSlug,
   runState,
   elapsedMs,
-  theme,
-  onThemeToggle,
   onOpenSettings,
   onRunPipeline,
   onStopRun,
   onRerun,
 }: HeaderBarProps) {
+  const { theme, toggle } = useTheme();
   return (
     <header
       data-testid="header-bar"
@@ -164,7 +162,7 @@ export default function HeaderBar({
         <button
           type="button"
           data-testid="header-theme-toggle"
-          onClick={onThemeToggle}
+          onClick={toggle}
           aria-pressed={theme === "dark"}
           aria-label="Toggle theme"
           className="flex h-7 w-7 items-center justify-center rounded text-fg-muted hover:text-fg"
