@@ -13,6 +13,14 @@ const AGENT_BG_CLASS: Record<string, string> = {
   reviewer: "bg-agent-reviewer",
 };
 
+const AGENT_TINT_RGBA: Record<string, string> = {
+  architect: "rgb(59 130 246 / 0.06)",   // --agent-architect #3b82f6
+  developer: "rgb(16 185 129 / 0.06)",   // --agent-developer #10b981
+  qa: "rgb(139 92 246 / 0.06)",          // --agent-qa #8b5cf6
+  reviewer: "rgb(245 158 11 / 0.06)",    // --agent-reviewer #f59e0b
+};
+const TINT_FALLBACK = "rgb(245 158 11 / 0.06)"; // amber (status-active)
+
 const STATUS_BORDER_CLASS: Record<AgentStatus, string> = {
   done: "border-status-done",
   active: "border-status-active",
@@ -30,13 +38,17 @@ export default function AgentCard({ agent, status, onMenuClick }: AgentCardProps
     <div
       data-testid={`agent-card-${agent}`}
       data-status={status}
+      role="button"
+      tabIndex={0}
+      aria-label={`${agent} — ${status}`}
       className={`relative border ${borderClass} rounded-[10px] bg-bg-surface px-3 py-2 flex flex-col gap-1`}
     >
       {status === "active" && (
         <div
           data-testid={`agent-card-${agent}-tint`}
+          aria-hidden="true"
           className="absolute inset-0 -z-10 rounded-[10px]"
-          style={{ backgroundColor: "rgb(245 158 11 / 0.06)" }}
+          style={{ backgroundColor: AGENT_TINT_RGBA[agent] ?? TINT_FALLBACK }}
         />
       )}
 
@@ -56,6 +68,7 @@ export default function AgentCard({ agent, status, onMenuClick }: AgentCardProps
             {status === "active" && (
               <span
                 data-testid={`agent-card-${agent}-pulse`}
+                aria-hidden="true"
                 className="animate-pulse rounded-full h-1.5 w-1.5 bg-status-active"
               />
             )}

@@ -10,6 +10,7 @@ describe("tailwind.config.js theme.extend", () => {
       "fg",
       "fg-muted",
       "fg-subtle",
+      "border",
       "border-soft",
       "border-strong",
       "status-done",

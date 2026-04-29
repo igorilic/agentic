@@ -10,6 +10,7 @@ export default {
         fg: "var(--fg)",
         "fg-muted": "var(--fg-muted)",
         "fg-subtle": "var(--fg-subtle)",
+        border: "var(--border)",
         "border-soft": "var(--border-soft)",
         "border-strong": "var(--border-strong)",
         "status-done": "var(--status-done)",

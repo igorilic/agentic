@@ -82,6 +82,87 @@ describe("AgentCard", () => {
     });
   });
 
+  describe("F3 — card role, tabIndex, aria-label", () => {
+    const cases: Array<{ agent: string; status: AgentStatus }> = [
+      { agent: "architect", status: "queued" },
+      { agent: "architect", status: "active" },
+      { agent: "developer", status: "queued" },
+      { agent: "developer", status: "active" },
+    ];
+
+    for (const { agent, status } of cases) {
+      it(`card has role="button", tabIndex=0, and aria-label for agent="${agent}" status="${status}"`, () => {
+        render(<AgentCard agent={agent} status={status} />);
+        const card = screen.getByTestId(`agent-card-${agent}`);
+        expect(card).toHaveAttribute("role", "button");
+        // tabIndex=0 on a non-interactive element: check the property directly
+        expect(card.tabIndex).toBe(0);
+        expect(card).toHaveAttribute("aria-label", `${agent} — ${status}`);
+      });
+    }
+  });
+
+  describe("F2 — decorative elements have aria-hidden", () => {
+    it("active tint overlay has aria-hidden=true", () => {
+      render(<AgentCard agent="architect" status="active" />);
+      const tint = screen.getByTestId("agent-card-architect-tint");
+      expect(tint).toHaveAttribute("aria-hidden", "true");
+    });
+
+    it("pulse indicator has aria-hidden=true", () => {
+      render(<AgentCard agent="architect" status="active" />);
+      const pulse = screen.getByTestId("agent-card-architect-pulse");
+      expect(pulse).toHaveAttribute("aria-hidden", "true");
+    });
+  });
+
+  describe("F4 — per-agent tint color in active state", () => {
+    it("architect active tint uses blue rgba (59 130 246)", () => {
+      render(<AgentCard agent="architect" status="active" />);
+      const tint = screen.getByTestId("agent-card-architect-tint") as HTMLElement;
+      const bg = tint.style.backgroundColor;
+      expect(bg).toContain("59");
+      expect(bg).toContain("130");
+      expect(bg).toContain("246");
+    });
+
+    it("developer active tint uses green rgba (16 185 129)", () => {
+      render(<AgentCard agent="developer" status="active" />);
+      const tint = screen.getByTestId("agent-card-developer-tint") as HTMLElement;
+      const bg = tint.style.backgroundColor;
+      expect(bg).toContain("16");
+      expect(bg).toContain("185");
+      expect(bg).toContain("129");
+    });
+
+    it("qa active tint uses purple rgba (139 92 246)", () => {
+      render(<AgentCard agent="qa" status="active" />);
+      const tint = screen.getByTestId("agent-card-qa-tint") as HTMLElement;
+      const bg = tint.style.backgroundColor;
+      expect(bg).toContain("139");
+      expect(bg).toContain("92");
+      expect(bg).toContain("246");
+    });
+
+    it("reviewer active tint uses amber rgba (245 158 11)", () => {
+      render(<AgentCard agent="reviewer" status="active" />);
+      const tint = screen.getByTestId("agent-card-reviewer-tint") as HTMLElement;
+      const bg = tint.style.backgroundColor;
+      expect(bg).toContain("245");
+      expect(bg).toContain("158");
+      expect(bg).toContain("11");
+    });
+
+    it("unknown agent falls back to amber rgba (245 158 11)", () => {
+      render(<AgentCard agent="researcher" status="active" />);
+      const tint = screen.getByTestId("agent-card-researcher-tint") as HTMLElement;
+      const bg = tint.style.backgroundColor;
+      expect(bg).toContain("245");
+      expect(bg).toContain("158");
+      expect(bg).toContain("11");
+    });
+  });
+
   describe("avatar tile per-agent accent bg class", () => {
     const agentColors: Array<[string, string]> = [
       ["architect", "bg-agent-architect"],
