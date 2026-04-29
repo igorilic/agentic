@@ -137,10 +137,10 @@ describe("ChatComposer", () => {
       const textarea = screen.getByTestId("chat-composer-textarea");
 
       await userEvent.type(textarea, "hi");
-      // Simulate browser newline insertion: keydown then change with updated value
+      // Simulate browser newline insertion: keydown does not send,
+      // then change event reflects the newline the browser would insert.
       fireEvent.keyDown(textarea, { key: "Enter" });
       fireEvent.change(textarea, { target: { value: "hi\nworld" } });
-      await userEvent.type(textarea, "world", { skipClick: true });
 
       expect(textarea).toHaveValue("hi\nworld");
       expect(onSend).not.toHaveBeenCalled();
