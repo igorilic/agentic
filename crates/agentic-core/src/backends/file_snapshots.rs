@@ -75,6 +75,8 @@ pub struct FinalizeReport {
 /// computes diffs and emits [`Event::FileChange`] events.
 pub struct FileSnapshotter {
     before: HashMap<PathBuf, FileState>,
+    /// When `Some`, before-state blobs are persisted to `<snapshot_dir>/<hash>`.
+    snapshot_dir: Option<PathBuf>,
 }
 
 impl Default for FileSnapshotter {
@@ -85,10 +87,23 @@ impl Default for FileSnapshotter {
 
 impl FileSnapshotter {
     /// Create a new snapshotter. Paths are tracked absolutely and are not
-    /// restricted to any workspace root.
+    /// restricted to any workspace root. Before-states are kept in memory
+    /// only — nothing is persisted to disk.
     pub fn new() -> Self {
         Self {
             before: HashMap::new(),
+            snapshot_dir: None,
+        }
+    }
+
+    /// Create a snapshotter that persists before-state blobs to
+    /// `snapshot_dir/<hash>`. The directory is created on first write.
+    /// Callers that need `vscode.diff` support (Phase 3) should use this
+    /// constructor so the extension can fetch the before-content later.
+    pub fn with_store(snapshot_dir: PathBuf) -> Self {
+        Self {
+            before: HashMap::new(),
+            snapshot_dir: Some(snapshot_dir),
         }
     }
 
@@ -99,13 +114,37 @@ impl FileSnapshotter {
     /// session, this call is a no-op. The first-captured state is preserved so
     /// that repeated `ToolUseStart` events for the same file do not overwrite
     /// the genuine pre-edit snapshot with an intermediate state.
+    ///
+    /// When a `snapshot_dir` is configured via [`Self::with_store`], the raw
+    /// bytes are persisted to `<snapshot_dir>/<hash>` (idempotent — skipped if
+    /// the file already exists). [`FileState::Skipped`] entries (too-large /
+    /// binary) are not persisted.
     pub fn capture(&mut self, path: &Path) -> std::io::Result<()> {
         if self.before.contains_key(path) {
             return Ok(());
         }
         let state = read_file_state(path)?;
+
+        // Persist blob when a store dir is configured and state has bytes.
+        if let Some(ref snap_dir) = self.snapshot_dir {
+            persist_snapshot(snap_dir, &state)?;
+        }
+
         self.before.insert(path.to_path_buf(), state);
         Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Public utility
+    // ------------------------------------------------------------------
+
+    /// Read the raw bytes of a previously-persisted snapshot blob.
+    ///
+    /// `snapshot_dir` must be the same directory passed to
+    /// [`FileSnapshotter::with_store`]. Returns `Err(NotFound)` when no
+    /// blob exists for the given `hash`.
+    pub fn snapshot_dir(&self) -> Option<&Path> {
+        self.snapshot_dir.as_deref()
     }
 
     /// Compute after-states, emit [`Event::FileChange`] events, and write the
@@ -281,4 +320,40 @@ fn build_unified_diff(path: &str, before: &str, after: &str) -> String {
         .context_radius(3)
         .header(&before_label, &after_label)
         .to_string()
+}
+
+/// Persist a before-state blob to `<snapshot_dir>/<hash>`.
+///
+/// Skips `FileState::Absent` (nothing to write) and
+/// `FileState::Skipped` (no text bytes; binary/large files are not diffable
+/// anyway so the extension has no use for the raw bytes).
+///
+/// Idempotent: if `<snapshot_dir>/<hash>` already exists, this function
+/// returns `Ok(())` without re-writing.
+fn persist_snapshot(snapshot_dir: &Path, state: &FileState) -> std::io::Result<()> {
+    let (hash, bytes): (&str, &[u8]) = match state {
+        FileState::Present {
+            hash,
+            text: Some(text),
+        } => (hash.as_str(), text.as_bytes()),
+        // Absent or Skipped — nothing to persist.
+        _ => return Ok(()),
+    };
+
+    fs::create_dir_all(snapshot_dir)?;
+    let dest = snapshot_dir.join(hash);
+    if dest.exists() {
+        return Ok(());
+    }
+    fs::write(&dest, bytes)
+}
+
+/// Read the raw bytes of a previously-persisted snapshot blob.
+///
+/// `snapshot_dir` is the directory passed to
+/// [`FileSnapshotter::with_store`]. Returns an `Err` with
+/// `ErrorKind::NotFound` when no blob exists for the given `hash`.
+pub fn read_snapshot(snapshot_dir: &Path, hash: &str) -> std::io::Result<Vec<u8>> {
+    let path = snapshot_dir.join(hash);
+    fs::read(&path)
 }

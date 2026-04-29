@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use agentic_core::backends::file_snapshots::{FileSnapshotter, SkipReason};
+use agentic_core::backends::file_snapshots::{FileSnapshotter, SkipReason, read_snapshot};
 use agentic_core::{Event, EventEnvelope};
 use tempfile::TempDir;
 use tokio::sync::broadcast;
@@ -506,5 +506,140 @@ fn modify_diff_contains_unified_diff_markers() {
     assert!(
         diff_content.contains("@@"),
         "diff must contain @@ hunk header: {diff_content}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 Step 14.5: snapshot persistence
+// ---------------------------------------------------------------------------
+
+/// with_store_persists_before_snapshots — capture a file in a tempdir,
+/// finalize, read_snapshot returns the original bytes.
+#[test]
+fn with_store_persists_before_snapshots() {
+    let dir = TempDir::new().unwrap();
+    let snapshot_dir = dir.path().join("snapshots");
+    let file_path = dir.path().join("source.txt");
+    let original_bytes = b"hello snapshot world";
+
+    fs::write(&file_path, original_bytes).unwrap();
+
+    let mut snapshotter = FileSnapshotter::with_store(snapshot_dir.clone());
+    snapshotter.capture(&file_path).unwrap();
+
+    // Record the before_hash from the FileChange event
+    let diff_path = dir.path().join("changes.diff");
+    let (sink, mut rx) = make_sink();
+
+    // Mutate so a FileChange event is emitted
+    fs::write(&file_path, b"modified snapshot world").unwrap();
+
+    snapshotter
+        .finalize(&diff_path, &sink, "run-snap", Some("step-snap"))
+        .unwrap();
+
+    let events = collect_file_change_events(&mut rx);
+    assert_eq!(events.len(), 1);
+    let (_, before_hash, _) = &events[0];
+
+    // The snapshot blob must be readable from the snapshot_dir
+    let bytes = read_snapshot(&snapshot_dir, before_hash)
+        .expect("read_snapshot should return the before bytes");
+    assert_eq!(bytes, original_bytes);
+}
+
+/// with_store_idempotent — capture the same path twice, snapshot file
+/// written once, content matches.
+#[test]
+fn with_store_idempotent() {
+    let dir = TempDir::new().unwrap();
+    let snapshot_dir = dir.path().join("snapshots");
+    let file_path = dir.path().join("idem.txt");
+    let original_bytes = b"idempotent content";
+
+    fs::write(&file_path, original_bytes).unwrap();
+
+    let mut snapshotter = FileSnapshotter::with_store(snapshot_dir.clone());
+    // First capture
+    snapshotter.capture(&file_path).unwrap();
+    // Second capture of same path is a no-op (per existing semantics),
+    // but the snapshot file must already exist from the first capture.
+    snapshotter.capture(&file_path).unwrap();
+
+    // Mutate so finalize emits a change
+    fs::write(&file_path, b"different now").unwrap();
+
+    let diff_path = dir.path().join("changes.diff");
+    let (sink, mut rx) = make_sink();
+    snapshotter
+        .finalize(&diff_path, &sink, "run-idem", Some("step-idem"))
+        .unwrap();
+
+    let events = collect_file_change_events(&mut rx);
+    assert_eq!(events.len(), 1);
+    let (_, before_hash, _) = &events[0];
+
+    // Snapshot dir must contain exactly one file
+    let entries: Vec<_> = fs::read_dir(&snapshot_dir)
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(entries.len(), 1, "exactly one snapshot file should exist");
+
+    // Content must match original
+    let bytes = read_snapshot(&snapshot_dir, before_hash).unwrap();
+    assert_eq!(bytes, original_bytes);
+}
+
+/// read_snapshot_missing_hash_errors — read_snapshot for a nonexistent
+/// hash returns NotFound.
+#[test]
+fn read_snapshot_missing_hash_errors() {
+    let dir = TempDir::new().unwrap();
+    let snapshot_dir = dir.path().join("snapshots");
+
+    let err = read_snapshot(&snapshot_dir, "deadbeefdeadbeef")
+        .expect_err("should error for missing hash");
+    assert_eq!(
+        err.kind(),
+        std::io::ErrorKind::NotFound,
+        "expected NotFound, got: {err}"
+    );
+}
+
+/// default_constructor_does_not_persist — FileSnapshotter::new() (no
+/// store) captures + finalizes without writing anything to disk;
+/// read_snapshot of the captured hash returns NotFound.
+#[test]
+fn default_constructor_does_not_persist() {
+    let dir = TempDir::new().unwrap();
+    let snapshot_dir = dir.path().join("snapshots");
+    let file_path = dir.path().join("no-store.txt");
+    let original_bytes = b"should not be stored";
+
+    fs::write(&file_path, original_bytes).unwrap();
+
+    let mut snapshotter = FileSnapshotter::new(); // no store
+    snapshotter.capture(&file_path).unwrap();
+
+    fs::write(&file_path, b"changed now").unwrap();
+
+    let diff_path = dir.path().join("changes.diff");
+    let (sink, mut rx) = make_sink();
+    snapshotter
+        .finalize(&diff_path, &sink, "run-nostored", Some("step-ns"))
+        .unwrap();
+
+    let events = collect_file_change_events(&mut rx);
+    assert_eq!(events.len(), 1);
+    let (_, before_hash, _) = &events[0];
+
+    // snapshot_dir was never created; read returns NotFound
+    let err = read_snapshot(&snapshot_dir, before_hash)
+        .expect_err("no-store snapshotter must not write blobs");
+    assert_eq!(
+        err.kind(),
+        std::io::ErrorKind::NotFound,
+        "expected NotFound, got: {err}"
     );
 }
