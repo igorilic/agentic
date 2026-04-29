@@ -163,6 +163,19 @@ describe("HeaderBar", () => {
     expect(screen.queryByTestId("header-stop")).toBeNull();
   });
 
+  // S1 — Re-run button absent when running (symmetric negative for completed-direction negatives)
+  it("does not render Re-run button when runState is running", () => {
+    render(<HeaderBar {...defaultProps} runState="running" elapsedMs={5000} />);
+    expect(screen.queryByTestId("header-rerun")).toBeNull();
+  });
+
+  // S2 — nothing renders in run-state slot when running but elapsedMs is null (pre-first-tick)
+  it("does not render running pill or Stop button when runState is running and elapsedMs is null", () => {
+    render(<HeaderBar {...defaultProps} runState="running" elapsedMs={null} />);
+    expect(screen.queryByTestId("header-running-pill")).toBeNull();
+    expect(screen.queryByTestId("header-stop")).toBeNull();
+  });
+
   // W.1.2 — formatMmSs unit tests
   describe("formatMmSs", () => {
     it("formats 0ms as 00:00", () => {
