@@ -371,7 +371,7 @@ describe("PipelineBar", () => {
       expect(screen.queryByTestId("agent-picker")).not.toBeInTheDocument();
     });
 
-    it("click pipeline-add-agent then pick reviewer fires onInsert(4, 'researcher')", async () => {
+    it("click pipeline-add-agent then pick researcher fires onInsert(4, 'researcher')", async () => {
       const onInsert = vi.fn();
       render(
         <PipelineBar

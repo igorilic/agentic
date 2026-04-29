@@ -10,7 +10,7 @@ export type PipelineBarProps = {
   activeIndex: number;
   // Reserved for downstream steps; accepted but not yet consumed:
   onReorder?: (from: number, to: number) => void;
-  onInsert?: (atIndex: number, agentId?: string) => void;
+  onInsert?: (atIndex: number, agentId: string) => void;
   onRemove?: (atIndex: number) => void;
   onSkip?: (atIndex: number) => void;
 };
