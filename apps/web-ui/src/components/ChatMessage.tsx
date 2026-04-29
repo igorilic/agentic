@@ -11,14 +11,15 @@ const AGENT_NAME_CLASS: Record<string, string> = {
   reviewer: "text-agent-reviewer",
 };
 
-// Mirrors AgentCard.tsx — second use site; Phase 13 can DRY when a third appears.
+// Spec §3.4 line 219 — agent bubble background: rgba(<accent>, 0.04).
+// Note: AgentCard uses 0.06 per §3.2 (active-card overlay) — different surface.
 const AGENT_TINT_RGBA: Record<string, string> = {
-  architect: "rgb(59 130 246 / 0.06)",  // --agent-architect #3b82f6
-  developer: "rgb(16 185 129 / 0.06)",  // --agent-developer #10b981
-  qa: "rgb(139 92 246 / 0.06)",         // --agent-qa #8b5cf6
-  reviewer: "rgb(245 158 11 / 0.06)",   // --agent-reviewer #f59e0b
+  architect: "rgb(59 130 246 / 0.04)",  // --agent-architect #3b82f6
+  developer: "rgb(16 185 129 / 0.04)",  // --agent-developer #10b981
+  qa: "rgb(139 92 246 / 0.04)",         // --agent-qa #8b5cf6
+  reviewer: "rgb(245 158 11 / 0.04)",   // --agent-reviewer #f59e0b
 };
-const TINT_FALLBACK = "rgb(245 158 11 / 0.06)"; // amber fallback for unknown agents
+const TINT_FALLBACK = "rgb(245 158 11 / 0.04)"; // amber fallback for unknown agents
 
 export default function ChatMessage(props: ChatMessageProps) {
   if (props.kind === "system") {
