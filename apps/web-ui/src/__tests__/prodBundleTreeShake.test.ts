@@ -10,7 +10,7 @@
  * with SKIP_BUILD_TEST=1. Always runs in CI (SKIP_BUILD_TEST is not set).
  *
  * Usage:
- *   SKIP_BUILD_TEST=1 pnpm test   # skip this test
+ *   SKIP_BUILD_TEST=1 pnpm test   # skip this test (reported as "skipped")
  *   pnpm test                      # run all tests including this one
  */
 
@@ -26,23 +26,18 @@ const DIST_ASSETS = join(UI_ROOT, "dist", "assets");
 // means the StartRunFormInner chunk was not tree-shaken.
 const FORM_STRINGS = ["start-run-form", "script-path-input"];
 
-describe("prod bundle tree-shake", () => {
+// describe.skipIf marks the whole suite as "skipped" in the Vitest report
+// when SKIP_BUILD_TEST=1, instead of silently passing via an early return.
+describe.skipIf(SKIP)("prod bundle tree-shake", () => {
   beforeAll(() => {
-    if (SKIP) return;
     // Build the production bundle. Throws if the build fails.
     execSync("pnpm build", {
       cwd: UI_ROOT,
       stdio: "pipe",
-      env: { ...process.env, NODE_ENV: "production" },
     });
   }, 120_000); // 2-minute timeout for the build step
 
   it("does not ship StartRunFormInner strings in the production bundle", () => {
-    if (SKIP) {
-      console.log("Skipped: SKIP_BUILD_TEST=1");
-      return;
-    }
-
     const jsFiles = readdirSync(DIST_ASSETS).filter((f) => f.endsWith(".js"));
     expect(jsFiles.length).toBeGreaterThan(0);
 
