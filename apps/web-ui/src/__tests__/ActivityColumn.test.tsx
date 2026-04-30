@@ -94,7 +94,7 @@ const findingEvents: EventEnvelope[] = [
     type: "Finding",
     t: 1_700_000_010_000,
     stepId: "reviewer",
-    data: { message: "Reviewer flagged: lock contention under burst" },
+    data: { message: "Reviewer flagged: lock contention under burst", severity: "error" },
   }),
 ];
 
@@ -212,6 +212,87 @@ describe("ActivityColumn", () => {
     render(<ControlledActivityColumn events={findingEvents} />);
     fireEvent.click(screen.getByTestId("activity-tab-error"));
     expect(screen.getAllByTestId("event-row")).toHaveLength(1);
+  });
+
+  it("Finding with severity='warning' renders as log-row-info, not error", () => {
+    const warningFinding = [
+      envelope({
+        id: "fw1",
+        type: "Finding",
+        t: 1_700_000_020_000,
+        stepId: "reviewer",
+        data: { message: "No test for all-punctuation input", severity: "warning" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={warningFinding} />);
+    expect(screen.getByTestId("log-row-info")).toBeInTheDocument();
+    expect(screen.queryByTestId("log-row-error")).toBeNull();
+    expect(screen.queryByTestId("log-row-level-chip")).toBeNull();
+  });
+
+  it("Finding with severity='info' renders as log-row-info, not error", () => {
+    const infoFinding = [
+      envelope({
+        id: "fi1",
+        type: "Finding",
+        t: 1_700_000_021_000,
+        stepId: "reviewer",
+        data: { message: "Observation: cache hit rate is high", severity: "info" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={infoFinding} />);
+    expect(screen.getByTestId("log-row-info")).toBeInTheDocument();
+    expect(screen.queryByTestId("log-row-error")).toBeNull();
+    expect(screen.queryByTestId("log-row-level-chip")).toBeNull();
+  });
+
+  it("Finding with no severity field defaults to info (not error)", () => {
+    const noSeverityFinding = [
+      envelope({
+        id: "fns1",
+        type: "Finding",
+        t: 1_700_000_022_000,
+        stepId: "reviewer",
+        data: { message: "Finding without explicit severity" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={noSeverityFinding} />);
+    expect(screen.getByTestId("log-row-info")).toBeInTheDocument();
+    expect(screen.queryByTestId("log-row-error")).toBeNull();
+    expect(screen.queryByTestId("log-row-level-chip")).toBeNull();
+  });
+
+  it("Finding with severity='ERROR' (uppercase) is treated as error — case-insensitive", () => {
+    const uppercaseErrorFinding = [
+      envelope({
+        id: "fue1",
+        type: "Finding",
+        t: 1_700_000_023_000,
+        stepId: "reviewer",
+        data: { message: "Critical issue found", severity: "ERROR" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={uppercaseErrorFinding} />);
+    expect(screen.getByTestId("log-row-error")).toBeInTheDocument();
+    expect(screen.getByTestId("log-row-level-chip")).toHaveClass("bg-red-500");
+  });
+
+  it("Finding with severity='warning' does NOT appear in Errors tab, only in All", () => {
+    const warningFinding = [
+      envelope({
+        id: "fw2",
+        type: "Finding",
+        t: 1_700_000_024_000,
+        stepId: "reviewer",
+        data: { message: "Warning-level finding", severity: "warning" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={warningFinding} />);
+    // All tab shows it
+    expect(screen.getAllByTestId("event-row")).toHaveLength(1);
+    // Errors tab does NOT show it
+    fireEvent.click(screen.getByTestId("activity-tab-error"));
+    expect(screen.queryAllByTestId("event-row")).toHaveLength(0);
   });
 });
 

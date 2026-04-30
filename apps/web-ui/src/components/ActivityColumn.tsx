@@ -87,15 +87,25 @@ function classify(
   }
 
   if (type === "Finding") {
-    const data = (env.event.data ?? {}) as { message?: unknown; title?: unknown; severity?: unknown };
+    const data = (env.event.data ?? {}) as {
+      message?: unknown;
+      title?: unknown;
+      severity?: unknown;
+    };
     const message =
       typeof data.message === "string"
         ? data.message
         : typeof data.title === "string"
           ? data.title
           : "Finding";
+    // Only severity "error" (case-insensitive) gets the red chip / Errors-tab
+    // visibility. Warning / info / unknown severities render as plain info rows
+    // in All — they are observations, not failures.
+    const severity =
+      typeof data.severity === "string" ? data.severity.toLowerCase() : "info";
+    const kind: "error" | "info" = severity === "error" ? "error" : "info";
     return {
-      kind: "error",
+      kind,
       id: env.event_id,
       t,
       agent,
