@@ -51,6 +51,16 @@ const mixedEvents: EventEnvelope[] = [
   }),
 ];
 
+const findingEvents: EventEnvelope[] = [
+  envelope({
+    id: "f1",
+    type: "Finding",
+    t: 1_700_000_010_000,
+    stepId: "reviewer",
+    data: { message: "Reviewer flagged: lock contention under burst" },
+  }),
+];
+
 describe("ActivityColumn", () => {
   it("renders outer data-testid='activity-column'", () => {
     render(<ControlledActivityColumn events={[]} />);
@@ -147,5 +157,23 @@ describe("ActivityColumn", () => {
     const agentTexts = agentLabels.map((el) => el.textContent);
     expect(agentTexts).toContain("system");
     expect(agentTexts).toContain("developer");
+  });
+
+  it("renders zero event rows when perm tab is selected", () => {
+    render(<ControlledActivityColumn events={mixedEvents} />);
+    fireEvent.click(screen.getByTestId("activity-tab-perm"));
+    expect(screen.queryAllByTestId("event-row")).toHaveLength(0);
+  });
+
+  it("Finding event renders in All tab with log-row-error and red chip", () => {
+    render(<ControlledActivityColumn events={findingEvents} />);
+    expect(screen.getByTestId("log-row-error")).toBeInTheDocument();
+    expect(screen.getByTestId("log-row-level-chip")).toHaveClass("bg-red-500");
+  });
+
+  it("Finding event renders in Errors tab", () => {
+    render(<ControlledActivityColumn events={findingEvents} />);
+    fireEvent.click(screen.getByTestId("activity-tab-error"));
+    expect(screen.getAllByTestId("event-row")).toHaveLength(1);
   });
 });

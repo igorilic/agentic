@@ -64,6 +64,23 @@ function classify(env: EventEnvelope): ActivityRow {
     };
   }
 
+  if (type === "Finding") {
+    const data = (env.event.data ?? {}) as { message?: unknown; title?: unknown; severity?: unknown };
+    const message =
+      typeof data.message === "string"
+        ? data.message
+        : typeof data.title === "string"
+          ? data.title
+          : "Finding";
+    return {
+      kind: "error",
+      id: env.event_id,
+      t,
+      agent,
+      message,
+    };
+  }
+
   if (ERROR_TYPE_RE.test(type)) {
     const data = (env.event.data ?? {}) as { message?: unknown };
     return {
