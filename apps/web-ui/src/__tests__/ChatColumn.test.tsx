@@ -263,6 +263,38 @@ describe("ChatColumn", () => {
 
       expect(screen.getByTestId("spec-dialog")).toBeInTheDocument();
     });
+
+    it("calls onTicketRunStarted with the run_id returned from IPC", async () => {
+      invokeMock.mockResolvedValueOnce("run-xyz");
+      const onTicketRunStarted = vi.fn();
+      const user = userEvent.setup();
+
+      render(<ChatColumn {...makeProps({ onTicketRunStarted })} />);
+
+      await user.click(screen.getByTestId("chat-composer-new-spec"));
+      await user.type(screen.getByTestId("spec-dialog-title-input"), "My spec");
+      await user.click(screen.getByTestId("spec-dialog-submit"));
+
+      await waitFor(() => {
+        expect(onTicketRunStarted).toHaveBeenCalledWith("run-xyz");
+      });
+    });
+
+    it("does not throw when onTicketRunStarted is not provided", async () => {
+      invokeMock.mockResolvedValueOnce("run-xyz");
+      const user = userEvent.setup();
+
+      // No onTicketRunStarted prop — existing behaviour must still work
+      render(<ChatColumn {...makeProps()} />);
+
+      await user.click(screen.getByTestId("chat-composer-new-spec"));
+      await user.type(screen.getByTestId("spec-dialog-title-input"), "My spec");
+      await user.click(screen.getByTestId("spec-dialog-submit"));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("spec-dialog")).toBeNull();
+      });
+    });
   });
 
   describe("error display", () => {

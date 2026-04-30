@@ -173,4 +173,27 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
     // Title input retains value
     expect(screen.getByTestId("spec-dialog-title-input")).toHaveValue("New spec");
   });
+
+  it("calls onTicketRunStarted with the run_id returned from IPC", async () => {
+    invokeMock.mockResolvedValueOnce("run-abc");
+    const onTicketRunStarted = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <IssueColumn
+        ticket={ticket}
+        runState="completed"
+        actionItems={actionItems}
+        onTicketRunStarted={onTicketRunStarted}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("issue-create-spec"));
+    await user.type(screen.getByTestId("spec-dialog-title-input"), "New spec");
+    await user.click(screen.getByTestId("spec-dialog-submit"));
+
+    await waitFor(() => {
+      expect(onTicketRunStarted).toHaveBeenCalledWith("run-abc");
+    });
+  });
 });
