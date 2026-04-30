@@ -406,6 +406,35 @@ describe("AgentCard", () => {
     });
   });
 
+  describe("W.9.6 — StatusDot used for status display", () => {
+    it("renders status-dot testid inside AgentCard with status active", () => {
+      render(<AgentCard agent="architect" status="active" index={0} />);
+      const dot = screen.getByTestId("status-dot");
+      expect(dot).toBeInTheDocument();
+      expect(dot.textContent).toMatch(/Running/);
+    });
+
+    it("renders status-dot with label 'Queued' for status queued", () => {
+      render(<AgentCard agent="architect" status="queued" index={0} />);
+      const dot = screen.getByTestId("status-dot");
+      expect(dot.textContent).toMatch(/Queued/);
+    });
+
+    it("renders status-dot with label 'Done' for status done", () => {
+      render(<AgentCard agent="architect" status="done" index={0} />);
+      const dot = screen.getByTestId("status-dot");
+      expect(dot.textContent).toMatch(/Done/);
+    });
+
+    it("bare uppercase status text is NOT rendered (old span removed)", () => {
+      render(<AgentCard agent="architect" status="active" index={0} />);
+      // The old label was: <span class="text-[10px] uppercase ...">active</span>
+      // It should NOT exist any more
+      const spans = document.querySelectorAll('span.uppercase');
+      expect(spans.length).toBe(0);
+    });
+  });
+
   describe("W.9.2 — tdd-developer alias renders code glyph", () => {
     it("renders agent-icon-tdd-developer SVG inside avatar", () => {
       render(<AgentCard agent="tdd-developer" status="queued" index={0} />);
