@@ -1,4 +1,7 @@
+import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { ActionItem, IssueTicket, RunStateOverall } from "../types/pipeline";
+import SpecDialog from "./SpecDialog";
 
 export type IssueColumnProps = {
   ticket: IssueTicket;
@@ -16,6 +19,21 @@ export default function IssueColumn({ ticket, runState, actionItems }: IssueColu
   const acceptanceChecked = runState === "completed";
   const completedItems: ActionItem[] =
     runState === "completed" ? (actionItems ?? []) : [];
+
+  const [specDialogOpen, setSpecDialogOpen] = useState(false);
+
+  const handleCreateSpecSubmit = async (title: string, _body: string) => {
+    try {
+      await invoke("start_ticket_run", {
+        ticket: title,
+        backend: "claude-code",
+        model: null,
+      });
+      setSpecDialogOpen(false);
+    } catch {
+      // Keep dialog open on failure so the user can retry; errors surface at the App level.
+    }
+  };
 
   return (
     <div
@@ -120,12 +138,18 @@ export default function IssueColumn({ ticket, runState, actionItems }: IssueColu
           <button
             type="button"
             data-testid="issue-create-spec"
+            onClick={() => setSpecDialogOpen(true)}
             className="mt-2 self-start rounded-md bg-[#18181b] px-3 py-1.5 text-xs font-semibold text-white"
           >
             Create spec
           </button>
         </section>
       )}
+      <SpecDialog
+        open={specDialogOpen}
+        onClose={() => setSpecDialogOpen(false)}
+        onSubmit={handleCreateSpecSubmit}
+      />
     </div>
   );
 }
