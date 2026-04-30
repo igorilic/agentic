@@ -726,7 +726,7 @@ blocked.
 
 ## Phase 6 — Web Issue column
 
-### Step W.6.1: `IssueColumn` shell — id, title, labels, description
+### [x] Step W.6.1: `IssueColumn` shell — id, title, labels, description
 
 **Goal**: New component renders the static issue header strip. No action items yet.
 
@@ -793,7 +793,7 @@ blocked.
 
 ---
 
-### Step W.6.4: IssueColumn — derive action items from findings
+### [x] Step W.6.4: IssueColumn — derive action items from findings
 
 **Goal**: Adapter that maps `Finding[]` → `ActionItem[]` so the existing findings stream populates the new section. Keeps `FindingsTable` triage logic alive (W.7.x decides what to do with the standalone table).
 
@@ -1732,10 +1732,10 @@ Phase 5 — Web Activity column
 
 Phase 6 — Web Issue column
 - [ ] W.6.1 IssueColumn shell
-- [ ] W.6.2 Acceptance completed state
-- [ ] W.6.3 Action items section
-- [ ] W.6.4 findingsToActionItems adapter
-- [ ] W.6.5 SpecDialog modal
+- [x] W.6.2 Acceptance completed state
+- [x] W.6.3 Action items section
+- [x] W.6.4 findingsToActionItems adapter
+- [x] W.6.5 SpecDialog modal
 - [ ] W.6.6 Create spec → start_ticket_run
 
 Phase 7 — Web permission card
