@@ -12,7 +12,7 @@ export type ChatColumnProps = {
   activeAgent: string | null;
   onSend: (text: string) => void;
   error?: string | null;
-  onTicketRunStarted?: (info: { runId: string; ticketLabel: string }) => void;
+  onTicketRunStarted?: (info: { runId: string; ticketLabel: string; description?: string }) => void;
 };
 
 /**
@@ -42,10 +42,13 @@ export default function ChatColumn({
 }: ChatColumnProps) {
   const [specOpen, setSpecOpen] = useState(false);
 
-  const handleSpecSubmit = async (title: string, _body: string) => {
+  const handleSpecSubmit = async (title: string, body: string) => {
     try {
       const runId = await createSpec(title);
-      if (runId !== undefined) onTicketRunStarted?.({ runId, ticketLabel: title });
+      if (runId !== undefined) {
+        const description = body.trim().length > 0 ? body.trim() : undefined;
+        onTicketRunStarted?.({ runId, ticketLabel: title, description });
+      }
       setSpecOpen(false);
     } catch {
       // Keep dialog open on failure so the user can retry.

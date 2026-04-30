@@ -29,6 +29,7 @@ const PLACEHOLDER_TICKET: IssueTicket = {
 export default function App() {
   const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
   const [activeTicketLabel, setActiveTicketLabel] = useState<string | undefined>(undefined);
+  const [activeTicketDescription, setActiveTicketDescription] = useState<string | undefined>(undefined);
   const [findingsRunId, setFindingsRunId] = useState<string | undefined>(undefined);
   const [findingsRefetchKey, setFindingsRefetchKey] = useState(0);
 
@@ -72,9 +73,10 @@ export default function App() {
     await invoke("cancel_run", { runId: activeRunId });
   }, [activeRunId]);
 
-  const handleTicketRunStarted = useCallback((info: { runId: string; ticketLabel: string }) => {
+  const handleTicketRunStarted = useCallback((info: { runId: string; ticketLabel: string; description?: string }) => {
     setActiveRunId(info.runId);
     setActiveTicketLabel(info.ticketLabel);
+    setActiveTicketDescription(info.description);
   }, []);
 
   const handleRunPipeline = useCallback(() => {
@@ -89,6 +91,7 @@ export default function App() {
         if (typeof result === "string") {
           setActiveRunId(result);
           setActiveTicketLabel("Untitled run");
+          setActiveTicketDescription(undefined);
         }
       })
       .catch(() => {
@@ -99,14 +102,21 @@ export default function App() {
   const dense = isTauriDense();
   const ticket: IssueTicket = useMemo(() => {
     if (activeTicketLabel === undefined) return PLACEHOLDER_TICKET;
+    const body =
+      activeTicketDescription !== undefined
+        ? activeTicketDescription
+            .split(/\n\n+/)
+            .map((p) => p.trim())
+            .filter((p) => p.length > 0)
+        : ["No description available — ticket source integration ships in a future phase."];
     return {
       id: "AGT-DEV",
       title: activeTicketLabel,
       labels: [],
-      body: ["No description available — ticket source integration ships in a future phase."],
+      body,
       acceptance: [],
     };
-  }, [activeTicketLabel]);
+  }, [activeTicketLabel, activeTicketDescription]);
 
   return (
     <>

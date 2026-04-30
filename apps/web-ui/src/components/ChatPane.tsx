@@ -5,6 +5,7 @@ import { useMentionEvents } from "../hooks/useMentionEvents";
 import { parseSlashCommand, formatSlashParseError } from "../slash/parser";
 import { dispatchSlashCommand, type SlashServices } from "../slash/dispatcher";
 import { parseMention, formatMentionParseError } from "../mention/parser";
+import { splitTicketText } from "../utils/splitTicketText";
 import ChatColumn from "./ChatColumn";
 
 type MentionResult = {
@@ -15,7 +16,7 @@ type MentionResult = {
 
 export type ChatPaneProps = {
   /// Called when `/plan <ticket>` or SpecDialog successfully kicks off a real ticket run.
-  onTicketRunStarted?: (info: { runId: string; ticketLabel: string }) => void;
+  onTicketRunStarted?: (info: { runId: string; ticketLabel: string; description?: string }) => void;
 };
 
 export default function ChatPane({
@@ -40,7 +41,8 @@ export default function ChatPane({
           backend: backend ?? "claude-code",
           model: null,
         })) as string;
-        onTicketRunStarted?.({ runId, ticketLabel: ticket });
+        const { ticketLabel, description } = splitTicketText(ticket);
+        onTicketRunStarted?.({ runId, ticketLabel, description });
         return runId;
       },
       status: async (_runId) => {
