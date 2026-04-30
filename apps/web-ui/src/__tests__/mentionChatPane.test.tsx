@@ -1,5 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import ChatPane from "../components/ChatPane";
 
 const invokeMock = vi.fn();
@@ -27,11 +26,15 @@ describe("ChatPane @mention routing", () => {
       agent: "architect",
       dispatched: false,
     });
-    const user = userEvent.setup();
     render(<ChatPane />);
 
-    await user.type(screen.getByTestId("chat-input"), "@architect hello");
-    await user.click(screen.getByTestId("chat-send"));
+    // Use fireEvent to set the textarea value directly (avoids mention-popover
+    // keyboard interception that occurs when userEvent types character-by-character).
+    const textarea = screen.getByTestId("chat-input");
+    fireEvent.change(textarea, { target: { value: "@architect hello" } });
+
+    // Trigger send via Cmd+Enter
+    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("mention_agent", {
@@ -42,11 +45,12 @@ describe("ChatPane @mention routing", () => {
   });
 
   it("submitting @bad-input (no body) shows a parse error system message", async () => {
-    const user = userEvent.setup();
     render(<ChatPane />);
 
-    await user.type(screen.getByTestId("chat-input"), "@bad-input");
-    await user.click(screen.getByTestId("chat-send"));
+    const textarea = screen.getByTestId("chat-input");
+    // Use fireEvent to bypass the mention popover keyboard handling
+    fireEvent.change(textarea, { target: { value: "@bad-input" } });
+    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
 
     await waitFor(() => {
       expect(screen.getByTestId("chat-message-system")).toBeInTheDocument();
@@ -55,7 +59,7 @@ describe("ChatPane @mention routing", () => {
     expect(systemMsg.textContent).toMatch(/bad-input/i);
   });
 
-  it("renders mention envelopes received on agentic://mention-event as chat messages", async () => {
+  it("renders mention envelopes received on agentic://mention-event as agent-variant chat messages", async () => {
     render(<ChatPane />);
 
     await waitFor(() => {
@@ -79,9 +83,12 @@ describe("ChatPane @mention routing", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("chat-message-mention")).toBeInTheDocument();
+      // Mention envelopes are now rendered via ChatColumn as agent-variant
+      // ChatMessage components; the old chat-message-mention testid is replaced
+      // by chat-message-agent (the agent-variant's testid from ChatMessage.tsx).
+      expect(screen.getByTestId("chat-message-agent")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("chat-message-mention")).toHaveTextContent(
+    expect(screen.getByTestId("chat-message-agent")).toHaveTextContent(
       "[STUB] @architect received: hello",
     );
   });

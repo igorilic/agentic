@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ChatPane from "../components/ChatPane";
 
@@ -73,11 +73,12 @@ describe("ChatPane", () => {
 
     await waitFor(() => {
       expect(screen.getAllByTestId("chat-message-user")).toHaveLength(1);
-      expect(screen.getAllByTestId("chat-message-assistant")).toHaveLength(1);
+      // assistant role messages render as chat-message-agent in the new ChatColumn
+      expect(screen.getAllByTestId("chat-message-agent")).toHaveLength(1);
     });
 
     expect(screen.getByTestId("chat-message-user")).toHaveTextContent("hello");
-    expect(screen.getByTestId("chat-message-assistant")).toHaveTextContent(
+    expect(screen.getByTestId("chat-message-agent")).toHaveTextContent(
       "Echo: hello",
     );
   });
@@ -184,5 +185,29 @@ describe("ChatPane", () => {
     render(<ChatPane />);
     const messages = screen.getByTestId("chat-messages");
     expect(messages.className).toMatch(/overflow-y-auto/);
+  });
+
+  it("typing / into the textarea opens the slash popover", async () => {
+    render(<ChatPane />);
+    const textarea = screen.getByTestId("chat-input");
+
+    fireEvent.change(textarea, { target: { value: "/" } });
+
+    expect(screen.getByTestId("slash-popover")).toBeInTheDocument();
+  });
+
+  it("an assistant message renders with [data-testid='chat-message-agent'] and a data-agent attribute", async () => {
+    invokeMock.mockResolvedValueOnce(makeSendResult("hi"));
+    const user = userEvent.setup();
+    render(<ChatPane />);
+
+    await user.type(screen.getByTestId("chat-input"), "hi");
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-message-agent")).toBeInTheDocument();
+    });
+    const agentMsg = screen.getByTestId("chat-message-agent");
+    expect(agentMsg).toHaveAttribute("data-agent");
   });
 });
