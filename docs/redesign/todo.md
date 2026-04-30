@@ -1711,7 +1711,7 @@ Phase 4 — Web Chat column
 - [ ] W.4.2 Inline token highlighter
 - [x] W.4.3 ChatComposer
 - [x] W.4.4 Slash popover
-- [ ] W.4.5 Mention popover
+- [x] W.4.5 Mention popover
 - [ ] W.4.6 ChatColumn integration
 
 Phase 5 — Web Activity column
