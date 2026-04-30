@@ -1,8 +1,16 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi } from "vitest";
+import { vi, afterEach } from "vitest";
 import ChatColumn from "../components/ChatColumn";
 import type { ChatColumnProps } from "../components/ChatColumn";
+
+const invokeMock = vi.fn();
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => invokeMock(...args),
+}));
+
+afterEach(() => invokeMock.mockReset());
 
 // Minimal prop factory — keeps each test focused on only what it varies.
 function makeProps(overrides: Partial<ChatColumnProps> = {}): ChatColumnProps {
@@ -187,6 +195,73 @@ describe("ChatColumn", () => {
       await userEvent.click(sendBtn);
 
       expect(onSend).toHaveBeenCalledWith("hello");
+    });
+  });
+
+  describe("W.9.4 — New-spec affordance in ChatColumn", () => {
+    it("renders chat-composer-new-spec button inside ChatColumn", () => {
+      render(<ChatColumn {...makeProps()} />);
+      expect(screen.getByTestId("chat-composer-new-spec")).toBeInTheDocument();
+    });
+
+    it("clicking new-spec button opens the SpecDialog", async () => {
+      render(<ChatColumn {...makeProps()} />);
+      expect(screen.queryByTestId("spec-dialog")).toBeNull();
+
+      await userEvent.click(screen.getByTestId("chat-composer-new-spec"));
+
+      expect(screen.getByTestId("spec-dialog")).toBeInTheDocument();
+    });
+
+    it("typing a title and submitting calls invoke with start_ticket_run", async () => {
+      invokeMock.mockResolvedValueOnce({ run_id: "run-1" });
+      const user = userEvent.setup();
+
+      render(<ChatColumn {...makeProps()} />);
+
+      await user.click(screen.getByTestId("chat-composer-new-spec"));
+      await user.type(screen.getByTestId("spec-dialog-title-input"), "My spec");
+      await user.click(screen.getByTestId("spec-dialog-submit"));
+
+      await waitFor(() => {
+        expect(invokeMock).toHaveBeenCalledWith("start_ticket_run", {
+          ticket: "My spec",
+          backend: "claude-code",
+          model: null,
+        });
+      });
+    });
+
+    it("SpecDialog closes after successful submit", async () => {
+      invokeMock.mockResolvedValueOnce({ run_id: "run-1" });
+      const user = userEvent.setup();
+
+      render(<ChatColumn {...makeProps()} />);
+
+      await user.click(screen.getByTestId("chat-composer-new-spec"));
+      await user.type(screen.getByTestId("spec-dialog-title-input"), "My spec");
+      await user.click(screen.getByTestId("spec-dialog-submit"));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("spec-dialog")).toBeNull();
+      });
+    });
+
+    it("SpecDialog stays open when IPC fails", async () => {
+      invokeMock.mockRejectedValueOnce(new Error("network"));
+      const user = userEvent.setup();
+
+      render(<ChatColumn {...makeProps()} />);
+
+      await user.click(screen.getByTestId("chat-composer-new-spec"));
+      await user.type(screen.getByTestId("spec-dialog-title-input"), "My spec");
+      await user.click(screen.getByTestId("spec-dialog-submit"));
+
+      await waitFor(() => {
+        expect(invokeMock).toHaveBeenCalledTimes(1);
+      });
+
+      expect(screen.getByTestId("spec-dialog")).toBeInTheDocument();
     });
   });
 

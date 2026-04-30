@@ -479,6 +479,60 @@ describe("ChatComposer", () => {
     });
   });
 
+  describe("W.9.4 — New-spec button", () => {
+    it("renders chat-composer-new-spec button when onCreateSpec is provided", () => {
+      render(<ChatComposer onSend={vi.fn()} onCreateSpec={vi.fn()} />);
+      expect(screen.getByTestId("chat-composer-new-spec")).toBeInTheDocument();
+    });
+
+    it("new-spec button is inside chat-composer-input-wrapper", () => {
+      render(<ChatComposer onSend={vi.fn()} onCreateSpec={vi.fn()} />);
+      const btn = screen.getByTestId("chat-composer-new-spec");
+      const wrapper = btn.closest('[data-testid="chat-composer-input-wrapper"]');
+      expect(wrapper).not.toBeNull();
+    });
+
+    it("new-spec button appears BEFORE send button in document order", () => {
+      render(<ChatComposer onSend={vi.fn()} onCreateSpec={vi.fn()} />);
+      const newSpec = screen.getByTestId("chat-composer-new-spec");
+      const send = screen.getByTestId("chat-composer-send");
+      // DOCUMENT_POSITION_FOLLOWING (4) means send comes after newSpec
+      const position = newSpec.compareDocumentPosition(send);
+      expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("new-spec button has aria-label='Create spec'", () => {
+      render(<ChatComposer onSend={vi.fn()} onCreateSpec={vi.fn()} />);
+      const btn = screen.getByTestId("chat-composer-new-spec");
+      expect(btn).toHaveAttribute("aria-label", "Create spec");
+    });
+
+    it("new-spec button inner SVG path d attribute matches doc-icon glyph", () => {
+      render(<ChatComposer onSend={vi.fn()} onCreateSpec={vi.fn()} />);
+      const btn = screen.getByTestId("chat-composer-new-spec");
+      const path = btn.querySelector("path");
+      expect(path).not.toBeNull();
+      expect(path!.getAttribute("d")).toBe(
+        "M5 3h7l3 3v11H5zM12 3v3h3M7 9h6M7 12h6M7 15h4",
+      );
+    });
+
+    it("clicking new-spec button calls onCreateSpec once with no args", async () => {
+      const onCreateSpec = vi.fn();
+      render(<ChatComposer onSend={vi.fn()} onCreateSpec={onCreateSpec} />);
+      const btn = screen.getByTestId("chat-composer-new-spec");
+
+      await userEvent.click(btn);
+
+      expect(onCreateSpec).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT render new-spec button when onCreateSpec is omitted", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      expect(screen.queryByTestId("chat-composer-new-spec")).toBeNull();
+    });
+  });
+
   describe("mention popover", () => {
     it("typing @ alone opens the mention popover", () => {
       render(<ChatComposer onSend={vi.fn()} />);
