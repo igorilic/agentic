@@ -14,7 +14,8 @@ const ACTION_ITEM_ICON: Record<ActionItem["kind"], string> = {
 
 export default function IssueColumn({ ticket, runState, actionItems }: IssueColumnProps) {
   const acceptanceChecked = runState === "completed";
-  const showActionItems = runState === "completed" && (actionItems?.length ?? 0) > 0;
+  const completedItems: ActionItem[] =
+    runState === "completed" ? (actionItems ?? []) : [];
 
   return (
     <div
@@ -88,13 +89,13 @@ export default function IssueColumn({ ticket, runState, actionItems }: IssueColu
       )}
 
       {/* Action items section — only when completed and non-empty */}
-      {showActionItems && (
+      {completedItems.length > 0 && (
         <section data-testid="issue-action-items" className="flex flex-col gap-2">
           <h2 className="text-[12px] font-bold uppercase tracking-[0.05em] text-fg-muted">
             Action items
           </h2>
           <ul role="list" className="flex flex-col gap-2">
-            {(actionItems ?? []).map((item) => (
+            {completedItems.map((item) => (
               <li
                 key={item.id}
                 data-testid={`action-item-${item.id}`}
