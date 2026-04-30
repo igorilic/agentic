@@ -212,13 +212,61 @@ describe("ChatComposer", () => {
     });
   });
 
-  describe("A — send button shape", () => {
-    it("send button has rounded-none class (square, not rounded)", () => {
+  describe("W.9.3 — layout polish", () => {
+    it("chip placement: textarea appears before chip in document order", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+      const chip = screen.getByTestId("chat-composer-chip-plan");
+      // Node.DOCUMENT_POSITION_FOLLOWING (4) is set when chip comes after textarea
+      const position = textarea.compareDocumentPosition(chip);
+      expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("placeholder text matches handoff verbatim (U+2026 ellipsis)", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea") as HTMLTextAreaElement;
+      expect(textarea.placeholder).toBe("Ask a question, or use /plan, /develop, /@agent…");
+    });
+
+    it("send button contains paper-plane SVG path; up-arrow path is absent", () => {
       render(<ChatComposer onSend={vi.fn()} />);
       const sendBtn = screen.getByTestId("chat-composer-send");
+      const svg = sendBtn.querySelector("svg");
+      expect(svg).not.toBeNull();
+      const path = svg!.querySelector("path");
+      expect(path).not.toBeNull();
+      expect(path!.getAttribute("d")).toBe("M3 10l14-7-3 16-4-7-7-2z");
+      // Old up-arrow path must not be in the document
+      const allPaths = document.querySelectorAll("path");
+      allPaths.forEach((p) => {
+        expect(p.getAttribute("d")).not.toBe("M8 14V2 M3 7l5-5 5 5");
+      });
+    });
 
-      expect(sendBtn.className).not.toContain("rounded-md");
-      expect(sendBtn.className).toContain("rounded-none");
+    it("send button bg is bg-bg-surface-2 when draft empty, bg-[#18181b] after typing", async () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+      const sendBtn = screen.getByTestId("chat-composer-send");
+
+      // Empty draft
+      expect(sendBtn.className).toContain("bg-bg-surface-2");
+
+      // Type content
+      await userEvent.type(textarea, "hello");
+      expect(sendBtn.className).toContain("bg-[#18181b]");
+      expect(sendBtn.className).toContain("text-white");
+    });
+
+    it("chat-composer-input-wrapper wraps textarea and send button, has border + rounded-xl", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+      const sendBtn = screen.getByTestId("chat-composer-send");
+
+      const wrapper = textarea.closest('[data-testid="chat-composer-input-wrapper"]');
+      expect(wrapper).not.toBeNull();
+      expect(wrapper).toContainElement(sendBtn);
+      expect(wrapper!.className).toContain("border");
+      expect(wrapper!.className).toContain("rounded-xl");
     });
   });
 
