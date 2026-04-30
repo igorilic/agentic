@@ -631,7 +631,7 @@ blocked.
 
 ## Phase 5 — Web Activity column
 
-### Step W.5.1: `ActivityHeader` with tab strip
+### [x] Step W.5.1: `ActivityHeader` with tab strip
 
 **Goal**: Header that shows the title and four tabs (`All`, `Tool calls`, `Permissions`, `Errors`) with per-tab count chips.
 
@@ -656,7 +656,7 @@ blocked.
 
 ---
 
-### Step W.5.2: `LogRow` (info / status variant)
+### [x] Step W.5.2: `LogRow` (info / status variant)
 
 **Goal**: Pure component for a single info or status log row — `[HH:MM:SS]` + agent in agent color + message body.
 
