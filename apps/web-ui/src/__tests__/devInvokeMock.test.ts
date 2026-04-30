@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installDevInvokeMock } from "../utils/devInvokeMock";
 
 type WindowWithTauri = typeof window & {
-  __TAURI_INTERNALS__?: { invoke: (cmd: string, args?: unknown) => Promise<unknown> };
+  __TAURI_INTERNALS__?: {
+    invoke: (cmd: string, args?: unknown) => Promise<unknown>;
+    transformCallback?: (handler: (event: unknown) => void, once?: boolean) => number;
+  };
 };
 
 describe("installDevInvokeMock", () => {
@@ -90,6 +93,126 @@ describe("installDevInvokeMock", () => {
         { foo: "bar" },
       );
       warnSpy.mockRestore();
+    });
+  });
+
+  describe("B2 — Tauri 2 callback protocol + simulated event stream", () => {
+    let invoke: (cmd: string, args?: unknown) => Promise<unknown>;
+    let internals: NonNullable<WindowWithTauri["__TAURI_INTERNALS__"]>;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.stubEnv("DEV", true);
+      installDevInvokeMock();
+      internals = (window as WindowWithTauri).__TAURI_INTERNALS__!;
+      invoke = internals.invoke;
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("transformCallback is present on __TAURI_INTERNALS__", () => {
+      expect(typeof internals.transformCallback).toBe("function");
+    });
+
+    it("transformCallback registers a handler and returns a unique numeric id", () => {
+      const handlerA = vi.fn();
+      const handlerB = vi.fn();
+      const idA = internals.transformCallback!(handlerA);
+      const idB = internals.transformCallback!(handlerB);
+      expect(typeof idA).toBe("number");
+      expect(typeof idB).toBe("number");
+      expect(idA).not.toBe(idB);
+    });
+
+    it("plugin:event|listen with a registered callback id stores the subscription", async () => {
+      const handler = vi.fn();
+      const cbId = internals.transformCallback!(handler);
+      // Register listener for "agentic://event"
+      await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
+      // Now emit an event — handler should be called
+      await invoke("start_ticket_run", { ticket: "test", backend: "claude-code", model: null });
+      // Advance timers to fire the first scheduled event (RunStarted at 250ms)
+      vi.advanceTimersByTime(300);
+      expect(handler).toHaveBeenCalled();
+    });
+
+    it("plugin:event|unlisten removes the handler so no further events are dispatched", async () => {
+      const handler = vi.fn();
+      const cbId = internals.transformCallback!(handler);
+      await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
+      // Unlisten immediately
+      await invoke("plugin:event|unlisten", { eventId: cbId });
+      // Start a run and advance timers
+      await invoke("start_ticket_run", { ticket: "test", backend: "claude-code", model: null });
+      vi.advanceTimersByTime(5000);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("after start_ticket_run, emits RunStarted envelope to agentic://event listeners", async () => {
+      const received: unknown[] = [];
+      const cbId = internals.transformCallback!((event) => received.push(event));
+      await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
+      const runId = await invoke("start_ticket_run", { ticket: "fix issue 88", backend: "claude-code", model: null }) as string;
+
+      vi.advanceTimersByTime(300); // fire RunStarted at 250ms
+
+      expect(received).toHaveLength(1);
+      const envelope = (received[0] as { payload: { event: { type: string }; run_id: string } }).payload;
+      expect(envelope.event.type).toBe("RunStarted");
+      expect(envelope.run_id).toBe(runId);
+    });
+
+    it("emits 4× StepStarted and 4× StepComplete envelopes for the standard agents", async () => {
+      const received: unknown[] = [];
+      const cbId = internals.transformCallback!((event) => received.push(event));
+      await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
+      await invoke("start_ticket_run", { ticket: "task", backend: "claude-code", model: null });
+
+      // Advance past RunStarted + all 4 StepStarted+StepComplete pairs (no RunComplete yet)
+      // RunStarted: 250ms, then per-agent: start at N, complete at N+800, next start at N+1000
+      // 4 agents × 1000ms each = 4000ms after first step starts (250 + 400 = 650ms base)
+      vi.advanceTimersByTime(5600); // covers all step events but not RunComplete
+
+      const envelopes = received.map(
+        (e) => ((e as { payload: { event: { type: string } } }).payload.event.type)
+      );
+      expect(envelopes.filter((t) => t === "StepStarted")).toHaveLength(4);
+      expect(envelopes.filter((t) => t === "StepComplete")).toHaveLength(4);
+    });
+
+    it("emits RunComplete as the last envelope", async () => {
+      const received: unknown[] = [];
+      const cbId = internals.transformCallback!((event) => received.push(event));
+      await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
+      await invoke("start_ticket_run", { ticket: "task", backend: "claude-code", model: null });
+
+      vi.advanceTimersByTime(10000); // well past all events
+
+      const types = received.map(
+        (e) => ((e as { payload: { event: { type: string } } }).payload.event.type)
+      );
+      expect(types[types.length - 1]).toBe("RunComplete");
+    });
+
+    it("StepComplete envelopes have status='passed' and duration_ms > 0", async () => {
+      const received: unknown[] = [];
+      const cbId = internals.transformCallback!((event) => received.push(event));
+      await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
+      await invoke("start_ticket_run", { ticket: "task", backend: "claude-code", model: null });
+      vi.advanceTimersByTime(10000);
+
+      const stepCompletes = received
+        .map((e) => (e as { payload: { event: { type: string; data: Record<string, unknown> } } }).payload)
+        .filter((env) => env.event.type === "StepComplete");
+
+      expect(stepCompletes.length).toBe(4);
+      for (const env of stepCompletes) {
+        expect(env.event.data.status).toBe("passed");
+        expect(typeof env.event.data.duration_ms).toBe("number");
+        expect((env.event.data.duration_ms as number)).toBeGreaterThan(0);
+      }
     });
   });
 });
