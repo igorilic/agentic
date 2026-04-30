@@ -18,9 +18,9 @@ export type DismissableBannerProps = {
 };
 
 const STYLES: Record<BannerSeverity, string> = {
-  error: "bg-red-50 border-red-200 text-red-700",
-  warning: "bg-yellow-50 border-yellow-200 text-yellow-800",
-  info: "bg-blue-50 border-blue-200 text-blue-800",
+  error: "bg-red-500/10 border-red-300 text-red-700",
+  warning: "bg-amber-500/10 border-amber-300 text-amber-700",
+  info: "bg-blue-500/10 border-blue-300 text-blue-700",
 };
 
 export default function DismissableBanner({

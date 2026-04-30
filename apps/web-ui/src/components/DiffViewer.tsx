@@ -45,10 +45,10 @@ function parseUnified(diff: string): DiffLine[] {
 }
 
 const STYLES: Record<DiffLine["kind"], string> = {
-  "file-header": "text-cyan-700 font-semibold",
-  hunk: "text-purple-700",
-  add: "text-green-700 bg-green-50",
-  remove: "text-red-700 bg-red-50",
+  "file-header": "text-fg-muted font-semibold",
+  hunk: "text-fg-muted",
+  add: "text-green-700 bg-green-500/10",
+  remove: "text-red-700 bg-red-500/10",
   meta: "text-gray-400 italic",
   context: "text-gray-600",
 };
