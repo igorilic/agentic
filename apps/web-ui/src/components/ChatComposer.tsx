@@ -105,22 +105,15 @@ export default function ChatComposer({ onSend, inputTestId, sendTestId }: ChatCo
     // Enter alone: default behavior (newline insertion)
   };
 
+  const sendActive = value.trim() !== "";
+
   return (
     <div data-testid="chat-composer" className="flex flex-col gap-2 p-3">
-      <div className="flex gap-2">
-        {QUICK_PICK_CHIPS.map((chip) => (
-          <button
-            key={chip.id}
-            type="button"
-            data-testid={`chat-composer-chip-${chip.id}`}
-            onClick={() => handleChipClick(chip.command)}
-            className="rounded-md border border-border px-2 py-1 text-xs text-fg hover:bg-bg-surface-2"
-          >
-            {chip.label}
-          </button>
-        ))}
-      </div>
-      <div className="relative flex items-end gap-2">
+      {/* Input wrapper: border + radius live here; textarea is borderless inside */}
+      <div
+        data-testid="chat-composer-input-wrapper"
+        className="relative flex items-end gap-2 rounded-xl border border-[rgb(0_0_0_/_0.1)] bg-bg-surface p-1.5 shadow-card"
+      >
         {slashOpen && (
           <div
             data-testid="slash-popover"
@@ -168,29 +161,40 @@ export default function ChatComposer({ onSend, inputTestId, sendTestId }: ChatCo
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="flex-1 rounded-xl border border-[rgb(0_0_0_/_0.1)] px-[14px] py-[10px] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#18181b] focus:ring-offset-2 resize-none"
+          className="flex-1 bg-transparent px-2 py-1.5 text-sm font-sans focus:outline-none resize-none"
           rows={1}
-          placeholder="Type a message…"
+          placeholder="Ask a question, or use /plan, /develop, /@agent…"
         />
-        <button
-          type="button"
-          data-testid={sendTestId ?? "chat-composer-send"}
-          onClick={handleSend}
-          aria-label="Send"
-          className="h-9 w-9 rounded-none bg-[#18181b] text-white flex items-center justify-center"
-        >
-          <svg
-            viewBox="0 0 16 16"
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <div className="flex items-center gap-1">
+          {/* Reserved slot — W.9.4 plugs the New-spec button here */}
+          <button
+            type="button"
+            data-testid={sendTestId ?? "chat-composer-send"}
+            onClick={handleSend}
+            aria-label="Send"
+            className={`h-9 w-9 rounded-md flex items-center justify-center ${
+              sendActive ? "bg-[#18181b] text-white" : "bg-bg-surface-2 text-fg-subtle"
+            }`}
           >
-            <path d="M8 14V2 M3 7l5-5 5 5" />
-          </svg>
-        </button>
+            <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+              <path d="M3 10l14-7-3 16-4-7-7-2z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      {/* Quick-pick chip row — below the input wrapper per handoff */}
+      <div className="flex gap-2">
+        {QUICK_PICK_CHIPS.map((chip) => (
+          <button
+            key={chip.id}
+            type="button"
+            data-testid={`chat-composer-chip-${chip.id}`}
+            onClick={() => handleChipClick(chip.command)}
+            className="rounded-md border border-border px-2 py-1 text-xs text-fg hover:bg-bg-surface-2"
+          >
+            {chip.label}
+          </button>
+        ))}
       </div>
     </div>
   );
