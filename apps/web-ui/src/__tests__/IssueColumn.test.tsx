@@ -251,4 +251,70 @@ describe("IssueColumn", () => {
     render(<IssueColumn ticket={fixture} runState="idle" actionItems={actionItemsFixture} />);
     expect(screen.queryByTestId("issue-action-items")).toBeNull();
   });
+
+  // W.9.7 — run-state pill (StatusDot) inline with issue id + section labels
+
+  describe("W.9.7 run-state pill and section labels", () => {
+    it("runState='running': status-dot is in document with text matching /Running/", () => {
+      render(<IssueColumn ticket={fixture} runState="running" />);
+      const dot = screen.getByTestId("status-dot");
+      expect(dot).toBeInTheDocument();
+      expect(dot).toHaveTextContent(/Running/);
+    });
+
+    it("runState='completed': status-dot text matches /Done/", () => {
+      render(<IssueColumn ticket={fixture} runState="completed" />);
+      const dot = screen.getByTestId("status-dot");
+      expect(dot).toHaveTextContent(/Done/);
+    });
+
+    it("runState='idle': status-dot text matches /Queued/", () => {
+      render(<IssueColumn ticket={fixture} runState="idle" />);
+      const dot = screen.getByTestId("status-dot");
+      expect(dot).toHaveTextContent(/Queued/);
+    });
+
+    it("runState='failed': status-dot text matches /Failed/", () => {
+      render(<IssueColumn ticket={fixture} runState="failed" />);
+      const dot = screen.getByTestId("status-dot");
+      expect(dot).toHaveTextContent(/Failed/);
+    });
+
+    it("runState undefined: status-dot defaults to Queued", () => {
+      render(<IssueColumn ticket={fixture} />);
+      const dot = screen.getByTestId("status-dot");
+      expect(dot).toHaveTextContent(/Queued/);
+    });
+
+    it("status-dot is inside the issue-column root (inline with issue id)", () => {
+      render(<IssueColumn ticket={fixture} runState="running" />);
+      const dot = screen.getByTestId("status-dot");
+      const column = screen.getByTestId("issue-column");
+      expect(column.contains(dot)).toBe(true);
+    });
+
+    it("Description label renders when body is non-empty", () => {
+      render(<IssueColumn ticket={fixture} />);
+      const label = screen.getByTestId("issue-section-description");
+      expect(label).toBeInTheDocument();
+      expect(label).toHaveTextContent("Description");
+    });
+
+    it("Description label is absent when body is empty", () => {
+      render(<IssueColumn ticket={{ ...fixture, body: [] }} />);
+      expect(screen.queryByTestId("issue-section-description")).toBeNull();
+    });
+
+    it("Acceptance criteria label renders when acceptance is non-empty", () => {
+      render(<IssueColumn ticket={fixture} />);
+      const label = screen.getByTestId("issue-section-acceptance");
+      expect(label).toBeInTheDocument();
+      expect(label).toHaveTextContent("Acceptance criteria");
+    });
+
+    it("Acceptance criteria label is absent when acceptance is empty", () => {
+      render(<IssueColumn ticket={{ ...fixture, acceptance: [] }} />);
+      expect(screen.queryByTestId("issue-section-acceptance")).toBeNull();
+    });
+  });
 });
