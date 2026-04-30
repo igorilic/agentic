@@ -144,6 +144,7 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
             className="absolute bottom-full mb-2 left-0"
           >
             <AgentPicker
+              key={mentionTrigger.query}
               width="narrow"
               excludeIds={[]}
               initialQuery={mentionTrigger.query}

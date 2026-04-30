@@ -587,5 +587,21 @@ describe("ChatComposer", () => {
 
       expect(onSend).toHaveBeenCalledWith("@architect hello");
     });
+
+    it("filters picker rows as the user types past the initial trigger", () => {
+      const onSend = vi.fn();
+      render(<ChatComposer onSend={onSend} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+      // First trigger: "@a" — query "a", 6 agents match (architect, qa, researcher, perf, db, a11y)
+      fireEvent.change(textarea, { target: { value: "@a" } });
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+      const rowsAfterA = screen.queryAllByTestId(/^agent-picker-row-/);
+      expect(rowsAfterA.length).toBeGreaterThan(2);
+      // Continue typing: "@archi" — only architect matches
+      fireEvent.change(textarea, { target: { value: "@archi" } });
+      const rows = screen.queryAllByTestId(/^agent-picker-row-/);
+      expect(rows).toHaveLength(1);
+      expect(screen.getByTestId("agent-picker-row-architect")).toBeInTheDocument();
+    });
   });
 });
