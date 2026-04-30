@@ -3,7 +3,7 @@ import { useState } from "react";
 export type SpecDialogProps = {
   open: boolean;
   onClose: () => void;
-  onSubmit: (title: string, body: string) => void;
+  onSubmit: (title: string, body: string) => void | Promise<void>;
 };
 
 export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps) {
@@ -16,7 +16,7 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
 
   const handleSubmit = () => {
     if (submitDisabled) return;
-    onSubmit(title, body);
+    void onSubmit(title, body);
   };
 
   return (
