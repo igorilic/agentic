@@ -198,6 +198,20 @@ describe("ChatComposer", () => {
     });
   });
 
+  describe("testid overrides", () => {
+    it("uses inputTestId override when provided", () => {
+      render(<ChatComposer onSend={vi.fn()} inputTestId="chat-input" />);
+      expect(screen.getByTestId("chat-input")).toBeInTheDocument();
+      expect(screen.queryByTestId("chat-composer-textarea")).toBeNull();
+    });
+
+    it("uses sendTestId override when provided", () => {
+      render(<ChatComposer onSend={vi.fn()} sendTestId="chat-send" />);
+      expect(screen.getByTestId("chat-send")).toBeInTheDocument();
+      expect(screen.queryByTestId("chat-composer-send")).toBeNull();
+    });
+  });
+
   describe("A — send button shape", () => {
     it("send button has rounded-none class (square, not rounded)", () => {
       render(<ChatComposer onSend={vi.fn()} />);

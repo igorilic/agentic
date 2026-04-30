@@ -15,6 +15,10 @@ function findMentionTrigger(value: string): { atIndex: number; query: string } |
 
 export type ChatComposerProps = {
   onSend: (text: string) => void;
+  /** Override the textarea's data-testid. Defaults to "chat-composer-textarea". */
+  inputTestId?: string;
+  /** Override the send button's data-testid. Defaults to "chat-composer-send". */
+  sendTestId?: string;
 };
 
 const QUICK_PICK_CHIPS = [
@@ -24,7 +28,7 @@ const QUICK_PICK_CHIPS = [
   { id: "spec", label: "Spec", command: "/spec " },
 ] as const;
 
-export default function ChatComposer({ onSend }: ChatComposerProps) {
+export default function ChatComposer({ onSend, inputTestId, sendTestId }: ChatComposerProps) {
   const [value, setValue] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [escClosedForValue, setEscClosedForValue] = useState<string | null>(null);
@@ -160,7 +164,7 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
         )}
         <textarea
           ref={textareaRef}
-          data-testid="chat-composer-textarea"
+          data-testid={inputTestId ?? "chat-composer-textarea"}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -170,7 +174,7 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
         />
         <button
           type="button"
-          data-testid="chat-composer-send"
+          data-testid={sendTestId ?? "chat-composer-send"}
           onClick={handleSend}
           aria-label="Send"
           className="h-9 w-9 rounded-none bg-[#18181b] text-white flex items-center justify-center"
