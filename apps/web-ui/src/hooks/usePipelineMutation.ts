@@ -35,6 +35,7 @@ export function usePipelineMutation(
   // Re-seed on run-id change only. Not on every runState tick — that would
   // clobber user edits made between run start and run completion.
   useEffect(() => {
+    if (!activeRunId) return;  // only re-seed on undefined → string per spec §6.8.3
     setPipelineAgents(derivePipelineSeed(runState));
     setPipelineSkipped(new Set<string>());
     // eslint-disable-next-line react-hooks/exhaustive-deps
