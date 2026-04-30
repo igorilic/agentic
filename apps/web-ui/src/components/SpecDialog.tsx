@@ -23,12 +23,6 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
     <div
       data-testid="spec-dialog-backdrop"
       onClick={onClose}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.stopPropagation();
-          onClose();
-        }
-      }}
       className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center"
     >
       <div
@@ -37,6 +31,12 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
         aria-modal="true"
         aria-label="New spec"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            onClose();
+          }
+        }}
         className="w-[560px] max-h-[80vh] overflow-y-auto rounded-[14px] border border-border bg-bg-surface shadow-modal p-5 flex flex-col gap-4"
       >
         {/* Header */}
