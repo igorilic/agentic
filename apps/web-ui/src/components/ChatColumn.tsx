@@ -1,6 +1,5 @@
 import ChatComposer from "./ChatComposer";
 import ChatMessageComp from "./ChatMessage";
-import ActiveRunIndicator from "./ActiveRunIndicator";
 import type { ChatMessage } from "../types/chat";
 
 export type ChatColumnProps = {
@@ -8,10 +7,7 @@ export type ChatColumnProps = {
   systemMessages: string[];
   mentionMessages?: Array<{ agent: string; body: string; t: string }>;
   activeAgent: string | null;
-  activeRunId: string | null;
-  activeRunStartedAtMs: number | null;
   onSend: (text: string) => void;
-  onCancelActiveRun?: () => Promise<void>;
   error?: string | null;
 };
 
@@ -19,7 +15,6 @@ export type ChatColumnProps = {
  * ChatColumn composes the spec §3.4 Chat column layout:
  *   - Header with "Chat with pipeline" title + active-agent chip
  *   - Scrollable message list using ChatMessage variants
- *   - Optional ActiveRunIndicator
  *   - Sticky ChatComposer at the bottom
  *
  * NOTE: The ChatMessage type in types/chat.ts uses role: "user" | "assistant" |
@@ -27,16 +22,17 @@ export type ChatColumnProps = {
  * rendered via the ChatMessage agent variant with agent="assistant" as a
  * placeholder. A proper senderAgent field would require a chat.ts schema change
  * (deliberate decision deferred — see GH issue for Phase 8+ tracking).
+ *
+ * NOTE: ActiveRunIndicator was removed in W.8.5. The run-state pill now lives
+ * in HeaderBar (spec §3.4 line 250). HeaderBar.onStopRun → App.cancelActiveRun
+ * is the one wiring path.
  */
 export default function ChatColumn({
   messages,
   systemMessages,
   mentionMessages = [],
   activeAgent,
-  activeRunId,
-  activeRunStartedAtMs,
   onSend,
-  onCancelActiveRun,
   error,
 }: ChatColumnProps) {
   return (
@@ -115,19 +111,6 @@ export default function ChatColumn({
             <span className="px-1 italic text-gray-400">No messages yet.</span>
           )}
       </div>
-
-      {/* Active run indicator — only render when both activeRunId AND
-          onCancelActiveRun are provided; a cancel handler without a run id
-          (or a run id without a handler) produces a dead affordance. */}
-      {activeRunId !== null && onCancelActiveRun !== undefined && (
-        <div className="px-3 py-1 border-t border-gray-200 bg-gray-50">
-          <ActiveRunIndicator
-            runId={activeRunId}
-            startedAtMs={activeRunStartedAtMs}
-            onCancel={onCancelActiveRun}
-          />
-        </div>
-      )}
 
       {/* Error */}
       {error != null && (

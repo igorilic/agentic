@@ -16,19 +16,10 @@ type MentionResult = {
 export type ChatPaneProps = {
   /// Called when `/plan <ticket>` successfully kicks off a real ticket run.
   onTicketRunStarted?: (runId: string) => void;
-  /// Currently-active run, if any.
-  activeRunId?: string | null;
-  /// Wall-clock start of the active run (from the first envelope's timestamp_ms).
-  activeRunStartedAtMs?: number | null;
-  /// Cancels the currently-active run (best-effort SIGTERM via the `cancel_run` IPC).
-  onCancelActiveRun?: () => Promise<void>;
 };
 
 export default function ChatPane({
   onTicketRunStarted,
-  activeRunId = null,
-  activeRunStartedAtMs = null,
-  onCancelActiveRun,
 }: ChatPaneProps = {}) {
   const { messages, send, sending, error } = useChat();
   const [systemMessages, setSystemMessages] = useState<string[]>([]);
@@ -168,10 +159,7 @@ export default function ChatPane({
         systemMessages={systemMessages}
         mentionMessages={mentionMessagesForColumn}
         activeAgent={null}
-        activeRunId={activeRunId}
-        activeRunStartedAtMs={activeRunStartedAtMs}
         onSend={onSend}
-        onCancelActiveRun={onCancelActiveRun}
         error={error}
       />
     </section>

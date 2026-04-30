@@ -47,7 +47,7 @@ export default function App() {
 
   const runState = useMemo(() => deriveRunState(events), [events]);
 
-  const { overallRunState, startedAtMs, elapsedMs } = useRunStateOverall(events, activeRunId);
+  const { overallRunState, elapsedMs } = useRunStateOverall(events, activeRunId);
   const { pipelineAgents, pipelineStatuses, activeIndex } = usePipelineFromRunState(runState);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -108,9 +108,6 @@ export default function App() {
       >
         <ChatPane
           onTicketRunStarted={setActiveRunId}
-          activeRunId={activeRunId ?? null}
-          activeRunStartedAtMs={startedAtMs}
-          onCancelActiveRun={cancelActiveRun}
         />
         <ActivityColumn
           events={events}

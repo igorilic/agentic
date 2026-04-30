@@ -11,10 +11,7 @@ function makeProps(overrides: Partial<ChatColumnProps> = {}): ChatColumnProps {
     systemMessages: [],
     mentionMessages: [],
     activeAgent: null,
-    activeRunId: null,
-    activeRunStartedAtMs: null,
     onSend: vi.fn(),
-    onCancelActiveRun: undefined,
     error: null,
     ...overrides,
   };
@@ -190,39 +187,6 @@ describe("ChatColumn", () => {
       await userEvent.click(sendBtn);
 
       expect(onSend).toHaveBeenCalledWith("hello");
-    });
-  });
-
-  describe("active run indicator", () => {
-    it("shows ActiveRunIndicator when activeRunId is set", () => {
-      render(
-        <ChatColumn
-          {...makeProps({
-            activeRunId: "run-abc",
-            activeRunStartedAtMs: null,
-            onCancelActiveRun: vi.fn(async () => {}),
-          })}
-        />,
-      );
-      expect(screen.getByTestId("active-run-indicator")).toBeInTheDocument();
-    });
-
-    it("hides ActiveRunIndicator when activeRunId is null", () => {
-      render(<ChatColumn {...makeProps({ activeRunId: null })} />);
-      expect(screen.queryByTestId("active-run-indicator")).toBeNull();
-    });
-
-    it("hides ActiveRunIndicator when activeRunId is set but onCancelActiveRun is undefined", () => {
-      render(
-        <ChatColumn
-          {...makeProps({
-            activeRunId: "run-abc",
-            activeRunStartedAtMs: null,
-            onCancelActiveRun: undefined,
-          })}
-        />,
-      );
-      expect(screen.queryByTestId("active-run-indicator")).toBeNull();
     });
   });
 
