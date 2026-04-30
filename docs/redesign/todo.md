@@ -1682,7 +1682,7 @@ pane**. The dual binding is the contract:
    - Why deferred: schema change touches `agentic-core`, the chat SQLite migration, the `agentic-tauri` IPC handler, and the chat-routing layer that knows the answering agent.
    - Trigger: when chat replies are actually orchestrated by the multi-agent pipeline (architect/developer/qa/reviewer) rather than a single-LLM passthrough.
 
-9. **Streaming-row left-border animation** (GH #TBD).
+9. **Streaming-row left-border animation** (GH #91).
    - What's missing: ActivityColumn doesn't render the "subtle left-border animation matching agent color" on the currently-streaming event entry per spec §3.5 line 263. No `streamingEventId` / `isStreaming` signal flows through the column props.
    - Why deferred: streaming-state plumbing arrives with the App.tsx integration in Phase 8 (which threads the live event source). The animation class itself is trivial; the prop wiring + live-event correlation is the load-bearing work.
    - Trigger: Phase 8 App integration when ActivityColumn first sees a live event stream.
