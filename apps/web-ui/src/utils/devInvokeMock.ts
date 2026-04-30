@@ -5,7 +5,7 @@ type WindowWithTauri = typeof globalThis & {
 async function mockInvoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
   switch (cmd) {
     case "start_ticket_run":
-      return { run_id: `dev-mock-${Date.now()}`, status: "running" };
+      return `dev-mock-${Date.now()}`;
     case "cancel_run":
       return undefined;
     case "mention_agent":

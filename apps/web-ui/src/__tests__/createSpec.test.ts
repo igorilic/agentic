@@ -13,7 +13,7 @@ afterEach(() => invokeMock.mockReset());
 
 describe("createSpec", () => {
   it("calls invoke with start_ticket_run and correct arg shape", async () => {
-    invokeMock.mockResolvedValueOnce({ run_id: "run-42" });
+    invokeMock.mockResolvedValueOnce("run-42");
 
     await createSpec("My new spec");
 
@@ -24,24 +24,32 @@ describe("createSpec", () => {
     });
   });
 
-  it("returns the run_id string when IPC resolves with { run_id: '...' }", async () => {
-    invokeMock.mockResolvedValueOnce({ run_id: "run-99" });
+  it("returns the run_id when invoke resolves with a string", async () => {
+    invokeMock.mockResolvedValueOnce("run-123");
 
-    const result = await createSpec("Spec title");
+    const result = await createSpec("Add rate limiting");
 
-    expect(result).toBe("run-99");
+    expect(result).toBe("run-123");
   });
 
-  it("returns undefined when IPC response lacks run_id (malformed)", async () => {
-    invokeMock.mockResolvedValueOnce({});
+  it("returns undefined when invoke resolves with a non-string (object)", async () => {
+    invokeMock.mockResolvedValueOnce({ unexpected: true });
+
+    const result = await createSpec("Add rate limiting");
+
+    expect(result).toBeUndefined();
+  });
+
+  it("returns undefined when invoke resolves with null", async () => {
+    invokeMock.mockResolvedValueOnce(null);
 
     const result = await createSpec("Spec title");
 
     expect(result).toBeUndefined();
   });
 
-  it("returns undefined when IPC response has non-string run_id", async () => {
-    invokeMock.mockResolvedValueOnce({ run_id: 123 });
+  it("returns undefined when invoke resolves with undefined", async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
 
     const result = await createSpec("Spec title");
 

@@ -80,11 +80,10 @@ export default function App() {
       model: null,
     })
       .then((result: unknown) => {
-        const r = result as { run_id?: string };
-        if (typeof r.run_id === "string") setActiveRunId(r.run_id);
+        if (typeof result === "string") setActiveRunId(result);
       })
       .catch(() => {
-        /* no-op; error surfaces elsewhere */
+        /* no-op; failure surfaces via the run-state pill remaining idle */
       });
   }, []);
 

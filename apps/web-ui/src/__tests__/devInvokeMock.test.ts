@@ -47,9 +47,10 @@ describe("installDevInvokeMock", () => {
       invoke = (window as WindowWithTauri).__TAURI_INTERNALS__!.invoke;
     });
 
-    it("start_ticket_run returns a run_id starting with dev-mock-", async () => {
-      const result = (await invoke("start_ticket_run", {})) as { run_id: string };
-      expect(result.run_id).toMatch(/^dev-mock-\d+$/);
+    it("start_ticket_run returns a bare run_id string starting with dev-mock-", async () => {
+      const result = (await invoke("start_ticket_run", {})) as string;
+      expect(typeof result).toBe("string");
+      expect(result).toMatch(/^dev-mock-\d+$/);
     });
 
     it("cancel_run resolves with undefined", async () => {
