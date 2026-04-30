@@ -137,6 +137,7 @@ export default function App() {
           ticket={ticket}
           runState={overallRunState}
           actionItems={actionItems}
+          onTicketRunStarted={setActiveRunId}
         />
       </AppShell>
       <SettingsModal

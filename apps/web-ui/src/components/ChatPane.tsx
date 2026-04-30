@@ -161,6 +161,7 @@ export default function ChatPane({
         activeAgent={null}
         onSend={onSend}
         error={error}
+        onTicketRunStarted={onTicketRunStarted}
       />
     </section>
   );
