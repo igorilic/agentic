@@ -281,10 +281,12 @@ describe("App pipeline mutation — W.9.1", () => {
     };
 
     // Mount with an active run id — seeds from runState
+    type HookProps = { runState: RunState; activeRunId: string | undefined };
+    const initialProps: HookProps = { runState: runStateWithSteps, activeRunId: "run-1" };
     const { result, rerender } = renderHook(
-      ({ runState, activeRunId }: { runState: RunState; activeRunId: string | undefined }) =>
+      ({ runState, activeRunId }: HookProps) =>
         usePipelineMutation(runState, activeRunId),
-      { initialProps: { runState: runStateWithSteps, activeRunId: "run-1" } },
+      { initialProps },
     );
 
     // Simulate user edit: remove qa (index 2)
