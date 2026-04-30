@@ -113,12 +113,51 @@ describe("ChatPane", () => {
       });
     });
     await waitFor(() => {
-      expect(onStart).toHaveBeenCalledWith({ runId: "01abc", ticketLabel: "#42" });
+      expect(onStart).toHaveBeenCalledWith({ runId: "01abc", ticketLabel: "#42", description: undefined });
     });
     // System message confirms the run started.
     expect(screen.getByTestId("chat-message-system")).toHaveTextContent(
       /started run 01abc/i,
     );
+  });
+
+  it("/plan splits on first dot — first sentence is ticketLabel, rest is description", async () => {
+    invokeMock.mockResolvedValueOnce("run-split-1");
+    const onStart = vi.fn();
+    const user = userEvent.setup();
+    render(<ChatPane onTicketRunStarted={onStart} />);
+
+    await user.type(
+      screen.getByTestId("chat-input"),
+      "/plan Add rate limiting. Pro tier issue.",
+    );
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(onStart).toHaveBeenCalledWith({
+        runId: "run-split-1",
+        ticketLabel: "Add rate limiting",
+        description: "Pro tier issue.",
+      });
+    });
+  });
+
+  it("/plan with no dot sends full text as ticketLabel with undefined description", async () => {
+    invokeMock.mockResolvedValueOnce("run-nodot-1");
+    const onStart = vi.fn();
+    const user = userEvent.setup();
+    render(<ChatPane onTicketRunStarted={onStart} />);
+
+    await user.type(screen.getByTestId("chat-input"), "/plan create palindrome");
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(onStart).toHaveBeenCalledWith({
+        runId: "run-nodot-1",
+        ticketLabel: "create palindrome",
+        description: undefined,
+      });
+    });
   });
 
   it("/plan --backend=copilot-cli forwards the parsed backend to the IPC", async () => {

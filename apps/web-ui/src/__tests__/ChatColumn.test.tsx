@@ -264,7 +264,7 @@ describe("ChatColumn", () => {
       expect(screen.getByTestId("spec-dialog")).toBeInTheDocument();
     });
 
-    it("calls onTicketRunStarted with { runId, ticketLabel } returned from IPC", async () => {
+    it("calls onTicketRunStarted with { runId, ticketLabel, description: undefined } when body is empty", async () => {
       invokeMock.mockResolvedValueOnce("run-xyz");
       const onTicketRunStarted = vi.fn();
       const user = userEvent.setup();
@@ -279,6 +279,28 @@ describe("ChatColumn", () => {
         expect(onTicketRunStarted).toHaveBeenCalledWith({
           runId: "run-xyz",
           ticketLabel: "My spec",
+          description: undefined,
+        });
+      });
+    });
+
+    it("calls onTicketRunStarted with description populated when body is non-empty", async () => {
+      invokeMock.mockResolvedValueOnce("run-with-desc");
+      const onTicketRunStarted = vi.fn();
+      const user = userEvent.setup();
+
+      render(<ChatColumn {...makeProps({ onTicketRunStarted })} />);
+
+      await user.click(screen.getByTestId("chat-composer-new-spec"));
+      await user.type(screen.getByTestId("spec-dialog-title-input"), "My spec");
+      await user.type(screen.getByTestId("spec-dialog-body-textarea"), "The body details");
+      await user.click(screen.getByTestId("spec-dialog-submit"));
+
+      await waitFor(() => {
+        expect(onTicketRunStarted).toHaveBeenCalledWith({
+          runId: "run-with-desc",
+          ticketLabel: "My spec",
+          description: "The body details",
         });
       });
     });

@@ -110,6 +110,52 @@ describe("App polish (W.9.8)", () => {
     });
   });
 
+  it("after SpecDialog submit with body, IssueColumn body paragraph reflects the body field (B1-body)", async () => {
+    invokeMock.mockImplementation(async (cmd: string): Promise<unknown> => {
+      if (cmd === "start_ticket_run") return "run-b1-body-test";
+      if (cmd === "list_runs") return [];
+      if (cmd === "list_findings") return [];
+      if (cmd === "get_event_history") return [];
+      return undefined;
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByTestId("chat-composer-new-spec"));
+    await user.type(screen.getByTestId("spec-dialog-title-input"), "fix issue 88");
+    await user.type(screen.getByTestId("spec-dialog-body-textarea"), "This is the description.");
+    await user.click(screen.getByTestId("spec-dialog-submit"));
+
+    await waitFor(() => {
+      const para = screen.getByTestId("issue-body-paragraph");
+      expect(para).toHaveTextContent("This is the description.");
+    });
+  });
+
+  it("/plan splits on first dot — IssueColumn title and body paragraph reflect the split (B2)", async () => {
+    invokeMock.mockImplementation(async (cmd: string): Promise<unknown> => {
+      if (cmd === "start_ticket_run") return "run-plan-split";
+      if (cmd === "list_runs") return [];
+      if (cmd === "list_findings") return [];
+      if (cmd === "get_event_history") return [];
+      return undefined;
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(
+      screen.getByTestId("chat-input"),
+      "/plan Add rate limiting. Pro tier issue.",
+    );
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("issue-title")).toHaveTextContent("Add rate limiting");
+    });
+    const para = screen.getByTestId("issue-body-paragraph");
+    expect(para).toHaveTextContent("Pro tier issue.");
+  });
+
   it("clicking New-spec opens SpecDialog; Esc closes it (W.9.4)", async () => {
     render(<App />);
     expect(screen.queryByTestId("spec-dialog")).toBeNull();

@@ -174,7 +174,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
     expect(screen.getByTestId("spec-dialog-title-input")).toHaveValue("New spec");
   });
 
-  it("calls onTicketRunStarted with { runId, ticketLabel } returned from IPC", async () => {
+  it("calls onTicketRunStarted with { runId, ticketLabel, description: undefined } when body is empty", async () => {
     invokeMock.mockResolvedValueOnce("run-abc");
     const onTicketRunStarted = vi.fn();
     const user = userEvent.setup();
@@ -196,6 +196,35 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
       expect(onTicketRunStarted).toHaveBeenCalledWith({
         runId: "run-abc",
         ticketLabel: "New spec",
+        description: undefined,
+      });
+    });
+  });
+
+  it("calls onTicketRunStarted with description populated when body is non-empty", async () => {
+    invokeMock.mockResolvedValueOnce("run-with-body");
+    const onTicketRunStarted = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <IssueColumn
+        ticket={ticket}
+        runState="completed"
+        actionItems={actionItems}
+        onTicketRunStarted={onTicketRunStarted}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("issue-create-spec"));
+    await user.type(screen.getByTestId("spec-dialog-title-input"), "New spec");
+    await user.type(screen.getByTestId("spec-dialog-body-textarea"), "Some description text");
+    await user.click(screen.getByTestId("spec-dialog-submit"));
+
+    await waitFor(() => {
+      expect(onTicketRunStarted).toHaveBeenCalledWith({
+        runId: "run-with-body",
+        ticketLabel: "New spec",
+        description: "Some description text",
       });
     });
   });
