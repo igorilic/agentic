@@ -3,6 +3,12 @@ export type ChatMessage = {
   session_id: string;
   run_id: string | null;
   role: "user" | "assistant" | "system" | "tool";
+  /**
+   * The agent that produced an `assistant`/`tool` message. Optional —
+   * not yet populated by the backend; tracked in GH #<TBD> for the
+   * agentic-core schema change.
+   */
+  senderAgent?: string;
   content: string;
   metadata: string | null;
   created_at: number;

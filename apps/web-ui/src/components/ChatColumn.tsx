@@ -79,7 +79,7 @@ export default function ChatColumn({
               <ChatMessageComp
                 key={msg.id}
                 kind="agent"
-                agent="assistant"
+                agent={msg.senderAgent ?? "assistant"}
                 timestamp={new Date(msg.created_at).toLocaleTimeString()}
                 body={msg.content}
               />
@@ -116,13 +116,15 @@ export default function ChatColumn({
           )}
       </div>
 
-      {/* Active run indicator */}
-      {activeRunId !== null && (
+      {/* Active run indicator — only render when both activeRunId AND
+          onCancelActiveRun are provided; a cancel handler without a run id
+          (or a run id without a handler) produces a dead affordance. */}
+      {activeRunId !== null && onCancelActiveRun !== undefined && (
         <div className="px-3 py-1 border-t border-gray-200 bg-gray-50">
           <ActiveRunIndicator
             runId={activeRunId}
             startedAtMs={activeRunStartedAtMs}
-            onCancel={onCancelActiveRun ?? (async () => {})}
+            onCancel={onCancelActiveRun}
           />
         </div>
       )}

@@ -32,6 +32,12 @@ export default function ChatPane({
 }: ChatPaneProps = {}) {
   const { messages, send, sending, error } = useChat();
   const [systemMessages, setSystemMessages] = useState<string[]>([]);
+  // Maps mention run_id → agent name so event envelopes can be rendered with
+  // the correct per-agent identity. The EventEnvelope schema does not carry an
+  // agent field; we capture it at dispatch time from the parsed mention command.
+  const [mentionRunAgents, setMentionRunAgents] = useState<
+    Record<string, string>
+  >({});
   const mentionEvents = useMentionEvents();
 
   // Slash-command services wired to IPC.
@@ -61,18 +67,28 @@ export default function ChatPane({
   );
 
   // Project mention envelopes into renderable chat messages.
+  // The agent name is looked up from mentionRunAgents (populated at dispatch
+  // time) using the envelope's run_id. Falls back to "mention" for envelopes
+  // whose run was not initiated in this session (e.g., replayed stubs).
   const mentionMessages = useMemo(
     () =>
       mentionEvents
         .map((env) => {
           const ev = env.event as { type: string; data?: { content?: string } };
           if (ev.type === "TextDelta" && typeof ev.data?.content === "string") {
-            return { id: env.event_id, content: ev.data.content };
+            return {
+              id: env.event_id,
+              content: ev.data.content,
+              agent: mentionRunAgents[env.run_id] ?? "mention",
+            };
           }
           return null;
         })
-        .filter((m): m is { id: string; content: string } => m !== null),
-    [mentionEvents],
+        .filter(
+          (m): m is { id: string; content: string; agent: string } =>
+            m !== null,
+        ),
+    [mentionEvents, mentionRunAgents],
   );
 
   // onSend is called by ChatColumn/ChatComposer on Cmd+Enter or send-button click.
@@ -107,6 +123,12 @@ export default function ChatPane({
             agent: parsed.command.agent,
             body: parsed.command.body,
           })) as MentionResult;
+          // Record run_id → agent so incoming EventEnvelopes on the mention
+          // channel can be projected with the real agent name.
+          setMentionRunAgents((prev) => ({
+            ...prev,
+            [result.run_id]: result.agent,
+          }));
           setSystemMessages((prev) => [
             ...prev,
             `Mention dispatched to @${parsed.command.agent} (run ${result.run_id})${result.dispatched ? "" : " [STUB]"}`,
@@ -122,10 +144,14 @@ export default function ChatPane({
   };
 
   // Adapt mentionMessages for ChatColumn: map to { agent, body, t } shape.
+  // The agent field now carries the real agent name (e.g., "architect") from
+  // the dispatch-time run_id→agent mapping rather than the "mention" placeholder.
+  // Timestamp is not surfaced in EventEnvelope for mention stubs; use empty
+  // string (ChatMessage renders nothing for an empty timestamp).
   const mentionMessagesForColumn = useMemo(
     () =>
       mentionMessages.map((m) => ({
-        agent: "mention",
+        agent: m.agent,
         body: m.content,
         t: "",
       })),

@@ -95,6 +95,29 @@ describe("ChatColumn", () => {
       expect(agentMsg).toHaveTextContent("reply from agent");
     });
 
+    it("renders data-agent='developer' when assistant message has senderAgent='developer'", () => {
+      render(
+        <ChatColumn
+          {...makeProps({
+            messages: [
+              {
+                id: "m3",
+                session_id: "s1",
+                run_id: null,
+                role: "assistant",
+                senderAgent: "developer",
+                content: "developer reply",
+                metadata: null,
+                created_at: 1002,
+              },
+            ],
+          })}
+        />,
+      );
+      const agentMsg = screen.getByTestId("chat-message-agent");
+      expect(agentMsg).toHaveAttribute("data-agent", "developer");
+    });
+
     it("renders system messages via chat-message-system testid", () => {
       render(
         <ChatColumn
@@ -186,6 +209,19 @@ describe("ChatColumn", () => {
 
     it("hides ActiveRunIndicator when activeRunId is null", () => {
       render(<ChatColumn {...makeProps({ activeRunId: null })} />);
+      expect(screen.queryByTestId("active-run-indicator")).toBeNull();
+    });
+
+    it("hides ActiveRunIndicator when activeRunId is set but onCancelActiveRun is undefined", () => {
+      render(
+        <ChatColumn
+          {...makeProps({
+            activeRunId: "run-abc",
+            activeRunStartedAtMs: null,
+            onCancelActiveRun: undefined,
+          })}
+        />,
+      );
       expect(screen.queryByTestId("active-run-indicator")).toBeNull();
     });
   });

@@ -92,4 +92,57 @@ describe("ChatPane @mention routing", () => {
       "[STUB] @architect received: hello",
     );
   });
+
+  it("mention envelopes render with data-agent matching the dispatched agent name", async () => {
+    // Dispatch a mention for "architect", then simulate the mention event
+    // arriving on the channel. The rendered chat message should carry
+    // data-agent="architect", not data-agent="mention".
+    invokeMock.mockResolvedValueOnce({
+      run_id: "run-arch-42",
+      agent: "architect",
+      dispatched: false,
+    });
+    render(<ChatPane />);
+
+    await waitFor(() => {
+      expect(capturedMentionHandler).not.toBeNull();
+    });
+
+    // Trigger the mention dispatch so ChatPane tracks run_id → agent.
+    const textarea = screen.getByTestId("chat-input");
+    fireEvent.change(textarea, { target: { value: "@architect explain tdd" } });
+    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("mention_agent", {
+        agent: "architect",
+        body: "explain tdd",
+      });
+    });
+
+    // Now simulate a TextDelta event arriving for that run.
+    act(() => {
+      capturedMentionHandler!({
+        payload: {
+          schema_version: 1,
+          event_id: "ev-arch-1",
+          run_id: "run-arch-42",
+          step_id: null,
+          timestamp_ms: 100,
+          event: {
+            type: "TextDelta",
+            data: { content: "TDD means red-green-refactor." },
+          },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-message-agent")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("chat-message-agent")).toHaveAttribute(
+      "data-agent",
+      "architect",
+    );
+  });
 });
