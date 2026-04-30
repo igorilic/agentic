@@ -8,6 +8,7 @@ export type PipelineBarProps = {
   agents: string[];
   statuses: Record<string, AgentStatus>;
   activeIndex: number;
+  skipped?: ReadonlySet<string>;
   onReorder?: (from: number, to: number) => void;
   onInsert?: (atIndex: number, agentId: string) => void;
   onRemove?: (atIndex: number) => void;
@@ -56,8 +57,11 @@ function useDragReorder(onReorder?: (from: number, to: number) => void) {
 export default function PipelineBar({
   agents,
   statuses,
+  skipped,
   onReorder,
   onInsert,
+  onRemove,
+  onSkip,
 }: PipelineBarProps) {
   const [pickerOpenAt, setPickerOpenAt] = useState<number | "end" | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
@@ -149,10 +153,13 @@ export default function PipelineBar({
           <AgentCard
             agent={agent}
             status={statuses[agent] ?? "queued"}
+            skipped={skipped?.has(agent) ?? false}
             draggable={true}
             dragging={dragFromIndex === i}
             onDragStart={() => onCardDragStart(i)}
             onDragEnd={() => onCardDragEnd()}
+            onRemove={() => onRemove?.(i)}
+            onSkip={() => onSkip?.(i)}
           />
           {i < agents.length - 1 && renderInterCardGap(i + 1)}
         </div>

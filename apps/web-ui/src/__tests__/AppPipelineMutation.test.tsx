@@ -14,7 +14,7 @@
  *   drag(0) → gap-3: adjusted = 0 < 3 ? 2 : 3 = 2 → order: [tdd-developer, qa, architect, reviewer]
  */
 
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import App from "../App";
@@ -54,9 +54,15 @@ function stubMatchMedia() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+/**
+ * Return testids for the root agent-card elements only (the ones that carry
+ * data-status). Filters out nested child testids like agent-card-foo-avatar,
+ * agent-card-foo-menu, etc. which also match the prefix pattern.
+ */
 function getCardTestIds() {
   return screen
-    .getAllByTestId(/^agent-card-[a-z-]+$/)
+    .getAllByTestId(/^agent-card-/)
+    .filter((el) => el.hasAttribute("data-status"))
     .map((el) => el.dataset.testid as string);
 }
 

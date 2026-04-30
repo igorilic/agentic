@@ -16,6 +16,7 @@ import type { ActivityFilter } from "./components/ActivityHeader";
 import type { IssueTicket } from "./types/pipeline";
 import { findingsToActionItems } from "./utils/findingsToActionItems";
 import { isTauriDense } from "./utils/isTauriDense";
+import { usePipelineMutation } from "./hooks/usePipelineMutation";
 
 const PLACEHOLDER_TICKET: IssueTicket = {
   id: "AGT-000",
@@ -48,7 +49,17 @@ export default function App() {
   const runState = useMemo(() => deriveRunState(events), [events]);
 
   const { overallRunState, elapsedMs } = useRunStateOverall(events, activeRunId);
-  const { pipelineAgents, pipelineStatuses, activeIndex } = usePipelineFromRunState(runState);
+  const { pipelineStatuses, activeIndex } = usePipelineFromRunState(runState);
+
+  // Local-only pipeline state (spec §6.8.3). Re-seeds on activeRunId change.
+  const {
+    pipelineAgents,
+    pipelineSkipped,
+    onReorder,
+    onInsert,
+    onRemove,
+    onSkip,
+  } = usePipelineMutation(runState, activeRunId);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -103,6 +114,11 @@ export default function App() {
             agents={pipelineAgents}
             statuses={pipelineStatuses}
             activeIndex={activeIndex}
+            skipped={pipelineSkipped}
+            onReorder={onReorder}
+            onInsert={onInsert}
+            onRemove={onRemove}
+            onSkip={onSkip}
           />
         }
       >

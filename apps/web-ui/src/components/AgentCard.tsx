@@ -4,6 +4,7 @@ import type { AgentStatus } from "../types/pipeline";
 export type AgentCardProps = {
   agent: string;
   status: AgentStatus;
+  skipped?: boolean;
   onRemove?: () => void;
   onSkip?: () => void;
   draggable?: boolean;
@@ -39,6 +40,7 @@ const STATUS_BORDER_CLASS: Record<AgentStatus, string> = {
 export default function AgentCard({
   agent,
   status,
+  skipped = false,
   onRemove,
   onSkip,
   draggable: isDraggable = false,
@@ -69,13 +71,14 @@ export default function AgentCard({
       data-testid={`agent-card-${agent}`}
       data-status={status}
       data-dragging={dragging ? "true" : "false"}
+      data-skipped={skipped ? "true" : "false"}
       role="button"
       tabIndex={0}
       aria-label={`${agent} — ${status}`}
       draggable={isDraggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`relative border ${borderClass} rounded-[10px] bg-bg-surface px-3 py-2 flex flex-col gap-1`}
+      className={`relative border ${borderClass} rounded-[10px] bg-bg-surface px-3 py-2 flex flex-col gap-1${skipped ? " opacity-50" : ""}`}
     >
       {status === "active" && (
         <div
@@ -98,7 +101,7 @@ export default function AgentCard({
 
         <div className="flex flex-col gap-0.5 flex-1 min-w-0 pt-0.5">
           <div className="flex items-center gap-1">
-            <span className="text-[13px] font-semibold text-fg leading-none">{agent}</span>
+            <span className={`text-[13px] font-semibold text-fg leading-none${skipped ? " line-through" : ""}`}>{agent}</span>
             {status === "active" && (
               <span
                 data-testid={`agent-card-${agent}-pulse`}
