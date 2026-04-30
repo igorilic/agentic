@@ -1677,6 +1677,11 @@ pane**. The dual binding is the contract:
    - Why deferred: backend pipeline-config persistence not yet specified.
    - Trigger: when `pipeline.toml` mutability lands.
 
+8. **Backend ChatMessage `senderAgent` field** (GH #90).
+   - What's missing: Rust `ChatMessage` struct + `chat_send_message` IPC don't carry which agent answered; TS `ChatMessage.senderAgent?` is reserved but always undefined for backend-issued assistants. ChatColumn falls back to `agent="assistant"` placeholder, so per-agent tints are homogeneous instead of agent-aware.
+   - Why deferred: schema change touches `agentic-core`, the chat SQLite migration, the `agentic-tauri` IPC handler, and the chat-routing layer that knows the answering agent.
+   - Trigger: when chat replies are actually orchestrated by the multi-agent pipeline (architect/developer/qa/reviewer) rather than a single-LLM passthrough.
+
 ---
 
 ## Status checklist
@@ -1712,7 +1717,7 @@ Phase 4 — Web Chat column
 - [x] W.4.3 ChatComposer
 - [x] W.4.4 Slash popover
 - [x] W.4.5 Mention popover
-- [ ] W.4.6 ChatColumn integration
+- [x] W.4.6 ChatColumn integration
 
 Phase 5 — Web Activity column
 - [ ] W.5.1 ActivityHeader tabs
