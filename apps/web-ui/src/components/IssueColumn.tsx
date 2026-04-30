@@ -15,7 +15,7 @@ export type IssueColumnProps = {
   ticket: IssueTicket;
   runState?: RunStateOverall;
   actionItems?: ActionItem[];
-  onTicketRunStarted?: (runId: string) => void;
+  onTicketRunStarted?: (info: { runId: string; ticketLabel: string }) => void;
 };
 
 const ACTION_ITEM_ICON: Record<ActionItem["kind"], string> = {
@@ -34,7 +34,7 @@ export default function IssueColumn({ ticket, runState, actionItems, onTicketRun
   const handleCreateSpecSubmit = async (title: string, _body: string) => {
     try {
       const runId = await createSpec(title);
-      if (runId !== undefined) onTicketRunStarted?.(runId);
+      if (runId !== undefined) onTicketRunStarted?.({ runId, ticketLabel: title });
       setSpecDialogOpen(false);
     } catch {
       // Keep dialog open on failure so the user can retry; errors surface at the App level.

@@ -28,6 +28,7 @@ const PLACEHOLDER_TICKET: IssueTicket = {
 
 export default function App() {
   const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
+  const [activeTicketLabel, setActiveTicketLabel] = useState<string | undefined>(undefined);
   const [findingsRunId, setFindingsRunId] = useState<string | undefined>(undefined);
   const [findingsRefetchKey, setFindingsRefetchKey] = useState(0);
 
@@ -71,6 +72,11 @@ export default function App() {
     await invoke("cancel_run", { runId: activeRunId });
   }, [activeRunId]);
 
+  const handleTicketRunStarted = useCallback((info: { runId: string; ticketLabel: string }) => {
+    setActiveRunId(info.runId);
+    setActiveTicketLabel(info.ticketLabel);
+  }, []);
+
   const handleRunPipeline = useCallback(() => {
     // Minimal placeholder: invokes start_ticket_run directly.
     // A SpecDialog-driven Run flow is tracked for a future W.8.x step.
@@ -80,7 +86,10 @@ export default function App() {
       model: null,
     })
       .then((result: unknown) => {
-        if (typeof result === "string") setActiveRunId(result);
+        if (typeof result === "string") {
+          setActiveRunId(result);
+          setActiveTicketLabel("Untitled run");
+        }
       })
       .catch(() => {
         /* no-op; failure surfaces via the run-state pill remaining idle */
@@ -88,7 +97,16 @@ export default function App() {
   }, []);
 
   const dense = isTauriDense();
-  const ticket = PLACEHOLDER_TICKET;
+  const ticket: IssueTicket = useMemo(() => {
+    if (activeTicketLabel === undefined) return PLACEHOLDER_TICKET;
+    return {
+      id: "AGT-DEV",
+      title: activeTicketLabel,
+      labels: [],
+      body: ["No description available — ticket source integration ships in a future phase."],
+      acceptance: [],
+    };
+  }, [activeTicketLabel]);
 
   return (
     <>
@@ -122,7 +140,7 @@ export default function App() {
         }
       >
         <ChatPane
-          onTicketRunStarted={setActiveRunId}
+          onTicketRunStarted={handleTicketRunStarted}
         />
         <ActivityColumn
           events={events}
@@ -137,7 +155,7 @@ export default function App() {
           ticket={ticket}
           runState={overallRunState}
           actionItems={actionItems}
-          onTicketRunStarted={setActiveRunId}
+          onTicketRunStarted={handleTicketRunStarted}
         />
       </AppShell>
       <SettingsModal

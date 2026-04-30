@@ -9,11 +9,8 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 // invokeMock is a named reference so we can reset it in afterEach.
-const invokeMock = vi.fn(async (cmd: string) => {
-  if (cmd === "list_runs") return [];
-  if (cmd === "list_findings") return [];
-  return undefined;
-});
+// Return type is unknown so per-test mockImplementation can return strings or arrays.
+const invokeMock = vi.fn(async (_cmd: string): Promise<unknown> => undefined);
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...(args as [string])),
@@ -42,9 +39,10 @@ beforeEach(() => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
   invokeMock.mockReset();
-  invokeMock.mockImplementation(async (cmd: string) => {
+  invokeMock.mockImplementation(async (cmd: string): Promise<unknown> => {
     if (cmd === "list_runs") return [];
     if (cmd === "list_findings") return [];
+    if (cmd === "get_event_history") return [];
     return undefined;
   });
 });
@@ -92,10 +90,11 @@ describe("App polish (W.9.8)", () => {
   });
 
   it("after SpecDialog submit, IssueColumn title updates to the typed title (B1)", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string): Promise<unknown> => {
       if (cmd === "start_ticket_run") return "run-b1-test";
       if (cmd === "list_runs") return [];
       if (cmd === "list_findings") return [];
+      if (cmd === "get_event_history") return [];
       return undefined;
     });
     const user = userEvent.setup();

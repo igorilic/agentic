@@ -14,8 +14,8 @@ type MentionResult = {
 };
 
 export type ChatPaneProps = {
-  /// Called when `/plan <ticket>` successfully kicks off a real ticket run.
-  onTicketRunStarted?: (runId: string) => void;
+  /// Called when `/plan <ticket>` or SpecDialog successfully kicks off a real ticket run.
+  onTicketRunStarted?: (info: { runId: string; ticketLabel: string }) => void;
 };
 
 export default function ChatPane({
@@ -40,7 +40,7 @@ export default function ChatPane({
           backend: backend ?? "claude-code",
           model: null,
         })) as string;
-        onTicketRunStarted?.(runId);
+        onTicketRunStarted?.({ runId, ticketLabel: ticket });
         return runId;
       },
       status: async (_runId) => {
