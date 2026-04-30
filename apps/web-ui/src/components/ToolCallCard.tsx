@@ -1,12 +1,5 @@
 import { useState } from "react";
-
-// Per-agent Tailwind name classes — literal strings required for JIT scanner.
-const AGENT_COLOR_CLASS: Record<string, string> = {
-  architect: "text-agent-architect",
-  developer: "text-agent-developer",
-  qa: "text-agent-qa",
-  reviewer: "text-agent-reviewer",
-};
+import { agentColorClass } from "../utils/agentColorClass";
 
 export type ToolCallCardProps = {
   agent: string;
@@ -18,7 +11,7 @@ export type ToolCallCardProps = {
 
 export default function ToolCallCard({ agent, tool, arg, result, details }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const agentClass = AGENT_COLOR_CLASS[agent] ?? "text-fg";
+  const agentClass = agentColorClass(agent);
 
   const isOk = result === "OK";
   const isErr = result === "error";

@@ -6,3 +6,5 @@ dist/
 .agentic/state.*
 # Tauri-generated ACL schemas — regenerated on every build by tauri_build
 crates/agentic-tauri/gen/
+# TDD gate bypass marker
+.tdd-skip

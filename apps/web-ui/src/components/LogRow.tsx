@@ -1,10 +1,4 @@
-// Per-agent Tailwind name classes — literal strings required for JIT scanner.
-const AGENT_COLOR_CLASS: Record<string, string> = {
-  architect: "text-agent-architect",
-  developer: "text-agent-developer",
-  qa: "text-agent-qa",
-  reviewer: "text-agent-reviewer",
-};
+import { agentColorClass } from "../utils/agentColorClass";
 
 export type LogLevel = "info" | "status" | "error";
 
@@ -16,7 +10,7 @@ export type LogRowProps = {
 };
 
 export default function LogRow({ level, t, agent, message }: LogRowProps) {
-  const agentClass = AGENT_COLOR_CLASS[agent] ?? "text-fg";
+  const agentClass = agentColorClass(agent);
   return (
     <div
       data-testid={`log-row-${level}`}
