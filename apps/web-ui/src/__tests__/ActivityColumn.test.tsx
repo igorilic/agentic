@@ -2,6 +2,7 @@ import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import ActivityColumn from "../components/ActivityColumn";
 import type { EventEnvelope } from "../types/event";
+import type { PermissionRequest } from "../types/pipeline";
 
 function envelope(opts: {
   id: string;
@@ -24,6 +25,42 @@ function ControlledActivityColumn({ events }: { events: EventEnvelope[] }) {
   const [filter, setFilter] = useState<"all" | "tool" | "perm" | "error">("all");
   return <ActivityColumn events={events} filter={filter} onFilterChange={setFilter} />;
 }
+
+type ControlledWithPermsProps = {
+  events: EventEnvelope[];
+  pendingPermissions?: PermissionRequest[];
+  onPermissionDecision?: (permId: string, decision: "once" | "session" | "deny") => void;
+  initialFilter?: "all" | "tool" | "perm" | "error";
+};
+
+function ControlledActivityColumnWithPerms({
+  events,
+  pendingPermissions,
+  onPermissionDecision,
+  initialFilter = "all",
+}: ControlledWithPermsProps) {
+  const [filter, setFilter] = useState<"all" | "tool" | "perm" | "error">(initialFilter);
+  return (
+    <ActivityColumn
+      events={events}
+      filter={filter}
+      onFilterChange={setFilter}
+      pendingPermissions={pendingPermissions}
+      onPermissionDecision={onPermissionDecision}
+    />
+  );
+}
+
+const examplePerm: PermissionRequest = {
+  id: "p1",
+  agent: "developer",
+  tool: "shell",
+  arg: "redis-cli FLUSHDB",
+  scope: "shell.destructive",
+  risk: "high",
+  reason: "Reset Redis to validate cold-start.",
+  t: 1_700_000_001_000,
+};
 
 const mixedEvents: EventEnvelope[] = [
   envelope({ id: "e1", type: "RunStarted", t: 1_700_000_000_000, stepId: null }),
@@ -175,5 +212,170 @@ describe("ActivityColumn", () => {
     render(<ControlledActivityColumn events={findingEvents} />);
     fireEvent.click(screen.getByTestId("activity-tab-error"));
     expect(screen.getAllByTestId("event-row")).toHaveLength(1);
+  });
+});
+
+// --- W.7.2: PermissionCard inline in ActivityColumn ---
+
+const permEnvelope = envelope({
+  id: "pe1",
+  type: "PermissionRequest",
+  t: 1_700_000_001_000,
+  stepId: "developer",
+  data: { permId: "p1" },
+});
+
+describe("ActivityColumn — W.7.2 PermissionCard inline rendering", () => {
+  it("renders PermissionCard for a matched perm event", () => {
+    render(
+      <ControlledActivityColumnWithPerms
+        events={[permEnvelope]}
+        pendingPermissions={[examplePerm]}
+      />,
+    );
+    expect(screen.getByTestId("permission-card")).toBeInTheDocument();
+    expect(screen.getAllByTestId("event-row")).toHaveLength(1);
+  });
+
+  it("filter 'perm' shows permission cards", () => {
+    render(
+      <ControlledActivityColumnWithPerms
+        events={[permEnvelope]}
+        pendingPermissions={[examplePerm]}
+        initialFilter="perm"
+      />,
+    );
+    expect(screen.getByTestId("permission-card")).toBeInTheDocument();
+  });
+
+  it("filter 'tool' hides permission cards", () => {
+    render(
+      <ControlledActivityColumnWithPerms
+        events={[permEnvelope]}
+        pendingPermissions={[examplePerm]}
+        initialFilter="tool"
+      />,
+    );
+    expect(screen.queryByTestId("permission-card")).toBeNull();
+  });
+
+  it("filter 'all' includes permission cards", () => {
+    render(
+      <ControlledActivityColumnWithPerms
+        events={[permEnvelope]}
+        pendingPermissions={[examplePerm]}
+        initialFilter="all"
+      />,
+    );
+    expect(screen.getByTestId("permission-card")).toBeInTheDocument();
+  });
+
+  it("header counts.perm reflects 1 when one matched perm event present", () => {
+    render(
+      <ControlledActivityColumnWithPerms
+        events={[permEnvelope]}
+        pendingPermissions={[examplePerm]}
+      />,
+    );
+    expect(screen.getByTestId("activity-tab-perm-count")).toHaveTextContent("1");
+  });
+
+  it("unmatched perm event (permId not in pendingPermissions) drops out", () => {
+    const unmatchedEnvelope = envelope({
+      id: "pe2",
+      type: "PermissionRequest",
+      data: { permId: "p999" },
+    });
+    render(
+      <ControlledActivityColumnWithPerms
+        events={[unmatchedEnvelope]}
+        pendingPermissions={[]}
+      />,
+    );
+    expect(screen.queryByTestId("permission-card")).toBeNull();
+    expect(screen.queryAllByTestId("event-row")).toHaveLength(0);
+    expect(screen.getByTestId("activity-tab-perm-count")).toHaveTextContent("0");
+  });
+
+  it("omitting pendingPermissions prop causes perm events to drop entirely", () => {
+    render(
+      <ControlledActivityColumnWithPerms
+        events={[permEnvelope]}
+        // pendingPermissions omitted
+      />,
+    );
+    expect(screen.queryByTestId("permission-card")).toBeNull();
+    expect(screen.queryAllByTestId("event-row")).toHaveLength(0);
+  });
+
+  it("decision callback fires onPermissionDecision('p1', 'once') on Allow once", () => {
+    const onDecision = vi.fn();
+    render(
+      <ControlledActivityColumnWithPerms
+        events={[permEnvelope]}
+        pendingPermissions={[examplePerm]}
+        onPermissionDecision={onDecision}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("permission-card-allow-once"));
+    expect(onDecision).toHaveBeenCalledWith("p1", "once");
+  });
+
+  it("decision callback fires onPermissionDecision('p1', 'session') on Allow for session", () => {
+    const onDecision = vi.fn();
+    render(
+      <ControlledActivityColumnWithPerms
+        events={[permEnvelope]}
+        pendingPermissions={[examplePerm]}
+        onPermissionDecision={onDecision}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("permission-card-allow-session"));
+    expect(onDecision).toHaveBeenCalledWith("p1", "session");
+  });
+
+  it("decision callback fires onPermissionDecision('p1', 'deny') on Deny", () => {
+    const onDecision = vi.fn();
+    render(
+      <ControlledActivityColumnWithPerms
+        events={[permEnvelope]}
+        pendingPermissions={[examplePerm]}
+        onPermissionDecision={onDecision}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("permission-card-deny"));
+    expect(onDecision).toHaveBeenCalledWith("p1", "deny");
+  });
+
+  it("mixed event stream: RunStarted + PermissionRequest + ToolCall all visible under filter=all", () => {
+    const mixedWithPerm: EventEnvelope[] = [
+      envelope({ id: "m1", type: "RunStarted", t: 1_700_000_000_000 }),
+      permEnvelope,
+      envelope({
+        id: "m3",
+        type: "ToolCall",
+        t: 1_700_000_002_000,
+        stepId: "developer",
+        data: { tool: "read_file", arg: "/src/api.ts", result: "OK" },
+      }),
+    ];
+    render(
+      <ControlledActivityColumnWithPerms
+        events={mixedWithPerm}
+        pendingPermissions={[examplePerm]}
+        initialFilter="all"
+      />,
+    );
+    const rows = screen.getAllByTestId("event-row");
+    expect(rows).toHaveLength(3);
+    // The perm row is at index 1; it contains the PermissionCard
+    expect(rows[1].querySelector('[data-testid="permission-card"]')).not.toBeNull();
+  });
+
+  it("W.5.4 backward compat: existing tests still pass without pendingPermissions (perm events drop, others show)", () => {
+    // existing ControlledActivityColumn never passes pendingPermissions — verify it still works
+    render(<ControlledActivityColumn events={mixedEvents} />);
+    expect(screen.getAllByTestId("event-row")).toHaveLength(5);
+    expect(screen.queryByTestId("permission-card")).toBeNull();
   });
 });

@@ -1,15 +1,22 @@
 import type { EventEnvelope } from "../types/event";
+import type { PermissionRequest } from "../types/pipeline";
 import ActivityHeader, {
   type ActivityFilter,
   type ActivityCounts,
 } from "./ActivityHeader";
 import LogRow from "./LogRow";
 import ToolCallCard from "./ToolCallCard";
+import PermissionCard from "./PermissionCard";
 
 export type ActivityColumnProps = {
   events: EventEnvelope[];
   filter: ActivityFilter;
   onFilterChange: (filter: ActivityFilter) => void;
+  pendingPermissions?: PermissionRequest[];
+  onPermissionDecision?: (
+    permId: string,
+    decision: "once" | "session" | "deny",
+  ) => void;
 };
 
 type VisibleRow =
@@ -24,7 +31,8 @@ type VisibleRow =
       arg: string;
       result: string;
       details?: string;
-    };
+    }
+  | { kind: "permission"; id: string; permission: PermissionRequest };
 
 type ActivityRow = VisibleRow | { kind: "filtered" };
 
@@ -38,9 +46,23 @@ function formatTime(ms: number): string {
   return `${hh}:${mm}:${ss}`;
 }
 
-function classify(env: EventEnvelope): ActivityRow {
+function classify(
+  env: EventEnvelope,
+  permsById: Map<string, PermissionRequest>,
+): ActivityRow {
   const type = env.event.type;
   if (type === "TextDelta") return { kind: "filtered" };
+
+  if (type === "PermissionRequest") {
+    const data = (env.event.data ?? {}) as { permId?: unknown };
+    if (typeof data.permId === "string") {
+      const perm = permsById.get(data.permId);
+      if (perm !== undefined) {
+        return { kind: "permission", id: env.event_id, permission: perm };
+      }
+    }
+    return { kind: "filtered" };
+  }
 
   const t = formatTime(env.timestamp_ms);
   const agent = env.step_id ?? "system";
@@ -109,7 +131,7 @@ function matchesFilter(row: VisibleRow, filter: ActivityFilter): boolean {
   if (filter === "all") return true;
   if (filter === "tool") return row.kind === "tool";
   if (filter === "error") return row.kind === "error";
-  if (filter === "perm") return false; // PermissionRequest arrives in a later phase
+  if (filter === "perm") return row.kind === "permission";
   return false;
 }
 
@@ -117,13 +139,19 @@ export default function ActivityColumn({
   events,
   filter,
   onFilterChange,
+  pendingPermissions,
+  onPermissionDecision,
 }: ActivityColumnProps) {
-  const rows = events.map(classify);
+  const permsById = new Map(
+    (pendingPermissions ?? []).map((p) => [p.id, p]),
+  );
+
+  const rows = events.map((env) => classify(env, permsById));
 
   const counts: ActivityCounts = {
     all: rows.filter((r) => r.kind !== "filtered").length,
     tool: rows.filter((r) => r.kind === "tool").length,
-    perm: 0,
+    perm: rows.filter((r) => r.kind === "permission").length,
     error: rows.filter((r) => r.kind === "error").length,
   };
 
@@ -151,6 +179,18 @@ export default function ActivityColumn({
           </li>
         ) : (
           visible.map((row) => {
+            if (row.kind === "permission") {
+              return (
+                <li key={row.id} data-testid="event-row">
+                  <PermissionCard
+                    permission={row.permission}
+                    onDecision={(decision) =>
+                      onPermissionDecision?.(row.permission.id, decision)
+                    }
+                  />
+                </li>
+              );
+            }
             if (row.kind === "tool") {
               return (
                 <li key={row.id} data-testid="event-row">
