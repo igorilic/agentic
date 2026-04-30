@@ -416,4 +416,176 @@ describe("ChatComposer", () => {
       expect(screen.getByTestId("slash-popover").getAttribute("aria-label")).toBe("Slash commands");
     });
   });
+
+  describe("mention popover", () => {
+    it("typing @ alone opens the mention popover", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "@" } });
+
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+    });
+
+    it("typing @arc opens the mention popover", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "@arc" } });
+
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+    });
+
+    it("typing @arc filters to show only architect row", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "@arc" } });
+
+      expect(screen.getByTestId("agent-picker-row-architect")).toBeInTheDocument();
+      // other agents should be filtered out
+      expect(screen.queryByTestId("agent-picker-row-developer")).toBeNull();
+      expect(screen.queryByTestId("agent-picker-row-qa")).toBeNull();
+    });
+
+    it("typing 'hi @arc' opens mention popover with architect filtered", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "hi @arc" } });
+
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+      expect(screen.getByTestId("agent-picker-row-architect")).toBeInTheDocument();
+      expect(screen.queryByTestId("agent-picker-row-developer")).toBeNull();
+    });
+
+    it("typing 'hi@arc' (no space before @) does NOT open mention popover", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "hi@arc" } });
+
+      expect(screen.queryByTestId("mention-popover")).toBeNull();
+    });
+
+    it("typing 'hi @arc done' (space after query) does NOT open mention popover", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "hi @arc done" } });
+
+      expect(screen.queryByTestId("mention-popover")).toBeNull();
+    });
+
+    it("typing 'hi @' shows all 12 agents", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "hi @" } });
+
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+      const rows = screen.queryAllByTestId(/^agent-picker-row-/);
+      expect(rows).toHaveLength(12);
+    });
+
+    it("clicking architect row when value is '@' sets textarea to '@architect '", async () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "@" } });
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByTestId("agent-picker-row-architect"));
+
+      expect(textarea).toHaveValue("@architect ");
+      expect(screen.queryByTestId("mention-popover")).toBeNull();
+    });
+
+    it("clicking architect row when value is 'hi @arc' sets textarea to 'hi @architect '", async () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "hi @arc" } });
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByTestId("agent-picker-row-architect"));
+
+      expect(textarea).toHaveValue("hi @architect ");
+      expect(screen.queryByTestId("mention-popover")).toBeNull();
+    });
+
+    it("pressing Escape closes the mention popover and preserves input", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "@" } });
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+
+      // AgentPicker's internal keyboard handler fires onClose on Escape
+      // which sets mentionEscClosedForValue
+      const agentPicker = screen.getByTestId("agent-picker");
+      fireEvent.keyDown(agentPicker, { key: "Escape" });
+
+      expect(screen.queryByTestId("mention-popover")).toBeNull();
+      expect(textarea).toHaveValue("@");
+    });
+
+    it("typing past the trigger reopens mention popover after Esc", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      // open at "@ar"
+      fireEvent.change(textarea, { target: { value: "@ar" } });
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+
+      // Escape closes it for "@ar"
+      const agentPicker = screen.getByTestId("agent-picker");
+      fireEvent.keyDown(agentPicker, { key: "Escape" });
+      expect(screen.queryByTestId("mention-popover")).toBeNull();
+
+      // type one more char — value is now "@arc", different from "@ar"
+      fireEvent.change(textarea, { target: { value: "@arc" } });
+
+      // popover reopens
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+    });
+
+    it("'/plan @arc' — slash popover does NOT open (no slash match), mention popover DOES open", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "/plan @arc" } });
+
+      // slash popover does NOT open (value doesn't match /^\/[a-z]*$/)
+      expect(screen.queryByTestId("slash-popover")).toBeNull();
+      // mention popover DOES open (space before @ and no space in query)
+      expect(screen.getByTestId("mention-popover")).toBeInTheDocument();
+    });
+
+    it("the mention popover's AgentPicker has width class w-60 (240 px narrow)", () => {
+      render(<ChatComposer onSend={vi.fn()} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      fireEvent.change(textarea, { target: { value: "@" } });
+
+      const agentPicker = screen.getByTestId("agent-picker");
+      expect(agentPicker.className).toContain("w-60");
+      expect(agentPicker.className).not.toContain("w-80");
+    });
+
+    it("Cmd+Enter with '@architect hello' calls onSend with the raw value", async () => {
+      const onSend = vi.fn();
+      render(<ChatComposer onSend={onSend} />);
+      const textarea = screen.getByTestId("chat-composer-textarea");
+
+      // type a value that would invoke parseMention on submission
+      fireEvent.change(textarea, { target: { value: "@architect hello" } });
+      // close popover first (space after — trigger ended)
+      expect(screen.queryByTestId("mention-popover")).toBeNull();
+
+      fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+
+      expect(onSend).toHaveBeenCalledWith("@architect hello");
+    });
+  });
 });
