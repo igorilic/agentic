@@ -1,0 +1,133 @@
+[
+  {
+    "type": "StepStarted",
+    "data": { "agent": "architect", "model": "claude-sonnet-4-6" }
+  },
+  { "type": "TextDelta", "data": { "content": "Analyzing requirements…" } },
+  { "type": "TextDelta", "data": { "content": " Designing spec." } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "spec ready",
+      "token_usage": {
+        "input_tokens": 320,
+        "output_tokens": 780,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.012,
+      "duration_ms": 1400
+    }
+  },
+  {
+    "type": "StepStarted",
+    "data": { "agent": "tdd-developer", "model": "claude-sonnet-4-6" }
+  },
+  { "type": "TextDelta", "data": { "content": "Writing failing tests…" } },
+  {
+    "type": "ToolUseStart",
+    "data": {
+      "tool_call_id": "tc-001",
+      "tool_name": "write_file",
+      "input": { "path": "src/lib_test.rs", "content": "#[test] fn it_works() {}" }
+    }
+  },
+  {
+    "type": "ToolUseDelta",
+    "data": {
+      "tool_call_id": "tc-001",
+      "stream": "stdout",
+      "content": "wrote src/lib_test.rs"
+    }
+  },
+  {
+    "type": "ToolUseEnd",
+    "data": {
+      "tool_call_id": "tc-001",
+      "exit_code": 0,
+      "duration_ms": 42
+    }
+  },
+  { "type": "TextDelta", "data": { "content": " Implementing minimum code." } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "tests green",
+      "token_usage": {
+        "input_tokens": 610,
+        "output_tokens": 1240,
+        "cache_read_input_tokens": 80,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.023,
+      "duration_ms": 1850
+    }
+  },
+  {
+    "type": "StepStarted",
+    "data": { "agent": "qa", "model": "claude-haiku-4-5-20251001" }
+  },
+  { "type": "TextDelta", "data": { "content": "Running test suite…" } },
+  {
+    "type": "ToolUseStart",
+    "data": {
+      "tool_call_id": "tc-002",
+      "tool_name": "bash",
+      "input": { "command": "cargo test --workspace" }
+    }
+  },
+  {
+    "type": "ToolUseDelta",
+    "data": {
+      "tool_call_id": "tc-002",
+      "stream": "stdout",
+      "content": "test result: ok. 12 passed; 0 failed"
+    }
+  },
+  {
+    "type": "ToolUseEnd",
+    "data": {
+      "tool_call_id": "tc-002",
+      "exit_code": 0,
+      "duration_ms": 890
+    }
+  },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "all tests pass",
+      "token_usage": {
+        "input_tokens": 180,
+        "output_tokens": 320,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.004,
+      "duration_ms": 950
+    }
+  },
+  {
+    "type": "StepStarted",
+    "data": { "agent": "reviewer", "model": "claude-sonnet-4-6" }
+  },
+  { "type": "TextDelta", "data": { "content": "Reviewing implementation…" } },
+  { "type": "TextDelta", "data": { "content": " Code looks clean." } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "no issues found",
+      "token_usage": {
+        "input_tokens": 420,
+        "output_tokens": 560,
+        "cache_read_input_tokens": 120,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.009,
+      "duration_ms": 1100
+    }
+  }
+]

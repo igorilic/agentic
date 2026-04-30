@@ -1,0 +1,138 @@
+[
+  {
+    "type": "StepStarted",
+    "data": { "agent": "architect", "model": "claude-sonnet-4-6" }
+  },
+  { "type": "TextDelta", "data": { "content": "Designing spec…" } },
+  {
+    "type": "RetryStarted",
+    "data": {
+      "attempt": 1,
+      "reason": "rate limit exceeded; retrying"
+    }
+  },
+  {
+    "type": "Finding",
+    "data": {
+      "finding_id": "rl-arch-1",
+      "severity": "warning",
+      "file": null,
+      "line": null,
+      "message": "rate limit exceeded; retrying",
+      "suggestion": "Consider spreading requests over time or upgrading your API plan."
+    }
+  },
+  { "type": "TextDelta", "data": { "content": " Spec complete after retry." } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "spec ready (after 1 retry)",
+      "token_usage": {
+        "input_tokens": 320,
+        "output_tokens": 760,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.012,
+      "duration_ms": 3100
+    }
+  },
+  {
+    "type": "StepStarted",
+    "data": { "agent": "tdd-developer", "model": "claude-sonnet-4-6" }
+  },
+  { "type": "TextDelta", "data": { "content": "Writing tests and implementation…" } },
+  {
+    "type": "RetryStarted",
+    "data": {
+      "attempt": 1,
+      "reason": "rate limit exceeded; retrying"
+    }
+  },
+  {
+    "type": "Finding",
+    "data": {
+      "finding_id": "rl-dev-1",
+      "severity": "warning",
+      "file": null,
+      "line": null,
+      "message": "rate limit exceeded; retrying",
+      "suggestion": null
+    }
+  },
+  {
+    "type": "RetryStarted",
+    "data": {
+      "attempt": 2,
+      "reason": "rate limit exceeded; retrying"
+    }
+  },
+  {
+    "type": "Finding",
+    "data": {
+      "finding_id": "rl-dev-2",
+      "severity": "warning",
+      "file": null,
+      "line": null,
+      "message": "rate limit exceeded; retrying",
+      "suggestion": null
+    }
+  },
+  { "type": "TextDelta", "data": { "content": " Implementation done after 2 retries." } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "tests green (after 2 retries)",
+      "token_usage": {
+        "input_tokens": 580,
+        "output_tokens": 1100,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.021,
+      "duration_ms": 6200
+    }
+  },
+  {
+    "type": "StepStarted",
+    "data": { "agent": "qa", "model": "claude-haiku-4-5-20251001" }
+  },
+  { "type": "TextDelta", "data": { "content": "Running test suite…" } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "all tests pass",
+      "token_usage": {
+        "input_tokens": 180,
+        "output_tokens": 290,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.003,
+      "duration_ms": 880
+    }
+  },
+  {
+    "type": "StepStarted",
+    "data": { "agent": "reviewer", "model": "claude-sonnet-4-6" }
+  },
+  { "type": "TextDelta", "data": { "content": "Reviewing changes…" } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "review passed",
+      "token_usage": {
+        "input_tokens": 400,
+        "output_tokens": 510,
+        "cache_read_input_tokens": 100,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.008,
+      "duration_ms": 1050
+    }
+  }
+]

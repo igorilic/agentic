@@ -1,0 +1,116 @@
+[
+  {
+    "type": "StepStarted",
+    "data": { "agent": "architect", "model": "claude-sonnet-4-6" }
+  },
+  { "type": "TextDelta", "data": { "content": "Designing spec…" } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "spec ready",
+      "token_usage": {
+        "input_tokens": 290,
+        "output_tokens": 640,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.010,
+      "duration_ms": 1200
+    }
+  },
+  {
+    "type": "StepStarted",
+    "data": { "agent": "tdd-developer", "model": "claude-sonnet-4-6" }
+  },
+  { "type": "TextDelta", "data": { "content": "Writing tests and implementation…" } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "tests green",
+      "token_usage": {
+        "input_tokens": 550,
+        "output_tokens": 1100,
+        "cache_read_input_tokens": 60,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.020,
+      "duration_ms": 1700
+    }
+  },
+  {
+    "type": "StepStarted",
+    "data": { "agent": "qa", "model": "claude-haiku-4-5-20251001" }
+  },
+  { "type": "TextDelta", "data": { "content": "Running test suite…" } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "passed",
+      "summary": "12 tests pass",
+      "token_usage": {
+        "input_tokens": 160,
+        "output_tokens": 280,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.003,
+      "duration_ms": 820
+    }
+  },
+  {
+    "type": "StepStarted",
+    "data": { "agent": "reviewer", "model": "claude-sonnet-4-6" }
+  },
+  { "type": "TextDelta", "data": { "content": "Reviewing implementation…" } },
+  {
+    "type": "Finding",
+    "data": {
+      "finding_id": "mf-error-1",
+      "severity": "error",
+      "file": "src/handlers/run.rs",
+      "line": 84,
+      "message": "missing test coverage for edge case: empty ticket reference",
+      "suggestion": "Add a unit test for the empty-string ticket ref path in start_ticket_run."
+    }
+  },
+  {
+    "type": "Finding",
+    "data": {
+      "finding_id": "mf-warn-1",
+      "severity": "warning",
+      "file": "src/handlers/run.rs",
+      "line": 61,
+      "message": "consider extracting helper: token_usage_to_row is duplicated in two call sites",
+      "suggestion": "Extract into a shared fn in agentic-core so both call sites share the logic."
+    }
+  },
+  {
+    "type": "Finding",
+    "data": {
+      "finding_id": "mf-info-1",
+      "severity": "info",
+      "file": "src/handlers/run.rs",
+      "line": 47,
+      "message": "style: prefer const over let for TIMEOUT_MS",
+      "suggestion": null
+    }
+  },
+  { "type": "TextDelta", "data": { "content": " Review complete. 3 findings." } },
+  {
+    "type": "StepComplete",
+    "data": {
+      "status": "needs_triage",
+      "summary": "1 error, 1 warning, 1 info finding",
+      "token_usage": {
+        "input_tokens": 480,
+        "output_tokens": 720,
+        "cache_read_input_tokens": 140,
+        "cache_creation_input_tokens": 0
+      },
+      "cost_usd": 0.011,
+      "duration_ms": 1350
+    }
+  }
+]
