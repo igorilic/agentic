@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import type { AgentStatus } from "../types/pipeline";
 import { AGENT_LIBRARY } from "../types/pipeline";
 import AgentIcon from "./AgentIcon";
+import StatusDot from "./StatusDot";
 import { getAgentAccent } from "../utils/agentAccents";
 
 export type AgentCardProps = {
@@ -123,9 +124,7 @@ export default function AgentCard({
               />
             )}
           </div>
-          <span className="text-[10px] uppercase tracking-[0.05em] text-fg-muted leading-none">
-            {status}
-          </span>
+          <StatusDot status={status} />
         </div>
 
         <div className="relative flex-shrink-0">
