@@ -235,6 +235,42 @@ describe("HeaderBar", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
+  // W.9.5 — heroicons cog SVG for settings button
+  describe("settings icon SVG", () => {
+    it("settings button svg has viewBox 0 0 20 20", () => {
+      render(<HeaderBar {...defaultProps} />);
+      const btn = screen.getByTestId("header-settings");
+      const svg = btn.querySelector("svg");
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute("viewBox")).toBe("0 0 20 20");
+    });
+
+    it("settings button path d starts with heroicons cog prefix", () => {
+      render(<HeaderBar {...defaultProps} />);
+      const btn = screen.getByTestId("header-settings");
+      const path = btn.querySelector("path");
+      expect(path).not.toBeNull();
+      const d = path!.getAttribute("d") ?? "";
+      expect(d.startsWith("M7.84 1.804A1 1 0 018.82 1")).toBe(true);
+    });
+
+    it("settings button path d contains inner circle subpath", () => {
+      render(<HeaderBar {...defaultProps} />);
+      const btn = screen.getByTestId("header-settings");
+      const path = btn.querySelector("path");
+      expect(path).not.toBeNull();
+      const d = path!.getAttribute("d") ?? "";
+      expect(d).toContain("M10 13a3 3 0 100-6");
+    });
+
+    it("old proprietary path starting with M7.0 0.5 is not in document", () => {
+      render(<HeaderBar {...defaultProps} />);
+      const allPaths = Array.from(document.querySelectorAll("path"));
+      const oldPath = allPaths.find((p) => (p.getAttribute("d") ?? "").startsWith("M7.0 0.5"));
+      expect(oldPath).toBeUndefined();
+    });
+  });
+
   // W.1.2 — formatMmSs unit tests
   describe("formatMmSs", () => {
     it("formats 0ms as 00:00", () => {
