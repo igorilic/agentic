@@ -8,17 +8,24 @@ export type UseRunStateOverallResult = {
   elapsedMs: number | null;
 };
 
+function terminalStateFromComplete(env: EventEnvelope): "completed" | "failed" {
+  const status = (env.event.data as { status?: string } | undefined)?.status;
+  if (status === "failed" || status === "cancelled" || status === "crashed") return "failed";
+  return "completed";
+}
+
 export function useRunStateOverall(
   events: EventEnvelope[],
   activeRunId: string | undefined,
 ): UseRunStateOverallResult {
   const overallRunState: RunStateOverall = useMemo(() => {
     if (activeRunId === undefined) {
-      return events.some((e) => e.event.type === "RunComplete") ? "completed" : "idle";
+      const completeEnv = events.find((e) => e.event.type === "RunComplete");
+      if (!completeEnv) return "idle";
+      return terminalStateFromComplete(completeEnv);
     }
     const lastEvent = events[events.length - 1];
-    if (lastEvent?.event.type === "RunComplete") return "completed";
-    if (lastEvent?.event.type === "RunFailed") return "failed";
+    if (lastEvent?.event.type === "RunComplete") return terminalStateFromComplete(lastEvent);
     return "running";
   }, [activeRunId, events]);
 
