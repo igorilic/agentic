@@ -14,12 +14,14 @@
  *   drag(0) → gap-3: adjusted = 0 < 3 ? 2 : 3 = 2 → order: [tdd-developer, qa, architect, reviewer]
  */
 
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import App from "../App";
 import { DEFAULT_AGENTS } from "../types/run";
 import { derivePipelineSeed } from "../utils/derivePipelineSeed";
+import { usePipelineMutation } from "../hooks/usePipelineMutation";
 import type { RunState } from "../types/run";
 
 // ---------------------------------------------------------------------------
@@ -243,7 +245,7 @@ describe("App pipeline mutation — W.9.1", () => {
   //    (Full IPC mock for activeRunId change is in tech-debt #7's scope;
   //     the pure-helper tests above cover the seed logic directly.)
   // =========================================================================
-  it("re-seed smoke: after remove, fresh App render restores DEFAULT_AGENTS (no run active)", () => {
+  it("on initial mount with no active run, seeds pipelineAgents from DEFAULT_AGENTS", () => {
     // Simulate a re-mount (no run id active, so seed = DEFAULT_AGENTS)
     const { unmount } = render(<App />);
 
@@ -259,5 +261,44 @@ describe("App pipeline mutation — W.9.1", () => {
     expect(screen.getByTestId("agent-card-qa")).toBeInTheDocument();
     const ids = getCardTestIds();
     expect(ids).toEqual(DEFAULT_AGENTS.map((a) => `agent-card-${a}`));
+  });
+
+  // =========================================================================
+  // 9. Guard: re-seed does NOT fire when activeRunId transitions to undefined
+  //    (spec §6.8.3: re-seed only on undefined → string, not string → undefined)
+  // =========================================================================
+  it("does not re-seed when activeRunId becomes undefined (run cancelled)", () => {
+    // Set up a run state with steps (so seed != DEFAULT_AGENTS)
+    const runStateWithSteps: RunState = {
+      steps: [
+        { agent: "architect", status: "pending", tokens: 0, costUsd: null, durationMs: 0, summary: null },
+        { agent: "tdd-developer", status: "pending", tokens: 0, costUsd: null, durationMs: 0, summary: null },
+        { agent: "qa", status: "pending", tokens: 0, costUsd: null, durationMs: 0, summary: null },
+        { agent: "reviewer", status: "pending", tokens: 0, costUsd: null, durationMs: 0, summary: null },
+      ],
+      totalTokens: 0,
+      totalCostUsd: 0,
+    };
+
+    // Mount with an active run id — seeds from runState
+    const { result, rerender } = renderHook(
+      ({ runState, activeRunId }: { runState: RunState; activeRunId: string | undefined }) =>
+        usePipelineMutation(runState, activeRunId),
+      { initialProps: { runState: runStateWithSteps, activeRunId: "run-1" } },
+    );
+
+    // Simulate user edit: remove qa (index 2)
+    act(() => {
+      result.current.onRemove(2);
+    });
+
+    // User now has 3 agents (qa removed)
+    expect(result.current.pipelineAgents).toEqual(["architect", "tdd-developer", "reviewer"]);
+
+    // Simulate run cancellation: activeRunId → undefined
+    rerender({ runState: runStateWithSteps, activeRunId: undefined });
+
+    // Guard should have blocked the re-seed — user edits are preserved
+    expect(result.current.pipelineAgents).toEqual(["architect", "tdd-developer", "reviewer"]);
   });
 });
