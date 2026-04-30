@@ -89,7 +89,7 @@ describe("DismissableBanner", () => {
     expect(el.className).toContain("text-blue-700");
   });
 
-  it("uses px-3 horizontal padding to align with sibling sections (EventList, Stepper)", () => {
+  it("uses px-3 horizontal padding to align with sibling sections", () => {
     render(
       <DismissableBanner testId="b" severity="info" message="aligned" />,
     );

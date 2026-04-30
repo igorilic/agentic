@@ -47,11 +47,11 @@ export function useTauriEvents(runId?: string): UseTauriEventsResult {
     let cancelled = false;
 
     // Only clear state when entering a new run (defined runId). Transitioning
-    // to `undefined` — what StartRunForm does on RunComplete — keeps the
-    // just-finished run's events visible so the user can review them. Without
-    // this guard, the EventList would go blank the instant a run finishes,
-    // and the FindingsTable refetch (which keys on the last event being
-    // RunComplete) would silently miss its trigger.
+    // to `undefined` — what App.tsx does on RunComplete (clears activeRunId) —
+    // keeps the just-finished run's events visible so the user can review them.
+    // Without this guard, the activity log would go blank the instant a run
+    // finishes, and the FindingsTable refetch (which keys on the last event
+    // being RunComplete) would silently miss its trigger.
     if (runId !== undefined) {
       setEvents([]);
       setHistoryError(null);

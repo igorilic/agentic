@@ -4,7 +4,6 @@ import type { RunStateOverall } from "../types/pipeline";
 
 export type UseRunStateOverallResult = {
   overallRunState: RunStateOverall;
-  startedAtMs: number | null;
   elapsedMs: number | null;
 };
 
@@ -48,5 +47,5 @@ export function useRunStateOverall(
     return now - startedAtMs;
   }, [overallRunState, startedAtMs, now]);
 
-  return { overallRunState, startedAtMs, elapsedMs };
+  return { overallRunState, elapsedMs };
 }

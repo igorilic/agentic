@@ -4,8 +4,8 @@ import type { EventEnvelope } from "../types/event";
 
 /**
  * Channel name for @mention-dispatch event envelopes. Distinct from the
- * cockpit `agentic://event` channel so the Stepper does NOT pick up chat
- * traffic.
+ * cockpit `agentic://event` channel so chat-driven events stay out of the
+ * activity log channel.
  */
 export const MENTION_EVENT_CHANNEL = "agentic://mention-event";
 

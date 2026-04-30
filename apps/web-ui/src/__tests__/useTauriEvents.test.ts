@@ -265,9 +265,9 @@ describe("useTauriEvents", () => {
     });
     expect(result.current.events.length).toBe(2);
 
-    // StartRunForm clears activeRunId on RunComplete — the hook should NOT
+    // App clears activeRunId on RunComplete — the hook should NOT
     // wipe its buffer when the runId argument transitions to undefined,
-    // otherwise the EventList renders blank the instant a run finishes.
+    // otherwise the activity log renders blank the instant a run finishes.
     rerender(undefined);
 
     // Allow effect cleanup + rerun to settle.
