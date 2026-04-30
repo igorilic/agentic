@@ -111,4 +111,50 @@ describe("IssueColumn", () => {
     render(<IssueColumn ticket={{ ...fixture, acceptance: [] }} />);
     expect(screen.queryAllByTestId("issue-acceptance-item")).toHaveLength(0);
   });
+
+  // W.6.2 — runState prop drives acceptance checked state
+
+  it("runState='completed': all items have data-checked='true' and '[x]' marker", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" />);
+    const items = screen.getAllByTestId("issue-acceptance-item");
+    items.forEach((item) => {
+      expect(item).toHaveAttribute("data-checked", "true");
+      expect(item).toHaveTextContent("[x]");
+    });
+  });
+
+  it("runState='running': all items have data-checked='false' and '[ ]' marker", () => {
+    render(<IssueColumn ticket={fixture} runState="running" />);
+    const items = screen.getAllByTestId("issue-acceptance-item");
+    items.forEach((item) => {
+      expect(item).toHaveAttribute("data-checked", "false");
+      expect(item).toHaveTextContent("[ ]");
+    });
+  });
+
+  it("runState='failed': all items have data-checked='false' and '[ ]' marker", () => {
+    render(<IssueColumn ticket={fixture} runState="failed" />);
+    const items = screen.getAllByTestId("issue-acceptance-item");
+    items.forEach((item) => {
+      expect(item).toHaveAttribute("data-checked", "false");
+      expect(item).toHaveTextContent("[ ]");
+    });
+  });
+
+  it("runState='idle': all items have data-checked='false' and '[ ]' marker", () => {
+    render(<IssueColumn ticket={fixture} runState="idle" />);
+    const items = screen.getAllByTestId("issue-acceptance-item");
+    items.forEach((item) => {
+      expect(item).toHaveAttribute("data-checked", "false");
+      expect(item).toHaveTextContent("[ ]");
+    });
+  });
+
+  it("omitting runState prop is backward-compatible: items remain data-checked='false'", () => {
+    render(<IssueColumn ticket={fixture} />);
+    const items = screen.getAllByTestId("issue-acceptance-item");
+    items.forEach((item) => {
+      expect(item).toHaveAttribute("data-checked", "false");
+    });
+  });
 });

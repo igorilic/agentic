@@ -1,10 +1,12 @@
-import type { IssueTicket } from "../types/pipeline";
+import type { IssueTicket, RunStateOverall } from "../types/pipeline";
 
 export type IssueColumnProps = {
   ticket: IssueTicket;
+  runState?: RunStateOverall;
 };
 
-export default function IssueColumn({ ticket }: IssueColumnProps) {
+export default function IssueColumn({ ticket, runState }: IssueColumnProps) {
+  const acceptanceChecked = runState === "completed";
   return (
     <div
       data-testid="issue-column"
@@ -66,10 +68,10 @@ export default function IssueColumn({ ticket }: IssueColumnProps) {
             <li
               key={i}
               data-testid="issue-acceptance-item"
-              data-checked="false"
+              data-checked={acceptanceChecked ? "true" : "false"}
               className="flex items-start gap-2"
             >
-              <span className="select-none">{"[ ]"}</span>
+              <span className="select-none">{acceptanceChecked ? "[x]" : "[ ]"}</span>
               <span>{item}</span>
             </li>
           ))}
