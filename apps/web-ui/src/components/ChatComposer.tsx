@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { SLASH_COMMAND_LIBRARY } from "../slash/library";
+import AgentPicker from "./AgentPicker";
+
+function findMentionTrigger(value: string): { atIndex: number; query: string } | null {
+  const lastAt = value.lastIndexOf("@");
+  if (lastAt < 0) return null;
+  // Must be at index 0 or preceded by whitespace.
+  if (lastAt > 0 && !/\s/.test(value[lastAt - 1])) return null;
+  // Chars after `@` up to next whitespace or end.
+  const after = value.slice(lastAt + 1);
+  if (/\s/.test(after)) return null; // trigger ended (space after the query)
+  return { atIndex: lastAt, query: after };
+}
 
 export type ChatComposerProps = {
   onSend: (text: string) => void;
@@ -16,10 +28,18 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
   const [value, setValue] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [escClosedForValue, setEscClosedForValue] = useState<string | null>(null);
+  const [mentionEscClosedForValue, setMentionEscClosedForValue] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const slashOpen =
     /^\/[a-z]*$/.test(value) && escClosedForValue !== value;
+
+  const mentionTriggerRaw = findMentionTrigger(value);
+  const mentionTrigger =
+    mentionTriggerRaw && mentionEscClosedForValue !== value
+      ? mentionTriggerRaw
+      : null;
+  const mentionOpen = !slashOpen && mentionTrigger !== null;
 
   const slashMatches = slashOpen
     ? SLASH_COMMAND_LIBRARY.filter((cmd) => cmd.name.startsWith(value.slice(1)))
@@ -116,6 +136,25 @@ export default function ChatComposer({ onSend }: ChatComposerProps) {
                 <div className="text-xs text-fg-muted">{cmd.desc}</div>
               </div>
             ))}
+          </div>
+        )}
+        {mentionOpen && mentionTrigger && (
+          <div
+            data-testid="mention-popover"
+            className="absolute bottom-full mb-2 left-0"
+          >
+            <AgentPicker
+              width="narrow"
+              excludeIds={[]}
+              initialQuery={mentionTrigger.query}
+              onPick={(agentId) => {
+                const before = value.slice(0, mentionTrigger.atIndex);
+                setValue(`${before}@${agentId} `);
+                setMentionEscClosedForValue(null);
+                textareaRef.current?.focus();
+              }}
+              onClose={() => setMentionEscClosedForValue(value)}
+            />
           </div>
         )}
         <textarea

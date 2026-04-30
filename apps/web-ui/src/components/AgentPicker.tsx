@@ -5,10 +5,12 @@ export type AgentPickerProps = {
   excludeIds: string[];
   onPick: (agentId: string) => void;
   onClose: () => void;
+  width?: "default" | "narrow";
+  initialQuery?: string;
 };
 
-export default function AgentPicker({ excludeIds, onPick, onClose }: AgentPickerProps) {
-  const [query, setQuery] = useState("");
+export default function AgentPicker({ excludeIds, onPick, onClose, width = "default", initialQuery = "" }: AgentPickerProps) {
+  const [query, setQuery] = useState(initialQuery);
 
   const visible = AGENT_LIBRARY.filter((a) => !excludeIds.includes(a.id)).filter((a) => {
     const q = query.trim().toLowerCase();
@@ -27,7 +29,7 @@ export default function AgentPicker({ excludeIds, onPick, onClose }: AgentPicker
       }}
       role="dialog"
       aria-label="Pick an agent"
-      className="w-80 rounded-xl border border-[rgb(0_0_0_/_0.08)] bg-bg-surface shadow-modal"
+      className={`${width === "narrow" ? "w-60" : "w-80"} rounded-xl border border-[rgb(0_0_0_/_0.08)] bg-bg-surface shadow-modal`}
     >
       <div className="border-b border-border-soft p-2">
         <input
