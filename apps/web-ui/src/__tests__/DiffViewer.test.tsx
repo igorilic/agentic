@@ -32,6 +32,7 @@ describe("DiffViewer", () => {
     // .textContent preserves whitespace; toHaveTextContent collapses it.
     expect(adds[0].textContent).toBe("+    42");
     expect(adds[0].className).toMatch(/text-green/);
+    expect(adds[0].className).toContain("bg-green-500/10");
   });
 
   it("classifies remove lines and styles them as removals", () => {
@@ -40,19 +41,23 @@ describe("DiffViewer", () => {
     expect(removes).toHaveLength(1);
     expect(removes[0].textContent).toBe("-    41");
     expect(removes[0].className).toMatch(/text-red/);
+    expect(removes[0].className).toContain("bg-red-500/10");
   });
 
-  it("classifies hunk headers", () => {
+  it("classifies hunk headers and styles them with text-fg-muted", () => {
     render(<DiffViewer diff={SAMPLE} />);
     const hunks = screen.getAllByTestId("diff-line-hunk");
     expect(hunks).toHaveLength(1);
     expect(hunks[0]).toHaveTextContent("@@ -1,3 +1,3 @@");
+    expect(hunks[0].className).toContain("text-fg-muted");
   });
 
-  it("classifies file headers", () => {
+  it("classifies file headers and styles them with text-fg-muted font-semibold", () => {
     render(<DiffViewer diff={SAMPLE} />);
     const headers = screen.getAllByTestId("diff-line-file-header");
     expect(headers).toHaveLength(2);
+    expect(headers[0].className).toContain("text-fg-muted");
+    expect(headers[0].className).toContain("font-semibold");
   });
 
   it("classifies context lines", () => {

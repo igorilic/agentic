@@ -65,13 +65,28 @@ describe("DismissableBanner", () => {
     expect(screen.queryByTestId("history-error-banner-dismiss")).toBeNull();
   });
 
-  it("uses different colour classes per severity", () => {
-    const { rerender } = render(
-      <DismissableBanner testId="b" severity="error" message="x" />,
-    );
-    expect(screen.getByTestId("b").className).toMatch(/red/);
-    rerender(<DismissableBanner testId="b" severity="warning" message="x" />);
-    expect(screen.getByTestId("b").className).toMatch(/yellow/);
+  it("applies new token classes for error severity", () => {
+    render(<DismissableBanner testId="b" severity="error" message="x" />);
+    const el = screen.getByTestId("b");
+    expect(el.className).toContain("bg-red-500/10");
+    expect(el.className).toContain("border-red-300");
+    expect(el.className).toContain("text-red-700");
+  });
+
+  it("applies new token classes for warning severity", () => {
+    render(<DismissableBanner testId="b" severity="warning" message="x" />);
+    const el = screen.getByTestId("b");
+    expect(el.className).toContain("bg-amber-500/10");
+    expect(el.className).toContain("border-amber-300");
+    expect(el.className).toContain("text-amber-700");
+  });
+
+  it("applies new token classes for info severity", () => {
+    render(<DismissableBanner testId="b" severity="info" message="x" />);
+    const el = screen.getByTestId("b");
+    expect(el.className).toContain("bg-blue-500/10");
+    expect(el.className).toContain("border-blue-300");
+    expect(el.className).toContain("text-blue-700");
   });
 
   it("uses px-3 horizontal padding to align with sibling sections (EventList, Stepper)", () => {
