@@ -77,13 +77,14 @@ describe("LogRow", () => {
       expect(screen.getByTestId("log-row-error")).toBeInTheDocument();
     });
 
-    it("has the level chip with data-testid log-row-level-chip and bg-red-500 className", () => {
+    it("has the level chip with data-testid log-row-level-chip and bg-red-500 + text-white", () => {
       render(
         <LogRow level="error" agent="developer" t="14:06:02" message="redis-cli FLUSHDB blocked" />
       );
       const chip = screen.getByTestId("log-row-level-chip");
       expect(chip).toBeInTheDocument();
       expect(chip.className).toContain("bg-red-500");
+      expect(chip.className).toContain("text-white");
     });
   });
 
