@@ -13,6 +13,7 @@ pub mod findings;
 pub mod layout;
 pub mod modes;
 pub mod run;
+pub mod theme;
 pub mod views;
 
 use ratatui::Frame;
