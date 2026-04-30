@@ -113,7 +113,7 @@ describe("ChatPane", () => {
       });
     });
     await waitFor(() => {
-      expect(onStart).toHaveBeenCalledWith("01abc");
+      expect(onStart).toHaveBeenCalledWith({ runId: "01abc", ticketLabel: "#42" });
     });
     // System message confirms the run started.
     expect(screen.getByTestId("chat-message-system")).toHaveTextContent(

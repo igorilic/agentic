@@ -264,7 +264,7 @@ describe("ChatColumn", () => {
       expect(screen.getByTestId("spec-dialog")).toBeInTheDocument();
     });
 
-    it("calls onTicketRunStarted with the run_id returned from IPC", async () => {
+    it("calls onTicketRunStarted with { runId, ticketLabel } returned from IPC", async () => {
       invokeMock.mockResolvedValueOnce("run-xyz");
       const onTicketRunStarted = vi.fn();
       const user = userEvent.setup();
@@ -276,7 +276,10 @@ describe("ChatColumn", () => {
       await user.click(screen.getByTestId("spec-dialog-submit"));
 
       await waitFor(() => {
-        expect(onTicketRunStarted).toHaveBeenCalledWith("run-xyz");
+        expect(onTicketRunStarted).toHaveBeenCalledWith({
+          runId: "run-xyz",
+          ticketLabel: "My spec",
+        });
       });
     });
 

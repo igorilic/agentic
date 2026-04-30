@@ -174,7 +174,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
     expect(screen.getByTestId("spec-dialog-title-input")).toHaveValue("New spec");
   });
 
-  it("calls onTicketRunStarted with the run_id returned from IPC", async () => {
+  it("calls onTicketRunStarted with { runId, ticketLabel } returned from IPC", async () => {
     invokeMock.mockResolvedValueOnce("run-abc");
     const onTicketRunStarted = vi.fn();
     const user = userEvent.setup();
@@ -193,7 +193,10 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
     await user.click(screen.getByTestId("spec-dialog-submit"));
 
     await waitFor(() => {
-      expect(onTicketRunStarted).toHaveBeenCalledWith("run-abc");
+      expect(onTicketRunStarted).toHaveBeenCalledWith({
+        runId: "run-abc",
+        ticketLabel: "New spec",
+      });
     });
   });
 });

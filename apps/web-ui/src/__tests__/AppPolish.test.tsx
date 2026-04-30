@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import App from "../App";
 
 // Mock the Tauri APIs since they're not available in jsdom.
@@ -88,6 +89,26 @@ describe("App polish (W.9.8)", () => {
   it("chat composer renders the New-spec doc icon (W.9.4)", () => {
     render(<App />);
     expect(screen.getByTestId("chat-composer-new-spec")).toBeInTheDocument();
+  });
+
+  it("after SpecDialog submit, IssueColumn title updates to the typed title (B1)", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "start_ticket_run") return "run-b1-test";
+      if (cmd === "list_runs") return [];
+      if (cmd === "list_findings") return [];
+      return undefined;
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    // Open SpecDialog from the chat composer new-spec button
+    await user.click(screen.getByTestId("chat-composer-new-spec"));
+    await user.type(screen.getByTestId("spec-dialog-title-input"), "fix issue 88");
+    await user.click(screen.getByTestId("spec-dialog-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("issue-title")).toHaveTextContent("fix issue 88");
+    });
   });
 
   it("clicking New-spec opens SpecDialog; Esc closes it (W.9.4)", async () => {
