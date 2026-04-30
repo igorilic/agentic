@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import type { ActionItem, IssueTicket, RunStateOverall } from "../types/pipeline";
 import SpecDialog from "./SpecDialog";
+import { createSpec } from "../utils/createSpec";
 
 export type IssueColumnProps = {
   ticket: IssueTicket;
@@ -24,11 +24,7 @@ export default function IssueColumn({ ticket, runState, actionItems }: IssueColu
 
   const handleCreateSpecSubmit = async (title: string, _body: string) => {
     try {
-      await invoke("start_ticket_run", {
-        ticket: title,
-        backend: "claude-code",
-        model: null,
-      });
+      await createSpec(title);
       setSpecDialogOpen(false);
     } catch {
       // Keep dialog open on failure so the user can retry; errors surface at the App level.

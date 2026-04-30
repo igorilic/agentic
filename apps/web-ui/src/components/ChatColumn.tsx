@@ -1,5 +1,8 @@
+import { useState } from "react";
 import ChatComposer from "./ChatComposer";
 import ChatMessageComp from "./ChatMessage";
+import SpecDialog from "./SpecDialog";
+import { createSpec } from "../utils/createSpec";
 import type { ChatMessage } from "../types/chat";
 
 export type ChatColumnProps = {
@@ -35,6 +38,17 @@ export default function ChatColumn({
   onSend,
   error,
 }: ChatColumnProps) {
+  const [specOpen, setSpecOpen] = useState(false);
+
+  const handleSpecSubmit = async (title: string, _body: string) => {
+    try {
+      await createSpec(title);
+      setSpecOpen(false);
+    } catch {
+      // Keep dialog open on failure so the user can retry.
+    }
+  };
+
   return (
     <div
       data-testid="chat-column"
@@ -133,8 +147,14 @@ export default function ChatColumn({
           onSend={onSend}
           inputTestId="chat-input"
           sendTestId="chat-send"
+          onCreateSpec={() => setSpecOpen(true)}
         />
       </form>
+      <SpecDialog
+        open={specOpen}
+        onClose={() => setSpecOpen(false)}
+        onSubmit={handleSpecSubmit}
+      />
     </div>
   );
 }

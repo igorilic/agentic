@@ -19,6 +19,8 @@ export type ChatComposerProps = {
   inputTestId?: string;
   /** Override the send button's data-testid. Defaults to "chat-composer-send". */
   sendTestId?: string;
+  /** When provided, renders a doc-icon button left of send that opens the New Spec dialog. */
+  onCreateSpec?: () => void;
 };
 
 const QUICK_PICK_CHIPS = [
@@ -28,7 +30,7 @@ const QUICK_PICK_CHIPS = [
   { id: "spec", label: "Spec", command: "/spec " },
 ] as const;
 
-export default function ChatComposer({ onSend, inputTestId, sendTestId }: ChatComposerProps) {
+export default function ChatComposer({ onSend, inputTestId, sendTestId, onCreateSpec }: ChatComposerProps) {
   const [value, setValue] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [escClosedForValue, setEscClosedForValue] = useState<string | null>(null);
@@ -166,7 +168,20 @@ export default function ChatComposer({ onSend, inputTestId, sendTestId }: ChatCo
           placeholder="Ask a question, or use /plan, /develop, /@agent…"
         />
         <div className="flex items-center gap-1">
-          {/* Reserved slot — W.9.4 plugs the New-spec button here */}
+          {onCreateSpec !== undefined && (
+            <button
+              type="button"
+              data-testid="chat-composer-new-spec"
+              onClick={onCreateSpec}
+              aria-label="Create spec"
+              title="Create spec"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:text-fg hover:bg-bg-surface-2"
+            >
+              <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 3h7l3 3v11H5zM12 3v3h3M7 9h6M7 12h6M7 15h4" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             data-testid={sendTestId ?? "chat-composer-send"}
