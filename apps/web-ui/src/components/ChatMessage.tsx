@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import AgentIcon from "./AgentIcon";
+import { getAgentAccent } from "../utils/agentAccents";
 
 export type ChatMessageProps =
   | { kind: "user"; userName: string; timestamp: string; body: string }
@@ -69,10 +71,13 @@ export default function ChatMessage(props: ChatMessageProps) {
       className="flex gap-3"
     >
       <div
-        className="h-7 w-7 rounded-full flex-shrink-0"
-        style={{ backgroundColor: tintRgba }}
+        data-testid="chat-message-agent-avatar"
+        className="h-7 w-7 rounded-full flex-shrink-0 flex items-center justify-center"
+        style={{ backgroundColor: getAgentAccent(props.agent).bg, color: getAgentAccent(props.agent).fg }}
         aria-hidden="true"
-      />
+      >
+        <AgentIcon agent={props.agent} size={14} />
+      </div>
       <div className="flex flex-col gap-1 min-w-0">
         <div className="flex items-baseline gap-2">
           <span

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { AGENT_LIBRARY } from "../types/pipeline";
+import AgentIcon from "./AgentIcon";
+import { getAgentAccent } from "../utils/agentAccents";
 
 export type AgentPickerProps = {
   excludeIds: string[];
@@ -12,11 +14,14 @@ export type AgentPickerProps = {
 export default function AgentPicker({ excludeIds, onPick, onClose, width = "default", initialQuery = "" }: AgentPickerProps) {
   const [query, setQuery] = useState(initialQuery);
 
-  const visible = AGENT_LIBRARY.filter((a) => !excludeIds.includes(a.id)).filter((a) => {
-    const q = query.trim().toLowerCase();
-    if (q === "") return true;
-    return a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q);
-  });
+  // tdd-developer is an alias entry — not shown as a separate picker option.
+  const visible = AGENT_LIBRARY.filter((a) => a.id !== "tdd-developer")
+    .filter((a) => !excludeIds.includes(a.id))
+    .filter((a) => {
+      const q = query.trim().toLowerCase();
+      if (q === "") return true;
+      return a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q);
+    });
 
   return (
     <div
@@ -29,7 +34,7 @@ export default function AgentPicker({ excludeIds, onPick, onClose, width = "defa
       }}
       role="dialog"
       aria-label="Pick an agent"
-      className={`${width === "narrow" ? "w-60" : "w-80"} rounded-xl border border-[rgb(0_0_0_/_0.08)] bg-bg-surface shadow-modal`}
+      className={`${width === "narrow" ? "w-60" : "w-80"} rounded-xl border border-[rgb(0_0_0_/_0.08)] bg-bg-surface shadow-popover`}
     >
       <div className="border-b border-border-soft p-2">
         <input
@@ -50,7 +55,13 @@ export default function AgentPicker({ excludeIds, onPick, onClose, width = "defa
               onClick={() => onPick(agent.id)}
               className="flex w-full items-center gap-3 px-3 py-2 hover:bg-[rgb(0_0_0_/_0.04)] focus:bg-[rgb(0_0_0_/_0.04)] focus:outline-none text-left"
             >
-              <span className="h-8 w-8 rounded-md bg-bg-surface-2" aria-hidden="true" />
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
+                style={{ backgroundColor: getAgentAccent(agent.id).bg, color: getAgentAccent(agent.id).fg }}
+                aria-hidden="true"
+              >
+                <AgentIcon agent={agent.id} size={16} />
+              </span>
               <span className="flex flex-col leading-tight">
                 <span className="text-[13px] font-semibold text-fg">{agent.name}</span>
                 <span className="text-[11px] text-fg-muted">{agent.desc}</span>

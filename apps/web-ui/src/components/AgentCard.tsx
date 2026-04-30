@@ -1,9 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import type { AgentStatus } from "../types/pipeline";
+import { AGENT_LIBRARY } from "../types/pipeline";
+import AgentIcon from "./AgentIcon";
+import { getAgentAccent } from "../utils/agentAccents";
 
 export type AgentCardProps = {
   agent: string;
   status: AgentStatus;
+  index: number;
   skipped?: boolean;
   onRemove?: () => void;
   onSkip?: () => void;
@@ -40,6 +44,7 @@ const STATUS_BORDER_CLASS: Record<AgentStatus, string> = {
 export default function AgentCard({
   agent,
   status,
+  index,
   skipped = false,
   onRemove,
   onSkip,
@@ -50,6 +55,9 @@ export default function AgentCard({
 }: AgentCardProps) {
   const borderClass = STATUS_BORDER_CLASS[status] ?? "border-border";
   const avatarBgClass = AGENT_BG_CLASS[agent] ?? "bg-bg-surface-2";
+  const lib = AGENT_LIBRARY.find((a) => a.id === agent);
+  const displayName = lib?.name ?? agent;
+  const accent = getAgentAccent(agent);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -90,18 +98,23 @@ export default function AgentCard({
       )}
 
       <div className="flex items-start gap-2">
+        <span
+          data-testid={`agent-card-${agent}-step-number`}
+          className="text-[11px] font-semibold text-fg-subtle tabular-nums w-4 text-right self-center"
+        >
+          {String(index + 1).padStart(2, "0")}
+        </span>
         <div
           data-testid={`agent-card-${agent}-avatar`}
           className={`h-11 w-11 rounded-md flex-shrink-0 flex items-center justify-center ${avatarBgClass}`}
+          style={{ backgroundColor: accent.bg, color: accent.fg }}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <rect x="2" y="2" width="12" height="12" rx="2" fill="white" fillOpacity="0.7" />
-          </svg>
+          <AgentIcon agent={agent} size={18} />
         </div>
 
         <div className="flex flex-col gap-0.5 flex-1 min-w-0 pt-0.5">
           <div className="flex items-center gap-1">
-            <span className={`text-[13px] font-semibold text-fg leading-none${skipped ? " line-through" : ""}`}>{agent}</span>
+            <span className={`text-[13px] font-semibold text-fg leading-none${skipped ? " line-through" : ""}`}>{displayName}</span>
             {status === "active" && (
               <span
                 data-testid={`agent-card-${agent}-pulse`}

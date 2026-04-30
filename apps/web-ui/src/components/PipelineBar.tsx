@@ -153,6 +153,7 @@ export default function PipelineBar({
           <AgentCard
             agent={agent}
             status={statuses[agent] ?? "queued"}
+            index={i}
             skipped={skipped?.has(agent) ?? false}
             draggable={true}
             dragging={dragFromIndex === i}

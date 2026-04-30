@@ -9,7 +9,8 @@ export type AgentLibraryEntry = {
 
 export const AGENT_LIBRARY: readonly AgentLibraryEntry[] = [
   { id: "architect",  name: "Architect",     icon: "blueprint", desc: "Designs system & breaks down work" },
-  { id: "developer",  name: "Developer",     icon: "code",      desc: "Writes code & tests" },
+  { id: "developer",      name: "Developer",     icon: "code",      desc: "Writes code & tests" },
+  { id: "tdd-developer", name: "Developer",     icon: "code",      desc: "Writes code & tests (TDD)" },
   { id: "qa",         name: "QA",            icon: "check",     desc: "Runs tests, checks edge cases" },
   { id: "reviewer",   name: "Reviewer",      icon: "eye",       desc: "Code review & feedback" },
   { id: "researcher", name: "Researcher",    icon: "book",      desc: "Gathers context, reads docs" },
