@@ -17,14 +17,24 @@ pub mod theme;
 pub mod views;
 
 use ratatui::Frame;
+use ratatui::layout::{Constraint, Direction, Layout};
 
 use crate::app::AppState;
 use crate::layout::compute_panes;
 
-/// Render one frame of the application — cockpit (stepper) on the left,
-/// chat (bordered + optional command prompt) on the right.
+/// Render one frame of the application — title bar at top, then cockpit
+/// (stepper) on the left and chat (bordered + optional command prompt)
+/// on the right.
 pub fn draw_app(f: &mut Frame<'_>, state: &AppState) {
-    let (cockpit_area, chat_area) = compute_panes(f.area(), state);
+    let total = f.area();
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .split(total);
+
+    views::title_bar::render(rows[0], f);
+
+    let (cockpit_area, chat_area) = compute_panes(rows[1], state);
     views::cockpit::render(cockpit_area, state, f);
     views::chat::render(chat_area, state, f);
 }
