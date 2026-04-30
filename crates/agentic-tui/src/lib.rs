@@ -22,19 +22,29 @@ use ratatui::layout::{Constraint, Direction, Layout};
 use crate::app::AppState;
 use crate::layout::compute_panes;
 
-/// Render one frame of the application — title bar at top, then cockpit
-/// (stepper) on the left and chat (bordered + optional command prompt)
-/// on the right.
+/// Render one frame of the application — title bar at top, issue header
+/// (full-width) next, then cockpit (stepper) on the left and chat
+/// (bordered + optional command prompt) on the right.
+///
+/// Row order matches spec §4 (TUI layout):
+///   0 — title bar (1 row)
+///   1 — issue header (1 row, full width)
+///   2… — two-pane body (cockpit | chat)
 pub fn draw_app(f: &mut Frame<'_>, state: &AppState) {
     let total = f.area();
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .constraints([
+            Constraint::Length(1), // row 0: title bar
+            Constraint::Length(1), // row 1: issue header
+            Constraint::Min(0),    // rows 2…: body panes
+        ])
         .split(total);
 
     views::title_bar::render(rows[0], f);
+    views::issue_header::render(rows[1], f, state);
 
-    let (cockpit_area, chat_area) = compute_panes(rows[1], state);
+    let (cockpit_area, chat_area) = compute_panes(rows[2], state);
     views::cockpit::render(cockpit_area, state, f);
     views::chat::render(chat_area, state, f);
 }

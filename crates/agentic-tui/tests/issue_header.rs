@@ -1,6 +1,7 @@
 //! Step T.11.1: issue header strip — spec §4.3.
 //!
-//! The issue header is a 1-row strip at the top of the chat (right) pane:
+//! The issue header is a full-width 1-row strip between the title bar and the
+//! two-pane body, per the design hand-off layout:
 //!   `▰ agentic │ AGT-204 Add multi-tenant rate limiting   ● running 02:34`
 //!
 //! Left side layout (spec §4.3):
@@ -16,7 +17,6 @@ use agentic_tui::app::AppState;
 use agentic_tui::draw_app;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use ratatui::style::Color;
 
 /// Collect every symbol in a given row into a single string.
 fn row_string(buffer: &ratatui::buffer::Buffer, y: u16, width: u16) -> String {
@@ -37,10 +37,12 @@ fn buffer_string(buffer: &ratatui::buffer::Buffer, width: u16, height: u16) -> S
 fn renders_issue_id_and_title_in_header() {
     let backend = TestBackend::new(80, 30);
     let mut terminal = Terminal::new(backend).unwrap();
-    let mut state = AppState::default();
-    state.run_label = Some("AGT-204".into());
-    state.run_title = Some("Add multi-tenant rate limiting".into());
-    state.run_elapsed_secs = 154; // 02:34
+    let state = AppState {
+        run_label: Some("AGT-204".into()),
+        run_title: Some("Add multi-tenant rate limiting".into()),
+        run_elapsed_secs: 154, // 02:34
+        ..Default::default()
+    };
 
     terminal.draw(|f| draw_app(f, &state)).unwrap();
     let buffer = terminal.backend().buffer().clone();
@@ -56,10 +58,12 @@ fn renders_issue_id_and_title_in_header() {
 fn renders_running_pill_in_blue() {
     let backend = TestBackend::new(80, 30);
     let mut terminal = Terminal::new(backend).unwrap();
-    let mut state = AppState::default();
-    state.run_label = Some("AGT-204".into());
-    state.run_title = Some("Add multi-tenant rate limiting".into());
-    state.run_elapsed_secs = 154; // 02:34
+    let state = AppState {
+        run_label: Some("AGT-204".into()),
+        run_title: Some("Add multi-tenant rate limiting".into()),
+        run_elapsed_secs: 154, // 02:34
+        ..Default::default()
+    };
 
     terminal.draw(|f| draw_app(f, &state)).unwrap();
     let buffer = terminal.backend().buffer().clone();
@@ -75,13 +79,29 @@ fn renders_running_pill_in_blue() {
     let needle = "running 02:34";
 
     // Find which row and column the needle starts in.
+    // We build per-row cell strings and compare char-by-char to find the
+    // column index (not byte index) because some cells like '▰' are
+    // multi-byte in UTF-8 but occupy a single column in the terminal.
     let found = (0..30u16).find_map(|y| {
-        let row = row_string(&buffer, y, 80);
+        // Collect each cell symbol as its own entry so we can index by column.
+        let cells: Vec<String> = (0..80u16)
+            .map(|x| buffer.cell((x, y)).unwrap().symbol().to_string())
+            .collect();
+        // Build a joined string to search in.
+        let row: String = cells.join("");
         row.find(needle).map(|byte_offset| {
-            // Map byte offset → character (cell) offset. Each cell is one char
-            // in the test backend, so byte and char index coincide for ASCII.
-            // 'running 02:34' is pure ASCII so this is safe.
-            (y, byte_offset as u16)
+            // Convert byte offset to cell (column) index by counting how many
+            // cells' bytes come before byte_offset.
+            let mut bytes_so_far = 0usize;
+            let mut col = 0u16;
+            for (i, sym) in cells.iter().enumerate() {
+                if bytes_so_far == byte_offset {
+                    col = i as u16;
+                    break;
+                }
+                bytes_so_far += sym.len();
+            }
+            (y, col)
         })
     });
 
@@ -107,10 +127,12 @@ fn elapsed_formats_as_mm_ss() {
     // 154 seconds = 2 min 34 sec → "02:34"
     let backend = TestBackend::new(80, 30);
     let mut terminal = Terminal::new(backend).unwrap();
-    let mut state = AppState::default();
-    state.run_label = Some("AGT-204".into());
-    state.run_title = Some("Test issue".into());
-    state.run_elapsed_secs = 154;
+    let state = AppState {
+        run_label: Some("AGT-204".into()),
+        run_title: Some("Test issue".into()),
+        run_elapsed_secs: 154,
+        ..Default::default()
+    };
 
     terminal.draw(|f| draw_app(f, &state)).unwrap();
     let buffer = terminal.backend().buffer().clone();
@@ -146,10 +168,12 @@ fn title_bar_still_at_row_zero() {
     // Issue header must NOT overwrite the title bar in row 0.
     let backend = TestBackend::new(80, 30);
     let mut terminal = Terminal::new(backend).unwrap();
-    let mut state = AppState::default();
-    state.run_label = Some("AGT-204".into());
-    state.run_title = Some("Some title".into());
-    state.run_elapsed_secs = 0;
+    let state = AppState {
+        run_label: Some("AGT-204".into()),
+        run_title: Some("Some title".into()),
+        run_elapsed_secs: 0,
+        ..Default::default()
+    };
 
     terminal.draw(|f| draw_app(f, &state)).unwrap();
     let buffer = terminal.backend().buffer().clone();

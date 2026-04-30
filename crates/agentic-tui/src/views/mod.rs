@@ -6,4 +6,5 @@ pub mod chat;
 pub mod cockpit;
 pub mod diff;
 pub mod findings;
+pub mod issue_header;
 pub mod title_bar;

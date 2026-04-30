@@ -67,6 +67,15 @@ pub struct AppState {
     /// Vertical scroll offset for the diff view (number of lines
     /// scrolled past the top). Reset to 0 by `set_diff`.
     pub diff_scroll_offset: u16,
+    /// Jira / issue tracker label for the active run, e.g. `"AGT-204"`.
+    /// `None` when no run is active (cold-start / idle state).
+    pub run_label: Option<String>,
+    /// Human-readable issue title for the active run.
+    /// `None` when no run is active.
+    pub run_title: Option<String>,
+    /// Elapsed wall-clock seconds since the current run started.
+    /// Formatted as `MM:SS` in the issue header pill.
+    pub run_elapsed_secs: u64,
 }
 
 impl Default for AppState {
@@ -80,6 +89,9 @@ impl Default for AppState {
             last_status: None,
             current_diff: None,
             diff_scroll_offset: 0,
+            run_label: None,
+            run_title: None,
+            run_elapsed_secs: 0,
         }
     }
 }
