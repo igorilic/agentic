@@ -678,7 +678,7 @@ blocked.
 
 ---
 
-### Step W.5.3: `ToolCallCard` (collapsible body)
+### Step W.5.3: `ToolCallCard` (collapsible body) ✓
 
 **Goal**: Bordered card with header row (agent + tool + result chip) and a collapsible detail body for stdout/stderr.
 
@@ -700,7 +700,7 @@ blocked.
 
 ---
 
-### Step W.5.4: `ActivityColumn` composes header + filtered log
+### [x] Step W.5.4: `ActivityColumn` composes header + filtered log
 
 **Goal**: Replaces today's `EventList`. Reads `events: EventEnvelope[]`, applies the tab filter, dispatches per-row to `LogRow` / `ToolCallCard`.
 
