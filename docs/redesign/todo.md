@@ -1365,7 +1365,7 @@ button into the icon-button group cleanly.
 
 ---
 
-### Step W.9.4: ChatComposer "New spec" affordance
+### Step W.9.4: ChatComposer "New spec" affordance ✅
 
 **Goal**: Add a small doc-icon button immediately to the left of the
 send button. Click opens `SpecDialog`. Closes user gap #6. Spec contract:
@@ -2314,8 +2314,8 @@ Phase 9 — Polish
 - [ ] W.9.2 Per-agent SVG icon library + render in card/picker/message
 - [x] W.9.3 ChatComposer layout polish (chips below, paper-plane, placeholder)
 - [ ] W.9.4 ChatComposer New-spec affordance
-- [ ] W.9.5 HeaderBar settings gear icon
-- [ ] W.9.6 StatusDot component + use in AgentCard
+- [x] W.9.5 HeaderBar settings gear icon
+- [x] W.9.6 StatusDot component + use in AgentCard
 - [ ] W.9.7 IssueColumn header polish (run-state pill + section labels)
 - [ ] W.9.8 App.tsx polish integration test
 - [ ] CP-W2
