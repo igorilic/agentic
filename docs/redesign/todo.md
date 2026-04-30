@@ -401,7 +401,7 @@ blocked.
 
 ---
 
-### Step W.2.8: AgentCard kebab menu (Remove / Skip / Configure)
+### [x] Step W.2.8: AgentCard kebab menu (Remove / Skip / Configure)
 
 **Goal**: Click the kebab opens a dropdown with three items. Remove and Skip fire callbacks. Configure is a no-op (placeholder modal opens and closes).
 
@@ -428,7 +428,7 @@ blocked.
 
 ## Phase 3 — Web 3-column shell
 
-### Step W.3.1: `AppShell` component with grid layout
+### [x] Step W.3.1: `AppShell` component with grid layout
 
 **Goal**: New top-level layout component: `HeaderBar` + `PipelineBar` + 3-column grid (`1fr 1fr 340px`). Accepts `dense: boolean` to flip the right column to 280 px.
 
@@ -454,7 +454,7 @@ blocked.
 
 ---
 
-### Step W.3.2: Tauri-dense detection helper
+### [x] Step W.3.2: Tauri-dense detection helper
 
 **Goal**: Pure helper `isTauriDense()` that returns true when `window.__TAURI_INTERNALS__` exists or `import.meta.env.TAURI === "1"`.
 
@@ -503,7 +503,7 @@ blocked.
 
 ---
 
-### Step W.4.2: `ChatMessage` inline token highlighter
+### Step W.4.2: `ChatMessage` inline token highlighter ✓
 
 **Goal**: Slash commands and `@mentions` inside message bodies render as highlighted tokens (light yellow bg, 2 px radius).
 
@@ -1709,8 +1709,8 @@ Phase 3 — Web 3-column shell
 Phase 4 — Web Chat column
 - [ ] W.4.1 ChatMessage variants
 - [ ] W.4.2 Inline token highlighter
-- [ ] W.4.3 ChatComposer
-- [ ] W.4.4 Slash popover
+- [x] W.4.3 ChatComposer
+- [x] W.4.4 Slash popover
 - [ ] W.4.5 Mention popover
 - [ ] W.4.6 ChatColumn integration
 
