@@ -95,4 +95,29 @@ describe("AgentPicker", () => {
     const rows = screen.queryAllByTestId(/^agent-picker-row-/);
     expect(rows).toHaveLength(12);
   });
+
+  describe("W.9.2 — AgentIcon SVG in each row's leading avatar", () => {
+    it("each visible row contains an AgentIcon SVG", () => {
+      render(<AgentPicker excludeIds={[]} onPick={vi.fn()} onClose={vi.fn()} />);
+      // architect row should contain the blueprint glyph SVG
+      const architectRow = screen.getByTestId("agent-picker-row-architect");
+      const svg = architectRow.querySelector("svg");
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute("data-testid")).toBe("agent-icon-architect");
+    });
+
+    it("architect row avatar does NOT contain the old bg-bg-surface-2 placeholder", () => {
+      render(<AgentPicker excludeIds={[]} onPick={vi.fn()} onClose={vi.fn()} />);
+      const architectRow = screen.getByTestId("agent-picker-row-architect");
+      const placeholder = architectRow.querySelector(".bg-bg-surface-2");
+      expect(placeholder).toBeNull();
+    });
+
+    it("uses shadow-popover class (not shadow-modal) on the picker container", () => {
+      render(<AgentPicker excludeIds={[]} onPick={vi.fn()} onClose={vi.fn()} />);
+      const picker = screen.getByTestId("agent-picker");
+      expect(picker.className).toContain("shadow-popover");
+      expect(picker.className).not.toContain("shadow-modal");
+    });
+  });
 });

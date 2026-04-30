@@ -343,4 +343,36 @@ describe("ChatMessage", () => {
       expect(bubble.style.borderLeftColor).toContain("--fg-muted");
     });
   });
+
+  describe("W.9.2 — AgentIcon SVG inside agent avatar wrapper", () => {
+    it("agent developer variant: avatar wrapper contains AgentIcon SVG", () => {
+      render(
+        <ChatMessage kind="agent" agent="developer" timestamp="14:04" body="coding" />
+      );
+      const avatarWrapper = screen.getByTestId("chat-message-agent-avatar");
+      const svg = avatarWrapper.querySelector("svg");
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute("data-testid")).toBe("agent-icon-developer");
+    });
+
+    it("agent developer avatar SVG contains the code glyph path", () => {
+      render(
+        <ChatMessage kind="agent" agent="developer" timestamp="14:04" body="coding" />
+      );
+      const avatarWrapper = screen.getByTestId("chat-message-agent-avatar");
+      const path = avatarWrapper.querySelector("path");
+      expect(path).not.toBeNull();
+      expect(path!.getAttribute("d")).toBe("M7 6l-4 4 4 4M13 6l4 4-4 4M11 4l-2 12");
+    });
+
+    it("agent architect variant: avatar wrapper contains AgentIcon SVG with blueprint glyph", () => {
+      render(
+        <ChatMessage kind="agent" agent="architect" timestamp="14:03" body="speccing now" />
+      );
+      const avatarWrapper = screen.getByTestId("chat-message-agent-avatar");
+      const svg = avatarWrapper.querySelector("svg");
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute("data-testid")).toBe("agent-icon-architect");
+    });
+  });
 });
