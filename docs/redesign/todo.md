@@ -1177,7 +1177,7 @@ backend persistence; this step does NOT block on it.
 
 ---
 
-### Step W.9.2: Add per-agent SVG icon library + render in AgentCard / AgentPicker / ChatMessage
+### [x] Step W.9.2: Add per-agent SVG icon library + render in AgentCard / AgentPicker / ChatMessage
 
 **Goal**: Replace the placeholder white rect / `bg-bg-surface-2` / colored
 circle with the 12 monoline SVG glyphs from the design hand-off. Closes
@@ -2312,7 +2312,7 @@ Phase 8 — Web App.tsx swap
 Phase 9 — Polish
 - [ ] W.9.1 Wire pipeline mutation handlers in App.tsx
 - [ ] W.9.2 Per-agent SVG icon library + render in card/picker/message
-- [ ] W.9.3 ChatComposer layout polish (chips below, paper-plane, placeholder)
+- [x] W.9.3 ChatComposer layout polish (chips below, paper-plane, placeholder)
 - [ ] W.9.4 ChatComposer New-spec affordance
 - [ ] W.9.5 HeaderBar settings gear icon
 - [ ] W.9.6 StatusDot component + use in AgentCard
