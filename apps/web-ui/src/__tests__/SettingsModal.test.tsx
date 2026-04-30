@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import React from "react";
 import SettingsModal from "../components/SettingsModal";
@@ -111,16 +111,16 @@ describe("SettingsModal", () => {
   });
 
   describe("onSelectRun pass-through", () => {
-    it("renders history tab with onSelectRun prop without throwing", () => {
+    it("renders history tab with onSelectRun prop without throwing", async () => {
       const onSelectRun = vi.fn();
-      expect(() => {
-        render(
-          <SettingsModal
-            {...makeProps({ initialTab: "history", onSelectRun })}
-          />
-        );
-      }).not.toThrow();
-      expect(screen.getByTestId("past-runs-pane")).toBeInTheDocument();
+      render(
+        <SettingsModal
+          {...makeProps({ initialTab: "history", onSelectRun })}
+        />
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("past-runs-pane")).toBeInTheDocument();
+      });
     });
   });
 });
