@@ -38,6 +38,15 @@ type ActivityRow = VisibleRow | { kind: "filtered" };
 
 const ERROR_TYPE_RE = /(Error|Failed|Exception)/i;
 
+// Event types that are pure noise — chain-of-thought deltas, stream chunks,
+// or events that are paired with a start event and would produce duplicate rows.
+const FILTERED_TYPES = new Set([
+  "TextDelta",
+  "ThinkingDelta",
+  "ToolUseDelta",
+  "ToolUseEnd",
+]);
+
 function formatTime(ms: number): string {
   const d = new Date(ms);
   const hh = String(d.getHours()).padStart(2, "0");
@@ -46,12 +55,35 @@ function formatTime(ms: number): string {
   return `${hh}:${mm}:${ss}`;
 }
 
+function resolveAgent(
+  env: EventEnvelope,
+  stepAgents: Map<string, string>,
+): string {
+  if (env.step_id === null) return "system";
+  return stepAgents.get(env.step_id) ?? "system";
+}
+
+function buildStepAgentMap(events: EventEnvelope[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const env of events) {
+    if (env.event.type === "StepStarted" && env.step_id !== null) {
+      const data = (env.event.data ?? {}) as { agent?: unknown };
+      if (typeof data.agent === "string") {
+        map.set(env.step_id, data.agent);
+      }
+    }
+  }
+  return map;
+}
+
 function classify(
   env: EventEnvelope,
   permsById: Map<string, PermissionRequest>,
+  stepAgents: Map<string, string>,
 ): ActivityRow {
   const type = env.event.type;
-  if (type === "TextDelta") return { kind: "filtered" };
+
+  if (FILTERED_TYPES.has(type)) return { kind: "filtered" };
 
   if (type === "PermissionRequest") {
     const data = (env.event.data ?? {}) as { permId?: unknown };
@@ -65,8 +97,9 @@ function classify(
   }
 
   const t = formatTime(env.timestamp_ms);
-  const agent = env.step_id ?? "system";
+  const agent = resolveAgent(env, stepAgents);
 
+  // Backward-compat: legacy dev-mock "ToolCall" events (pre-real-backend format)
   if (type === "ToolCall") {
     const data = (env.event.data ?? {}) as {
       tool?: unknown;
@@ -83,6 +116,32 @@ function classify(
       arg: typeof data.arg === "string" ? data.arg : "",
       result: typeof data.result === "string" ? data.result : "",
       details: typeof data.details === "string" ? data.details : undefined,
+    };
+  }
+
+  // Real backend: ToolUseStart is the card-producing event
+  if (type === "ToolUseStart") {
+    const data = (env.event.data ?? {}) as {
+      tool_name?: unknown;
+      input?: unknown;
+      tool_call_id?: unknown;
+    };
+    const tool = typeof data.tool_name === "string" ? data.tool_name : "?";
+    const arg =
+      typeof data.input === "string"
+        ? data.input
+        : data.input !== undefined
+          ? JSON.stringify(data.input)
+          : "";
+    return {
+      kind: "tool",
+      id: env.event_id,
+      t,
+      agent,
+      tool,
+      arg,
+      result: "OK",
+      details: undefined,
     };
   }
 
@@ -104,13 +163,7 @@ function classify(
     const severity =
       typeof data.severity === "string" ? data.severity.toLowerCase() : "info";
     const kind: "error" | "info" = severity === "error" ? "error" : "info";
-    return {
-      kind,
-      id: env.event_id,
-      t,
-      agent,
-      message,
-    };
+    return { kind, id: env.event_id, t, agent, message };
   }
 
   if (ERROR_TYPE_RE.test(type)) {
@@ -124,13 +177,63 @@ function classify(
     };
   }
 
-  return {
-    kind: "info",
-    id: env.event_id,
-    t,
-    agent,
-    message: type,
-  };
+  // Per-type human-readable message translations
+  let message = type;
+  if (type === "RunStarted") {
+    message = "Run started";
+  } else if (type === "RunComplete") {
+    const data = (env.event.data ?? {}) as {
+      status?: unknown;
+      duration_ms?: unknown;
+    };
+    const status =
+      typeof data.status === "string" ? data.status : "completed";
+    const seconds =
+      typeof data.duration_ms === "number"
+        ? Math.round(data.duration_ms / 1000)
+        : null;
+    message =
+      seconds !== null ? `Run ${status} in ${seconds}s` : `Run ${status}`;
+  } else if (type === "StepStarted") {
+    message = "Started";
+  } else if (type === "StepComplete") {
+    const data = (env.event.data ?? {}) as {
+      status?: unknown;
+      duration_ms?: unknown;
+      summary?: unknown;
+    };
+    const status =
+      typeof data.status === "string" ? data.status : "passed";
+    const seconds =
+      typeof data.duration_ms === "number"
+        ? Math.round(data.duration_ms / 1000)
+        : null;
+    const summary =
+      typeof data.summary === "string" && data.summary.length > 0
+        ? data.summary
+        : null;
+    if (summary) {
+      message = summary;
+    } else if (seconds !== null) {
+      message = `${status} in ${seconds}s`;
+    } else {
+      message = status;
+    }
+  } else if (type === "FileChange") {
+    const data = (env.event.data ?? {}) as { path?: unknown };
+    message =
+      typeof data.path === "string"
+        ? `Changed ${data.path}`
+        : "File changed";
+  } else if (type === "ClarifyingQuestion") {
+    const data = (env.event.data ?? {}) as { question?: unknown };
+    message =
+      typeof data.question === "string"
+        ? `? ${data.question}`
+        : "Clarifying question";
+  }
+
+  return { kind: "info", id: env.event_id, t, agent, message };
 }
 
 function isVisible(row: ActivityRow): row is VisibleRow {
@@ -156,7 +259,11 @@ export default function ActivityColumn({
     (pendingPermissions ?? []).map((p) => [p.id, p]),
   );
 
-  const rows = events.map((env) => classify(env, permsById));
+  // Build step_id → agent name map from StepStarted events before classifying.
+  // Real backend uses ULIDs as step_id; agent name lives in StepStarted.event.data.agent.
+  const stepAgents = buildStepAgentMap(events);
+
+  const rows = events.map((env) => classify(env, permsById, stepAgents));
 
   const counts: ActivityCounts = {
     all: rows.filter((r) => r.kind !== "filtered").length,

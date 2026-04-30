@@ -186,14 +186,15 @@ describe("ActivityColumn", () => {
     expect(screen.getByTestId("event-list")).toHaveAttribute("aria-live", "polite");
   });
 
-  it("uses step_id as agent name, falls back to 'system' when null", () => {
+  it("step_id → agent resolved via StepStarted map; events without map entry fall back to 'system'", () => {
+    // mixedEvents has no StepStarted events, so all step_ids without a map entry resolve to "system"
+    // RunStarted (step_id=null) → "system"
+    // ToolCall events (step_id="developer"/"qa") → no StepStarted to populate map → "system"
     render(<ControlledActivityColumn events={mixedEvents} />);
-    // e1 has stepId: null → agent should be "system"
-    // e2 has stepId: "developer" → agent should be "developer"
     const agentLabels = screen.getAllByTestId("log-row-agent");
     const agentTexts = agentLabels.map((el) => el.textContent);
+    // All non-tool rows have agent "system" since no StepStarted to populate map
     expect(agentTexts).toContain("system");
-    expect(agentTexts).toContain("developer");
   });
 
   it("renders zero event rows when perm tab is selected", () => {
@@ -458,5 +459,288 @@ describe("ActivityColumn — W.7.2 PermissionCard inline rendering", () => {
     render(<ControlledActivityColumn events={mixedEvents} />);
     expect(screen.getAllByTestId("event-row")).toHaveLength(5);
     expect(screen.queryByTestId("permission-card")).toBeNull();
+  });
+});
+
+// --- Real backend event classifier (step_id → agent map, human messages, filtered noise) ---
+
+const STEP_ULID = "01KQG1JPPHEE8RMVH3X4Y5Z6W7";
+const STEP_ULID_2 = "01KQG1M5RMVH3X4Y5Z6W7A8B9C";
+
+describe("ActivityColumn — real backend event classifier", () => {
+  // A. step_id → agent resolution via StepStarted map
+
+  it("StepStarted followed by StepComplete: StepComplete row shows resolved agent, not ULID", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "rs1",
+        type: "StepStarted",
+        t: 1_700_000_001_000,
+        stepId: STEP_ULID,
+        data: { agent: "architect", model: "claude-sonnet" },
+      }),
+      envelope({
+        id: "sc1",
+        type: "StepComplete",
+        t: 1_700_000_060_000,
+        stepId: STEP_ULID,
+        data: { status: "passed", duration_ms: 59000, summary: "" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const agentLabels = screen.getAllByTestId("log-row-agent");
+    const agentTexts = agentLabels.map((el) => el.textContent);
+    // Both rows should show "architect", not the ULID
+    expect(agentTexts.every((t) => t === "architect")).toBe(true);
+    expect(agentTexts).not.toContain(STEP_ULID);
+  });
+
+  it("events with step_id but no preceding StepStarted fall back to 'system'", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "sc_orphan",
+        type: "StepComplete",
+        t: 1_700_000_060_000,
+        stepId: STEP_ULID,
+        data: { status: "passed", duration_ms: 1000 },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const agentLabel = screen.getByTestId("log-row-agent");
+    expect(agentLabel.textContent).toBe("system");
+  });
+
+  it("multiple steps: each step resolves to its own agent name", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "ss1",
+        type: "StepStarted",
+        stepId: STEP_ULID,
+        data: { agent: "architect", model: "claude-sonnet" },
+      }),
+      envelope({
+        id: "ss2",
+        type: "StepStarted",
+        stepId: STEP_ULID_2,
+        data: { agent: "tdd-developer", model: "claude-sonnet" },
+      }),
+      envelope({
+        id: "sc2",
+        type: "StepComplete",
+        stepId: STEP_ULID_2,
+        data: { status: "passed", duration_ms: 5000 },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const agentLabels = screen.getAllByTestId("log-row-agent");
+    const agentTexts = agentLabels.map((el) => el.textContent);
+    expect(agentTexts).toContain("architect");
+    expect(agentTexts).toContain("tdd-developer");
+  });
+
+  // B. Filtered event types
+
+  it("ThinkingDelta events are filtered and produce no visible rows", () => {
+    const events: EventEnvelope[] = [
+      envelope({ id: "td1", type: "ThinkingDelta", stepId: STEP_ULID, data: { content: "hmm..." } }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    expect(screen.queryAllByTestId("event-row")).toHaveLength(0);
+    expect(screen.getByTestId("activity-tab-all-count")).toHaveTextContent("0");
+  });
+
+  it("ToolUseDelta events are filtered and produce no visible rows", () => {
+    const events: EventEnvelope[] = [
+      envelope({ id: "tud1", type: "ToolUseDelta", stepId: STEP_ULID, data: { content: "stdout line" } }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    expect(screen.queryAllByTestId("event-row")).toHaveLength(0);
+  });
+
+  it("TextDelta events are still filtered (regression guard)", () => {
+    const events: EventEnvelope[] = [
+      envelope({ id: "textd1", type: "TextDelta", stepId: STEP_ULID, data: { content: "partial text" } }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    expect(screen.queryAllByTestId("event-row")).toHaveLength(0);
+  });
+
+  // C. ToolUseStart → ToolCallCard
+
+  it("ToolUseStart with string input renders as ToolCallCard with correct tool and arg", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "tus1",
+        type: "ToolUseStart",
+        stepId: STEP_ULID,
+        data: { tool_call_id: "tc1", tool_name: "read_file", input: "/src/foo.ts" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    expect(screen.getByTestId("tool-call-card")).toBeInTheDocument();
+  });
+
+  it("ToolUseStart with object input renders as ToolCallCard with JSON-stringified arg", () => {
+    const inputObj = { command: "ls -la" };
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "tus2",
+        type: "ToolUseStart",
+        stepId: STEP_ULID,
+        data: { tool_call_id: "tc2", tool_name: "shell", input: inputObj },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const card = screen.getByTestId("tool-call-card");
+    expect(card).toBeInTheDocument();
+    // The arg should be the JSON stringified input
+    expect(card.textContent).toContain(JSON.stringify(inputObj));
+  });
+
+  it("ToolUseStart appears in the tool filter tab", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "tus3",
+        type: "ToolUseStart",
+        stepId: STEP_ULID,
+        data: { tool_call_id: "tc3", tool_name: "write_file", input: "/out/bar.ts" },
+      }),
+    ];
+    const { container } = render(<ControlledActivityColumn events={events} />);
+    fireEvent.click(screen.getByTestId("activity-tab-tool"));
+    const rows = container.querySelectorAll('[data-testid="event-row"]');
+    expect(rows).toHaveLength(1);
+  });
+
+  it("ToolUseEnd alone produces no visible row (filtered)", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "tue1",
+        type: "ToolUseEnd",
+        stepId: STEP_ULID,
+        data: { tool_call_id: "tc1", exit_code: 0, duration_ms: 123 },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    expect(screen.queryAllByTestId("event-row")).toHaveLength(0);
+    expect(screen.getByTestId("activity-tab-all-count")).toHaveTextContent("0");
+  });
+
+  // D. Per-type human message translations
+
+  it("RunStarted renders message 'Run started'", () => {
+    const events: EventEnvelope[] = [
+      envelope({ id: "rs_msg", type: "RunStarted", stepId: null, data: { ticket: "ABC-1" } }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const row = screen.getByTestId("event-row");
+    expect(row.textContent).toContain("Run started");
+  });
+
+  it("RunComplete with duration renders 'Run completed in 47s'", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "rc_msg",
+        type: "RunComplete",
+        stepId: null,
+        data: { status: "completed", duration_ms: 47000 },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const row = screen.getByTestId("event-row");
+    expect(row.textContent).toContain("Run completed in 47s");
+  });
+
+  it("StepStarted renders message 'Started'", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "ss_msg",
+        type: "StepStarted",
+        stepId: STEP_ULID,
+        data: { agent: "qa", model: "claude-haiku" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const row = screen.getByTestId("event-row");
+    expect(row.textContent).toContain("Started");
+  });
+
+  it("StepComplete with non-empty summary renders the summary as message", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "sc_sum",
+        type: "StepComplete",
+        stepId: STEP_ULID,
+        data: { status: "passed", duration_ms: 12000, summary: "ok" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const row = screen.getByTestId("event-row");
+    expect(row.textContent).toContain("ok");
+  });
+
+  it("StepComplete without summary uses 'status in Xs' format", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "sc_nosummary",
+        type: "StepComplete",
+        stepId: STEP_ULID,
+        data: { status: "passed", duration_ms: 12000, summary: "" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const row = screen.getByTestId("event-row");
+    expect(row.textContent).toContain("passed in 12s");
+  });
+
+  it("FileChange renders 'Changed /src/foo.go'", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "fc_msg",
+        type: "FileChange",
+        stepId: STEP_ULID,
+        data: { path: "/src/foo.go", before_hash: "abc", after_hash: "def" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const row = screen.getByTestId("event-row");
+    expect(row.textContent).toContain("Changed /src/foo.go");
+  });
+
+  it("ClarifyingQuestion renders the question text prefixed with '?'", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "cq_msg",
+        type: "ClarifyingQuestion",
+        stepId: STEP_ULID,
+        data: { question_id: "q1", question: "Which module should handle auth?", suggested_answers: [] },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const row = screen.getByTestId("event-row");
+    expect(row.textContent).toContain("? Which module should handle auth?");
+  });
+
+  it("ToolUseStart shows agent resolved from StepStarted when step_id matches", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "ss_for_tool",
+        type: "StepStarted",
+        stepId: STEP_ULID,
+        data: { agent: "tdd-developer", model: "claude-sonnet" },
+      }),
+      envelope({
+        id: "tus_agent",
+        type: "ToolUseStart",
+        stepId: STEP_ULID,
+        data: { tool_call_id: "tc_a", tool_name: "bash", input: "cargo test" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    // ToolCallCard should show agent "tdd-developer"
+    const cards = screen.getAllByTestId("tool-call-card");
+    expect(cards).toHaveLength(1);
+    // The card's agent chip should contain "tdd-developer"
+    expect(cards[0].textContent).toContain("tdd-developer");
   });
 });
