@@ -12,7 +12,31 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn().mockResolvedValue([]),
 }));
 
+// HeaderBar uses useTheme which calls window.matchMedia — stub it for jsdom.
+function stubMatchMedia() {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
 describe("App", () => {
+  beforeEach(() => {
+    stubMatchMedia();
+    localStorage.clear();
+    document.documentElement.removeAttribute("data-theme");
+  });
+
   it("renders the app shell header", () => {
     render(<App />);
     expect(screen.getByTestId("app-shell-header")).toBeInTheDocument();

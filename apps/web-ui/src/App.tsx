@@ -1,44 +1,39 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import AppShell from "./components/AppShell";
+import HeaderBar from "./components/HeaderBar";
+import PipelineBar from "./components/PipelineBar";
 import ChatPane from "./components/ChatPane";
-import DismissableBanner from "./components/DismissableBanner";
-import EventList from "./components/EventList";
-import FindingsTable from "./components/FindingsTable";
-import PastRunsPane from "./components/PastRunsPane";
-import SettingsPane from "./components/SettingsPane";
-import StartRunForm from "./components/StartRunForm";
-import Stepper from "./components/Stepper";
+import ActivityColumn from "./components/ActivityColumn";
+import IssueColumn from "./components/IssueColumn";
 import { useFindings } from "./hooks/useFindings";
 import { useTauriEvents } from "./hooks/useTauriEvents";
+import { useRunStateOverall } from "./hooks/useRunStateOverall";
+import { usePipelineFromRunState } from "./hooks/usePipelineFromRunState";
 import { deriveRunState } from "./types/run";
+import type { ActivityFilter } from "./components/ActivityHeader";
+import type { IssueTicket } from "./types/pipeline";
+import { findingsToActionItems } from "./utils/findingsToActionItems";
+import { isTauriDense } from "./utils/isTauriDense";
+
+const PLACEHOLDER_TICKET: IssueTicket = {
+  id: "AGT-000",
+  title: "No active ticket",
+  labels: [],
+  body: ["No description available — ticket source integration ships in a future phase."],
+  acceptance: [],
+};
 
 export default function App() {
   const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
-  // The run whose findings the cockpit should display. Pinned to the most
-  // recent active run; survives RunComplete (which clears activeRunId in
-  // StartRunForm) so the user can still triage findings from the run that
-  // just ended.
   const [findingsRunId, setFindingsRunId] = useState<string | undefined>(undefined);
-  // Bumped after RunComplete to force `useFindings` to refetch — the run
-  // persists findings synchronously, so by RunComplete they are guaranteed
-  // to be in the DB.
   const [findingsRefetchKey, setFindingsRefetchKey] = useState(0);
 
-  const { events, historyError } = useTauriEvents(activeRunId);
-  const { findings, error: findingsError } = useFindings(findingsRunId, findingsRefetchKey);
-  // Local dismiss state for the findings-error toast — once the user
-  // closes it, don't surface the same error again until a fresh fetch
-  // produces a new error (which resets `findingsError` to null briefly
-  // and then to the new value, both of which clear the dismissed flag).
-  const [findingsErrorDismissed, setFindingsErrorDismissed] = useState(false);
-  useEffect(() => {
-    setFindingsErrorDismissed(false);
-  }, [findingsError]);
+  const { events } = useTauriEvents(activeRunId);
+  const { findings } = useFindings(findingsRunId, findingsRefetchKey);
 
   useEffect(() => {
-    if (activeRunId && activeRunId !== findingsRunId) {
-      setFindingsRunId(activeRunId);
-    }
+    if (activeRunId && activeRunId !== findingsRunId) setFindingsRunId(activeRunId);
   }, [activeRunId, findingsRunId]);
 
   useEffect(() => {
@@ -51,72 +46,84 @@ export default function App() {
 
   const runState = useMemo(() => deriveRunState(events), [events]);
 
-  // Wall-clock start of the active run, derived from the first envelope's
-  // timestamp_ms. `null` until the first event arrives — the indicator
-  // shows "starting…" in that gap.
-  const startedAtMs = useMemo<number | null>(() => {
-    if (!activeRunId) return null;
-    const first = events.find((e) => e.run_id === activeRunId);
-    return first ? first.timestamp_ms : null;
-  }, [events, activeRunId]);
+  const { overallRunState, startedAtMs, elapsedMs } = useRunStateOverall(events, activeRunId);
+  const { pipelineAgents, pipelineStatuses, activeIndex } = usePipelineFromRunState(runState);
+
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const actionItems = useMemo(() => findingsToActionItems(findings), [findings]);
 
   const cancelActiveRun = useCallback(async () => {
     if (!activeRunId) return;
     await invoke("cancel_run", { runId: activeRunId });
   }, [activeRunId]);
 
+  const handleRunPipeline = useCallback(() => {
+    // Minimal placeholder: invokes start_ticket_run directly.
+    // A SpecDialog-driven Run flow is tracked for a future W.8.x step.
+    void invoke("start_ticket_run", {
+      ticket: "Untitled run",
+      backend: "claude-code",
+      model: null,
+    })
+      .then((result: unknown) => {
+        const r = result as { run_id?: string };
+        if (typeof r.run_id === "string") setActiveRunId(r.run_id);
+      })
+      .catch(() => {
+        /* no-op; error surfaces elsewhere */
+      });
+  }, []);
+
+  const dense = isTauriDense();
+  const ticket = PLACEHOLDER_TICKET;
+
   return (
-    <main className="min-h-screen bg-gray-50 flex flex-col md:flex-row md:items-start">
-      {/* Cockpit column — top at narrow viewports, left column at md+ */}
-      <div className="flex flex-col md:w-1/2 md:min-h-screen md:border-r md:border-gray-200">
-        <header className="px-4 sm:px-6 py-4 border-b border-gray-200">
-          <h1 className="text-2xl font-bold text-gray-900">Agentic</h1>
-        </header>
-        <DismissableBanner
-          testId="history-error-banner"
-          severity="warning"
-          message={historyError ? `Could not load event history: ${historyError}` : null}
+    <AppShell
+      dense={dense}
+      header={
+        <HeaderBar
+          brand="Agentic"
+          ticketSlug={activeRunId ? ticket.id : null}
+          runState={overallRunState}
+          elapsedMs={elapsedMs}
+          onOpenSettings={() => {
+            /* W.8.3 wires SettingsModal */
+          }}
+          onRunPipeline={handleRunPipeline}
+          onStopRun={() => {
+            void cancelActiveRun();
+          }}
+          onRerun={handleRunPipeline}
         />
-        <DismissableBanner
-          testId="findings-error-banner"
-          severity="error"
-          message={
-            findingsError && !findingsErrorDismissed
-              ? `Could not load findings: ${findingsError}`
-              : null
-          }
-          onDismiss={() => setFindingsErrorDismissed(true)}
+      }
+      pipelineBar={
+        <PipelineBar
+          agents={pipelineAgents}
+          statuses={pipelineStatuses}
+          activeIndex={activeIndex}
         />
-        <StartRunForm
-          events={events}
-          activeRunId={activeRunId}
-          onActiveRunIdChange={setActiveRunId}
-        />
-        <Stepper state={runState} />
-        <section className="px-3 sm:px-6 pb-6">
-          <EventList events={events} />
-        </section>
-        <section className="px-3 sm:px-6 pb-6">
-          <FindingsTable findings={findings} />
-        </section>
-        <section className="px-3 sm:px-6 pb-6">
-          <PastRunsPane onSelectRun={setFindingsRunId} />
-        </section>
-        <section className="px-3 sm:px-6 pb-6">
-          <SettingsPane />
-        </section>
-      </div>
-      {/* Chat column — bottom at narrow viewports, right column at md+ */}
-      <div className="flex flex-col md:w-1/2 md:sticky md:top-0 md:min-h-screen">
-        <section className="p-3 sm:p-6">
-          <ChatPane
-            onTicketRunStarted={setActiveRunId}
-            activeRunId={activeRunId ?? null}
-            activeRunStartedAtMs={startedAtMs}
-            onCancelActiveRun={cancelActiveRun}
-          />
-        </section>
-      </div>
-    </main>
+      }
+    >
+      <ChatPane
+        onTicketRunStarted={setActiveRunId}
+        activeRunId={activeRunId ?? null}
+        activeRunStartedAtMs={startedAtMs}
+        onCancelActiveRun={cancelActiveRun}
+      />
+      <ActivityColumn
+        events={events}
+        filter={activityFilter}
+        onFilterChange={setActivityFilter}
+        pendingPermissions={[]}
+        onPermissionDecision={() => {
+          /* parent will own this in a future step */
+        }}
+      />
+      <IssueColumn
+        ticket={ticket}
+        runState={overallRunState}
+        actionItems={actionItems}
+      />
+    </AppShell>
   );
 }
