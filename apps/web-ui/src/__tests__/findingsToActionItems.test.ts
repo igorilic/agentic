@@ -54,6 +54,11 @@ describe("findingsToActionItems", () => {
     expect(result).toHaveLength(0);
   });
 
+  it("skips empty-string severity", () => {
+    const result = findingsToActionItems([finding({ id: "f1", severity: "" })]);
+    expect(result).toHaveLength(0);
+  });
+
   it("filters out findings with non-null triage, keeps triage:null", () => {
     const findings = [
       finding({ id: "f1", severity: "error", triage: "fix" }),
