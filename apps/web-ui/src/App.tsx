@@ -6,6 +6,7 @@ import PipelineBar from "./components/PipelineBar";
 import ChatPane from "./components/ChatPane";
 import ActivityColumn from "./components/ActivityColumn";
 import IssueColumn from "./components/IssueColumn";
+import SettingsModal from "./components/SettingsModal";
 import { useFindings } from "./hooks/useFindings";
 import { useTauriEvents } from "./hooks/useTauriEvents";
 import { useRunStateOverall } from "./hooks/useRunStateOverall";
@@ -49,6 +50,8 @@ export default function App() {
   const { overallRunState, startedAtMs, elapsedMs } = useRunStateOverall(events, activeRunId);
   const { pipelineAgents, pipelineStatuses, activeIndex } = usePipelineFromRunState(runState);
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const actionItems = useMemo(() => findingsToActionItems(findings), [findings]);
 
@@ -78,52 +81,57 @@ export default function App() {
   const ticket = PLACEHOLDER_TICKET;
 
   return (
-    <AppShell
-      dense={dense}
-      header={
-        <HeaderBar
-          brand="Agentic"
-          ticketSlug={activeRunId ? ticket.id : null}
+    <>
+      <AppShell
+        dense={dense}
+        header={
+          <HeaderBar
+            brand="Agentic"
+            ticketSlug={activeRunId ? ticket.id : null}
+            runState={overallRunState}
+            elapsedMs={elapsedMs}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onRunPipeline={handleRunPipeline}
+            onStopRun={() => {
+              void cancelActiveRun();
+            }}
+            onRerun={handleRunPipeline}
+          />
+        }
+        pipelineBar={
+          <PipelineBar
+            agents={pipelineAgents}
+            statuses={pipelineStatuses}
+            activeIndex={activeIndex}
+          />
+        }
+      >
+        <ChatPane
+          onTicketRunStarted={setActiveRunId}
+          activeRunId={activeRunId ?? null}
+          activeRunStartedAtMs={startedAtMs}
+          onCancelActiveRun={cancelActiveRun}
+        />
+        <ActivityColumn
+          events={events}
+          filter={activityFilter}
+          onFilterChange={setActivityFilter}
+          pendingPermissions={[]}
+          onPermissionDecision={() => {
+            /* parent will own this in a future step */
+          }}
+        />
+        <IssueColumn
+          ticket={ticket}
           runState={overallRunState}
-          elapsedMs={elapsedMs}
-          onOpenSettings={() => {
-            /* W.8.3 wires SettingsModal */
-          }}
-          onRunPipeline={handleRunPipeline}
-          onStopRun={() => {
-            void cancelActiveRun();
-          }}
-          onRerun={handleRunPipeline}
+          actionItems={actionItems}
         />
-      }
-      pipelineBar={
-        <PipelineBar
-          agents={pipelineAgents}
-          statuses={pipelineStatuses}
-          activeIndex={activeIndex}
-        />
-      }
-    >
-      <ChatPane
-        onTicketRunStarted={setActiveRunId}
-        activeRunId={activeRunId ?? null}
-        activeRunStartedAtMs={startedAtMs}
-        onCancelActiveRun={cancelActiveRun}
+      </AppShell>
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSelectRun={setFindingsRunId}
       />
-      <ActivityColumn
-        events={events}
-        filter={activityFilter}
-        onFilterChange={setActivityFilter}
-        pendingPermissions={[]}
-        onPermissionDecision={() => {
-          /* parent will own this in a future step */
-        }}
-      />
-      <IssueColumn
-        ticket={ticket}
-        runState={overallRunState}
-        actionItems={actionItems}
-      />
-    </AppShell>
+    </>
   );
 }
