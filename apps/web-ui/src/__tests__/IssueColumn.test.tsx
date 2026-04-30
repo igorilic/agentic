@@ -26,6 +26,7 @@ describe("IssueColumn", () => {
     render(<IssueColumn ticket={fixture} />);
     const idEl = screen.getByTestId("issue-id");
     expect(idEl).toHaveTextContent("AGT-204");
+    expect(idEl.className).toContain("text-[11px]");
     expect(idEl.className).toContain("text-fg-subtle");
     expect(idEl.className).toMatch(/font-bold/);
   });
