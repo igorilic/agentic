@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Modal from "./Modal";
 
 export type SpecDialogProps = {
   open: boolean;
@@ -10,8 +11,6 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
 
-  if (!open) return null;
-
   const submitDisabled = title.trim() === "";
 
   const handleSubmit = () => {
@@ -20,25 +19,15 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
   };
 
   return (
-    <div
-      data-testid="spec-dialog-backdrop"
-      onClick={onClose}
-      className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center"
+    <Modal
+      open={open}
+      onClose={onClose}
+      ariaLabel="New spec"
+      backdropTestId="spec-dialog-backdrop"
+      panelTestId="spec-dialog"
+      widthClass="w-[560px]"
     >
-      <div
-        data-testid="spec-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="New spec"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.stopPropagation();
-            onClose();
-          }
-        }}
-        className="w-[560px] max-h-[80vh] overflow-y-auto rounded-[14px] border border-border bg-bg-surface shadow-modal p-5 flex flex-col gap-4"
-      >
+      <div className="p-5 flex flex-col gap-4">
         {/* Header */}
         <header className="flex items-start gap-3">
           <svg
@@ -99,6 +88,6 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
           </button>
         </footer>
       </div>
-    </div>
+    </Modal>
   );
 }
