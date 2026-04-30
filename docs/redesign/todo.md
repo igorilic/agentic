@@ -1645,7 +1645,7 @@ opens `SpecDialog` from the chat column.
 
 ## Phase 10 — TUI palette + title bar
 
-### Step T.10.1: New `theme` module with color constants
+### [x] Step T.10.1: New `theme` module with color constants
 
 **Goal**: Centralize all TUI colors per spec §4.1 in `crates/agentic-tui/src/theme.rs`.
 
@@ -1666,7 +1666,7 @@ opens `SpecDialog` from the chat column.
 
 ---
 
-### Step T.10.2: Title bar (28 px, traffic lights + centered text)
+### [x] Step T.10.2: Title bar (28 px, traffic lights + centered text)
 
 **Goal**: New widget rendering the title bar at the top of the frame.
 
@@ -1691,7 +1691,7 @@ opens `SpecDialog` from the chat column.
 
 ## Phase 11 — TUI pipeline strip + tabs
 
-### Step T.11.1: Issue header strip
+### [x] Step T.11.1: Issue header strip
 
 **Goal**: Render the `▰ agentic │ AGT-204 <title>` row + run-state pill on the right.
 
