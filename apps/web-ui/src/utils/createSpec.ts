@@ -7,7 +7,8 @@ import { invoke } from "@tauri-apps/api/core";
  *
  * The body parameter is captured at the SpecDialog boundary but
  * intentionally dropped at the IPC layer — start_ticket_run accepts
- * only { ticket, backend, model } today.
+ * only { ticket, backend, model }. Tracked in GH #92 for when the
+ * backend gains a body/description field.
  */
 export async function createSpec(title: string): Promise<string | undefined> {
   const result = (await invoke("start_ticket_run", {
