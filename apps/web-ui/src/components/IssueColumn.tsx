@@ -1,7 +1,15 @@
 import { useState } from "react";
-import type { ActionItem, IssueTicket, RunStateOverall } from "../types/pipeline";
+import type { ActionItem, AgentStatus, IssueTicket, RunStateOverall } from "../types/pipeline";
+import StatusDot from "./StatusDot";
 import SpecDialog from "./SpecDialog";
 import { createSpec } from "../utils/createSpec";
+
+const RUN_STATE_TO_AGENT_STATUS: Record<RunStateOverall, AgentStatus> = {
+  idle: "queued",
+  running: "active",
+  completed: "done",
+  failed: "failed",
+};
 
 export type IssueColumnProps = {
   ticket: IssueTicket;
@@ -38,12 +46,15 @@ export default function IssueColumn({ ticket, runState, actionItems }: IssueColu
     >
       {/* Header strip */}
       <div className="flex flex-col gap-1">
-        <span
-          data-testid="issue-id"
-          className="text-[11px] font-bold text-fg-subtle"
-        >
-          {ticket.id}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            data-testid="issue-id"
+            className="text-[11px] font-bold text-fg-subtle"
+          >
+            {ticket.id}
+          </span>
+          <StatusDot status={RUN_STATE_TO_AGENT_STATUS[runState ?? "idle"]} />
+        </div>
         <h1
           data-testid="issue-title"
           className="text-[15px] font-bold text-fg leading-tight"
@@ -70,6 +81,12 @@ export default function IssueColumn({ ticket, runState, actionItems }: IssueColu
       {/* Description body */}
       {ticket.body.length > 0 && (
         <div className="flex flex-col gap-2">
+          <div
+            data-testid="issue-section-description"
+            className="text-[11px] font-semibold uppercase tracking-[0.05em] text-fg-muted"
+          >
+            Description
+          </div>
           {ticket.body.map((paragraph, i) => (
             <p
               key={i}
@@ -84,10 +101,17 @@ export default function IssueColumn({ ticket, runState, actionItems }: IssueColu
 
       {/* Acceptance checklist */}
       {ticket.acceptance.length > 0 && (
-        <ul
-          role="list"
-          className="flex flex-col gap-1 font-mono text-[12px] text-fg"
-        >
+        <>
+          <div
+            data-testid="issue-section-acceptance"
+            className="text-[11px] font-semibold uppercase tracking-[0.05em] text-fg-muted"
+          >
+            Acceptance criteria
+          </div>
+          <ul
+            role="list"
+            className="flex flex-col gap-1 font-mono text-[12px] text-fg"
+          >
           {ticket.acceptance.map((item, i) => (
             <li
               key={i}
@@ -99,7 +123,8 @@ export default function IssueColumn({ ticket, runState, actionItems }: IssueColu
               <span>{item}</span>
             </li>
           ))}
-        </ul>
+          </ul>
+        </>
       )}
 
       {/* Action items section — only when completed and non-empty */}
