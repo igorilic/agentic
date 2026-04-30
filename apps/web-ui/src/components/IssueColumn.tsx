@@ -1,12 +1,21 @@
-import type { IssueTicket, RunStateOverall } from "../types/pipeline";
+import type { ActionItem, IssueTicket, RunStateOverall } from "../types/pipeline";
 
 export type IssueColumnProps = {
   ticket: IssueTicket;
   runState?: RunStateOverall;
+  actionItems?: ActionItem[];
 };
 
-export default function IssueColumn({ ticket, runState }: IssueColumnProps) {
+const ACTION_ITEM_ICON: Record<ActionItem["kind"], string> = {
+  issue: "✓",
+  warning: "⚠",
+  followup: "↗",
+};
+
+export default function IssueColumn({ ticket, runState, actionItems }: IssueColumnProps) {
   const acceptanceChecked = runState === "completed";
+  const showActionItems = runState === "completed" && (actionItems?.length ?? 0) > 0;
+
   return (
     <div
       data-testid="issue-column"
@@ -76,6 +85,45 @@ export default function IssueColumn({ ticket, runState }: IssueColumnProps) {
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Action items section — only when completed and non-empty */}
+      {showActionItems && (
+        <section data-testid="issue-action-items" className="flex flex-col gap-2">
+          <h2 className="text-[12px] font-bold uppercase tracking-[0.05em] text-fg-muted">
+            Action items
+          </h2>
+          <ul role="list" className="flex flex-col gap-2">
+            {(actionItems ?? []).map((item) => (
+              <li
+                key={item.id}
+                data-testid={`action-item-${item.id}`}
+                className="flex items-start gap-2"
+              >
+                <span
+                  data-testid={`action-item-${item.id}-icon`}
+                  aria-hidden="true"
+                  className="select-none"
+                >
+                  {ACTION_ITEM_ICON[item.kind]}
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[13px] font-semibold text-fg">{item.title}</span>
+                  {item.description !== undefined && (
+                    <span className="text-[12px] text-fg-muted">{item.description}</span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            data-testid="issue-create-spec"
+            className="mt-2 self-start rounded-md bg-[#18181b] px-3 py-1.5 text-xs font-semibold text-white"
+          >
+            Create spec
+          </button>
+        </section>
       )}
     </div>
   );

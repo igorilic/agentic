@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import IssueColumn from "../components/IssueColumn";
-import type { IssueTicket } from "../types/pipeline";
+import type { ActionItem, IssueTicket } from "../types/pipeline";
 
 const fixture: IssueTicket = {
   id: "AGT-204",
@@ -156,5 +156,99 @@ describe("IssueColumn", () => {
     items.forEach((item) => {
       expect(item).toHaveAttribute("data-checked", "false");
     });
+  });
+
+  // W.6.3 — action items section
+
+  const actionItemsFixture: ActionItem[] = [
+    { id: "a1", kind: "issue",    title: "Document new headers in public API reference", description: "from docs", fromAgent: "docs"     },
+    { id: "a2", kind: "warning",  title: "Reviewer flagged: lock contention under burst",                          fromAgent: "reviewer" },
+    { id: "a3", kind: "followup", title: "Add Grafana alert: 429 rate spike per-tenant",  description: "from devops", fromAgent: "devops" },
+  ];
+
+  it("runState='completed' + 3 items: issue-action-items section is in document", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={actionItemsFixture} />);
+    expect(screen.getByTestId("issue-action-items")).toBeInTheDocument();
+  });
+
+  it("runState='completed' + 3 items: heading 'Action items' has uppercase and text-fg-muted classes", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={actionItemsFixture} />);
+    const heading = screen.getByRole("heading", { name: /action items/i });
+    expect(heading.className).toContain("uppercase");
+    expect(heading.className).toContain("text-fg-muted");
+  });
+
+  it("runState='completed' + 3 items: all 3 action item rows render with correct testids", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={actionItemsFixture} />);
+    expect(screen.getByTestId("action-item-a1")).toBeInTheDocument();
+    expect(screen.getByTestId("action-item-a2")).toBeInTheDocument();
+    expect(screen.getByTestId("action-item-a3")).toBeInTheDocument();
+  });
+
+  it("each action item row renders its title text", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={actionItemsFixture} />);
+    expect(screen.getByTestId("action-item-a1")).toHaveTextContent("Document new headers in public API reference");
+    expect(screen.getByTestId("action-item-a2")).toHaveTextContent("Reviewer flagged: lock contention under burst");
+    expect(screen.getByTestId("action-item-a3")).toHaveTextContent("Add Grafana alert: 429 rate spike per-tenant");
+  });
+
+  it("rows with description render the description text", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={actionItemsFixture} />);
+    expect(screen.getByTestId("action-item-a1")).toHaveTextContent("from docs");
+    expect(screen.getByTestId("action-item-a3")).toHaveTextContent("from devops");
+  });
+
+  it("row without description (a2) does not render a description sub-element", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={actionItemsFixture} />);
+    const row = screen.getByTestId("action-item-a2");
+    // No element with the description class inside this row
+    expect(row.querySelectorAll(".text-fg-muted")).toHaveLength(0);
+  });
+
+  it("status icon a1 (issue) shows ✓", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={actionItemsFixture} />);
+    expect(screen.getByTestId("action-item-a1-icon")).toHaveTextContent("✓");
+  });
+
+  it("status icon a2 (warning) shows ⚠", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={actionItemsFixture} />);
+    expect(screen.getByTestId("action-item-a2-icon")).toHaveTextContent("⚠");
+  });
+
+  it("status icon a3 (followup) shows ↗", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={actionItemsFixture} />);
+    expect(screen.getByTestId("action-item-a3-icon")).toHaveTextContent("↗");
+  });
+
+  it("'Create spec' button renders with correct testid and text", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={actionItemsFixture} />);
+    const btn = screen.getByTestId("issue-create-spec");
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveTextContent(/create spec/i);
+  });
+
+  it("runState='completed' + empty actionItems: section is absent", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" actionItems={[]} />);
+    expect(screen.queryByTestId("issue-action-items")).toBeNull();
+  });
+
+  it("runState='completed' + undefined actionItems: section is absent", () => {
+    render(<IssueColumn ticket={fixture} runState="completed" />);
+    expect(screen.queryByTestId("issue-action-items")).toBeNull();
+  });
+
+  it("runState='running' + 3 items: section is absent", () => {
+    render(<IssueColumn ticket={fixture} runState="running" actionItems={actionItemsFixture} />);
+    expect(screen.queryByTestId("issue-action-items")).toBeNull();
+  });
+
+  it("runState='failed' + 3 items: section is absent", () => {
+    render(<IssueColumn ticket={fixture} runState="failed" actionItems={actionItemsFixture} />);
+    expect(screen.queryByTestId("issue-action-items")).toBeNull();
+  });
+
+  it("runState='idle' + 3 items: section is absent", () => {
+    render(<IssueColumn ticket={fixture} runState="idle" actionItems={actionItemsFixture} />);
+    expect(screen.queryByTestId("issue-action-items")).toBeNull();
   });
 });
