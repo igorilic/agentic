@@ -3,6 +3,7 @@
 //! draws into the frame.
 
 pub mod chat;
+pub mod chat_pane;
 pub mod cockpit;
 pub mod diff;
 pub mod findings;

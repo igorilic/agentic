@@ -53,5 +53,5 @@ pub fn draw_app(f: &mut Frame<'_>, state: &AppState) {
 
     let (cockpit_area, chat_area) = compute_panes(rows[4], state);
     views::logs_pane::render(cockpit_area, f, state);
-    views::chat::render(chat_area, state, f);
+    views::chat_pane::render(chat_area, f, state);
 }

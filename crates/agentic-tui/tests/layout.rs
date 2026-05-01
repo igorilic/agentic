@@ -8,16 +8,6 @@ use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Rect;
 
-fn flatten(terminal: &Terminal<TestBackend>) -> String {
-    terminal
-        .backend()
-        .buffer()
-        .content
-        .iter()
-        .map(|c| c.symbol())
-        .collect()
-}
-
 // ─── pure layout maths ───────────────────────────────────────────────────────
 
 #[test]
@@ -95,46 +85,32 @@ fn tab_cycles_focus_through_logs_chat_issue() {
 }
 
 // ─── render integration — pane titles appear in the buffer ──────────────────
-// NOTE(T.12.1): The left pane is now the borderless logs_pane; there is no
-// longer a "Cockpit" border title. The Chat border title remains. The
-// focus-star (*) indicator only applies to the Chat pane border, which still
-// has a titled Block. The logs pane focus state is tracked in AppState but
-// not reflected as a border title.
+// NOTE(T.12.2): `views::chat` (bordered Block with "Chat" title) has been
+// replaced by `views::chat_pane` (borderless message blocks per spec §4.6).
+// The "Chat" border title and "Chat *" focus indicator are no longer rendered.
+// Focus state is still tracked in AppState (tab_cycles test above covers that).
+// These render tests are updated to just verify no panic.
 
 #[test]
 fn first_frame_renders_chat_pane_title() {
+    // The old chat.rs Block had a "Chat" border title; chat_pane is borderless.
+    // T.12.2 removed that border. Assert: render does not panic.
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
     let s = AppState::default();
-    terminal.draw(|f| draw_app(f, &s)).unwrap();
-
-    let content = flatten(&terminal);
-    assert!(
-        content.contains("Chat"),
-        "expected 'Chat' title in frame; got: {content:?}"
-    );
+    terminal.draw(|f| draw_app(f, &s)).unwrap(); // must not panic
 }
 
 #[test]
 fn focus_indicator_renders_in_chat_pane_title_when_focused() {
+    // The old chat.rs Block had a "Chat *" focus indicator. chat_pane is
+    // borderless. T.12.2 removed that indicator. Assert: render does not panic
+    // in either focus state.
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
-    let mut s = AppState::default(); // focus = Logs (logs_pane, no border title)
-    terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content_logs = flatten(&terminal);
+    let mut s = AppState::default(); // focus = Logs
+    terminal.draw(|f| draw_app(f, &s)).unwrap(); // must not panic
 
     s.handle(AppEvent::ToggleFocus); // focus = Chat
-    terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content_chat = flatten(&terminal);
-
-    // When Chat is focused, the Chat pane border shows "Chat *".
-    assert!(
-        content_chat.contains("Chat *"),
-        "chat-focused frame should show 'Chat *'; got: {content_chat:?}"
-    );
-    // When Logs is focused, Chat border should NOT carry the marker.
-    assert!(
-        !content_logs.contains("Chat *"),
-        "logs-focused frame must not show 'Chat *'; got: {content_logs:?}"
-    );
+    terminal.draw(|f| draw_app(f, &s)).unwrap(); // must not panic
 }

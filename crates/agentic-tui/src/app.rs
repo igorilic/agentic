@@ -30,6 +30,19 @@ pub struct AgentInstance {
     pub status: AgentRunStatus,
 }
 
+/// A single message in the chat pane (spec §4.6).
+///
+/// Populated by runner wiring in T.13.x; seeded from tests for T.12.2.
+#[derive(Debug, Clone)]
+pub enum ChatMessage {
+    /// Centered divider: `── <text> ──` rendered in DIM.
+    System(String),
+    /// User message: label `you` in ACCENT, body indented 2 cols.
+    User(String),
+    /// Agent message: label = agent name in GREEN, body indented 2 cols.
+    Agent { agent: String, text: String },
+}
+
 /// Level of a log entry, including tool-call variant with structured fields.
 ///
 /// Tool calls carry `name`, `arg`, and `result` separately so the renderer
@@ -139,6 +152,9 @@ pub struct AppState {
     /// Log entries rendered in the logs pane (spec §4.6).
     /// Populated by the runner wiring in T.13.x; empty by default.
     pub log: Vec<LogEntry>,
+    /// Chat messages rendered in the chat pane (spec §4.6).
+    /// Populated by the runner wiring in T.13.x; empty by default.
+    pub chat: Vec<ChatMessage>,
 }
 
 impl Default for AppState {
@@ -158,6 +174,7 @@ impl Default for AppState {
             frame_parity: false,
             pipeline: vec![],
             log: vec![],
+            chat: vec![],
         }
     }
 }

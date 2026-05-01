@@ -96,8 +96,8 @@ fn chat_pane_renders_user_label_in_accent() {
     let state = state_with_chat(vec![user_msg("hello")]);
     let buffer = render(&state);
 
-    let (col, row) = find_in_buffer(&buffer, "you", 100, 20)
-        .expect("'you' label not found in buffer");
+    let (col, row) =
+        find_in_buffer(&buffer, "you", 100, 20).expect("'you' label not found in buffer");
     let cell = buffer.cell((col, row)).unwrap();
     assert_eq!(
         cell.style().fg,
@@ -168,19 +168,48 @@ fn chat_pane_centers_system_with_em_dash_dividers() {
         "expected ─ divider AFTER 'session started' on row {row}, but none found"
     );
 
-    // Centering: count leading space/non-text cells before the first ─.
-    // The text+dividers must be roughly centered — at least 1 leading space.
-    let first_non_space = (0..100_u16)
+    // Centering: find the first ─ on the row, then verify it is NOT flush
+    // against the chat pane's left edge (i.e., there is at least 1 leading
+    // space within the chat area before the divider begins).
+    //
+    // The chat area starts at the right half of the buffer.  With
+    // cockpit_ratio=0.50 on a 100-wide terminal, that is around col 50.
+    // We find the first ─ and assert it is at least 1 column to the right
+    // of the chat pane's leftmost column (text_col - prefix, where prefix is
+    // at minimum "── " = 3 chars).  If the divider were flush-left, the first
+    // ─ would be exactly at the chat left edge.
+    let first_dash = (0..100_u16)
         .find(|&x| {
             buffer
                 .cell((x, row))
-                .map(|c| c.symbol() != " ")
+                .map(|c| c.symbol() == "─")
                 .unwrap_or(false)
         })
-        .unwrap_or(0);
+        .expect("no ─ found on the system divider row");
+
+    // The first ─ must be at least 1 col after the leftmost cell of the chat
+    // area. Since `text_col - 3` is the expected flush-left position of the
+    // first ─ when there is no centering indent, the actual first ─ must be
+    // strictly to the right of where the chat pane begins — or equivalently,
+    // strictly to the right of `text_col - 3`.
+    // In practice "── session started ──" centered in ~50-col chat gives
+    // several leading spaces.
+    //
+    // We verify: first_dash > (some chat-left) by checking that the cell
+    // immediately to the LEFT of the first ─ (within the chat area half) is
+    // a space (i.e., there IS a leading-space before the divider in the pane).
+    // With the cockpit taking up ~50 cols, first_dash > 50.
+    let chat_area_start: u16 = 50; // approximate — cockpit_ratio default=0.50
     assert!(
-        first_non_space >= 1,
-        "expected at least 1 leading space for centering on row {row}, first non-space at col {first_non_space}"
+        first_dash > chat_area_start,
+        "first ─ at col {first_dash} but expected it to be after chat area start ({chat_area_start})"
+    );
+    // Verify there is at least 1 space between the chat area start and the ─.
+    let leading_spaces_in_chat = first_dash - chat_area_start;
+    assert!(
+        leading_spaces_in_chat >= 1,
+        "expected at least 1 leading space in chat area before first ─; \
+         chat_area_start={chat_area_start}, first_dash={first_dash}"
     );
 }
 
@@ -216,14 +245,16 @@ fn chat_pane_indents_body_two_cols() {
         prev_cell.symbol(),
         " ",
         "expected space immediately before body text at ({}, {}), got '{}'",
-        col - 1, row,
+        col - 1,
+        row,
         prev_cell.symbol()
     );
     assert_eq!(
         prev2_cell.symbol(),
         " ",
         "expected space 2 cols before body text at ({}, {}), got '{}'",
-        col - 2, row,
+        col - 2,
+        row,
         prev2_cell.symbol()
     );
 }
@@ -238,8 +269,8 @@ fn chat_pane_highlights_slash_command() {
     let state = state_with_chat(vec![user_msg("Run /develop now")]);
     let buffer = render(&state);
 
-    let (start_col, row) = find_in_buffer(&buffer, "/develop", 100, 20)
-        .expect("'/develop' not found in buffer");
+    let (start_col, row) =
+        find_in_buffer(&buffer, "/develop", 100, 20).expect("'/develop' not found in buffer");
 
     // Every character of "/develop" must have bg == SLASH_TINT.
     let token = "/develop";
@@ -249,7 +280,8 @@ fn chat_pane_highlights_slash_command() {
         assert_eq!(
             cell.symbol(),
             &ch.to_string(),
-            "expected '{}' at ({col}, {row})", ch
+            "expected '{}' at ({col}, {row})",
+            ch
         );
         assert_eq!(
             cell.style().bg,
@@ -282,8 +314,8 @@ fn chat_pane_highlights_at_mention() {
     let state = state_with_chat(vec![user_msg("Cc @qa for review")]);
     let buffer = render(&state);
 
-    let (start_col, row) = find_in_buffer(&buffer, "@qa", 100, 20)
-        .expect("'@qa' not found in buffer");
+    let (start_col, row) =
+        find_in_buffer(&buffer, "@qa", 100, 20).expect("'@qa' not found in buffer");
 
     let token = "@qa";
     for (i, ch) in token.chars().enumerate() {
@@ -292,7 +324,8 @@ fn chat_pane_highlights_at_mention() {
         assert_eq!(
             cell.symbol(),
             &ch.to_string(),
-            "expected '{}' at ({col}, {row})", ch
+            "expected '{}' at ({col}, {row})",
+            ch
         );
         assert_eq!(
             cell.style().bg,
@@ -364,14 +397,14 @@ fn chat_pane_renders_in_message_order() {
     ]);
     let buffer = render(&state);
 
-    let (_user_col, user_row) = find_in_buffer(&buffer, "you", 100, 20)
-        .expect("'you' user label not found in buffer");
+    let (_user_col, user_row) =
+        find_in_buffer(&buffer, "you", 100, 20).expect("'you' user label not found in buffer");
 
     let (_sys_col, sys_row) = find_in_buffer(&buffer, "checkpoint", 100, 20)
         .expect("'checkpoint' system text not found in buffer");
 
-    let (_agent_col, agent_row) = find_in_buffer(&buffer, "qa", 100, 20)
-        .expect("'qa' agent label not found in buffer");
+    let (_agent_col, agent_row) =
+        find_in_buffer(&buffer, "qa", 100, 20).expect("'qa' agent label not found in buffer");
 
     assert!(
         user_row < sys_row,

@@ -1,3 +1,6 @@
+// TODO(T.12.x cleanup): chat module is dead — replaced by chat_pane.
+// Retains views::diff dependency; remove when diff is also dispatched.
+//
 //! Chat-pane renderer. Step 12.4 only renders the bordered Block plus
 //! a command-mode prompt at the bottom (`:plan hello█`). Step 12.5
 //! adds chat scrollback + a real text-input field.
