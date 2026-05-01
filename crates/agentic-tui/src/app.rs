@@ -198,6 +198,9 @@ impl AppState {
                     KeyCode::Char('f') => self.findings.triage_selected(Triage::Fix),
                     KeyCode::Char('t') => self.findings.triage_selected(Triage::TechDebt),
                     KeyCode::Char('i') => self.findings.triage_selected(Triage::Ignore),
+                    KeyCode::Char('1') => self.focus = Pane::Logs,
+                    KeyCode::Char('2') => self.focus = Pane::Chat,
+                    KeyCode::Char('3') => self.focus = Pane::Issue,
                     _ => {}
                 }
                 None

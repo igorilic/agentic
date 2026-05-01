@@ -122,5 +122,9 @@ fn pane_switch_keys_dont_break_existing_tab_cycle() {
 
     // Tab from Logs still cycles to Chat (T.11.4 intact)
     state.handle(AppEvent::ToggleFocus);
-    assert_eq!(state.focus, Pane::Chat, "ToggleFocus from Logs: expected Chat");
+    assert_eq!(
+        state.focus,
+        Pane::Chat,
+        "ToggleFocus from Logs: expected Chat"
+    );
 }
