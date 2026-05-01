@@ -342,6 +342,14 @@ fn tab_bar_highlight_moves_when_pane_changes() {
         "─",
         "Issue: expected '─' underline at ({issue_check}, {underline_row_issue})"
     );
+
+    // S1: verify ACCENT on issue underline cell (mirrors Logs/Chat coverage).
+    let issue_underline_cell = buf_issue.cell((issue_check, underline_row_issue)).unwrap();
+    assert_eq!(
+        issue_underline_cell.style().fg,
+        Some(accent),
+        "Issue: expected '─' at ({issue_check}, {underline_row_issue}) to have fg=ACCENT"
+    );
 }
 
 // ── Test 7: HEADER_BG continuity ─────────────────────────────────────────
@@ -378,6 +386,28 @@ fn tab_bar_uses_header_bg_continuity() {
         underline_row_has_header_bg,
         "expected at least one cell on underline row {underline_row} to have bg=HEADER_BG"
     );
+}
+
+// ── Test 10: Narrow terminal does not panic ───────────────────────────────
+
+/// Rendering at 20x10 (narrower than the full tab strip + help hint) must
+/// not panic — locks in the panic-safety contract for narrow terminals.
+#[test]
+fn tab_bar_does_not_panic_on_narrow_terminal() {
+    let backend = TestBackend::new(20, 10);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        focus: Pane::Logs,
+        pipeline: vec![],
+        ..Default::default()
+    };
+    // Exercise the full layout path; must not panic.
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+
+    // Extreme narrow: 5 columns.
+    let backend2 = TestBackend::new(5, 10);
+    let mut terminal2 = Terminal::new(backend2).unwrap();
+    terminal2.draw(|f| draw_app(f, &state)).unwrap();
 }
 
 // ── Test 8: Pane enum — Logs is the default ───────────────────────────────

@@ -106,11 +106,10 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
     }
 
     // Write help hint right-aligned on label_y.
-    let hint_chars: Vec<char> = HELP_HINT.chars().collect();
-    let hint_width = hint_chars.len() as u16;
+    let hint_width = HELP_HINT.chars().count() as u16;
     if area.width >= hint_width {
         let hint_start = area.x + area.width - hint_width;
-        for (i, ch) in hint_chars.iter().enumerate() {
+        for (i, ch) in HELP_HINT.chars().enumerate() {
             let x = hint_start + i as u16;
             set_cell(buf, x, label_y, &ch.to_string(), theme::DIM, bg);
         }
