@@ -325,3 +325,210 @@ fn logs_pane_truncates_long_messages_at_area_width() {
     // Must not panic; must not overflow.
     terminal.draw(|f| draw_app(f, &state)).unwrap();
 }
+
+// ── Test 9 (F1): tool-call quote chars are FG; parens are DIM ────────────────
+
+/// Per tui-view.jsx:322-326, the entire `"arg"` block (including both quote
+/// characters) must be styled FG. Only the outer parentheses `(` and `)` are
+/// DIM.
+///
+/// Layout for `edit_file("src/foo.rs") → ok` at the message column:
+///   e d i t _ f i l e (  "  s  r  c  /  f  o  o  .  r  s  "  )  ...
+///   0 1 2 3 4 5 6 7 8 9 10 11 ...                             21 22
+///
+/// `(` is at offset 9 from start of "edit_file", `"` (opening) at offset 10,
+/// `"` (closing) at offset 9 + 1 + len("src/foo.rs") + 1 = 21,
+/// `)` at offset 22 from start of "edit_file".
+#[test]
+fn logs_pane_tool_call_quote_chars_are_fg_parens_are_dim() {
+    let buffer = render_state(&state_with_log(vec![tool_entry()]));
+
+    // Find the start of "edit_file" in the buffer.
+    let (ef_col, ef_row) =
+        find_in_buffer(&buffer, "edit_file", 140, 40).expect("'edit_file' not found in buffer");
+
+    // `(` is at ef_col + 9 — must be DIM.
+    let open_paren_col = ef_col + 9;
+    let open_paren_cell = buffer.cell((open_paren_col, ef_row)).unwrap();
+    assert_eq!(
+        open_paren_cell.symbol(),
+        "(",
+        "expected '(' at col {open_paren_col}, row {ef_row}"
+    );
+    assert_eq!(
+        open_paren_cell.style().fg,
+        Some(agentic_tui::theme::DIM),
+        "expected '(' at ({open_paren_col}, {ef_row}) to have fg=DIM, got {:?}",
+        open_paren_cell.style().fg
+    );
+
+    // Opening `"` is at ef_col + 10 — must be FG.
+    let open_quote_col = ef_col + 10;
+    let open_quote_cell = buffer.cell((open_quote_col, ef_row)).unwrap();
+    assert_eq!(
+        open_quote_cell.symbol(),
+        "\"",
+        "expected '\"' at col {open_quote_col}, row {ef_row}"
+    );
+    assert_eq!(
+        open_quote_cell.style().fg,
+        Some(agentic_tui::theme::FG),
+        "expected opening '\"' at ({open_quote_col}, {ef_row}) to have fg=FG, got {:?}",
+        open_quote_cell.style().fg
+    );
+
+    // Closing `"` is at ef_col + 10 + len("src/foo.rs") + 1 = ef_col + 21 — must be FG.
+    // "src/foo.rs" has 10 chars, so: open_quote + 1 (opening ") + 10 (arg) = closing " at +11.
+    let arg_len = "src/foo.rs".chars().count() as u16;
+    let close_quote_col = open_quote_col + 1 + arg_len;
+    let close_quote_cell = buffer.cell((close_quote_col, ef_row)).unwrap();
+    assert_eq!(
+        close_quote_cell.symbol(),
+        "\"",
+        "expected closing '\"' at col {close_quote_col}, row {ef_row}"
+    );
+    assert_eq!(
+        close_quote_cell.style().fg,
+        Some(agentic_tui::theme::FG),
+        "expected closing '\"' at ({close_quote_col}, {ef_row}) to have fg=FG, got {:?}",
+        close_quote_cell.style().fg
+    );
+
+    // `)` is at ef_col + 10 + 1 + len("src/foo.rs") + 1 = ef_col + 22 — must be DIM.
+    let close_paren_col = close_quote_col + 1;
+    let close_paren_cell = buffer.cell((close_paren_col, ef_row)).unwrap();
+    assert_eq!(
+        close_paren_cell.symbol(),
+        ")",
+        "expected ')' at col {close_paren_col}, row {ef_row}"
+    );
+    assert_eq!(
+        close_paren_cell.style().fg,
+        Some(agentic_tui::theme::DIM),
+        "expected ')' at ({close_paren_col}, {ef_row}) to have fg=DIM, got {:?}",
+        close_paren_cell.style().fg
+    );
+}
+
+// ── Test 10 (S3): unknown agent falls back to DIM ─────────────────────────────
+
+/// Any agent name not in the canonical set must render in DIM.
+#[test]
+fn logs_pane_unknown_agent_falls_back_to_dim() {
+    let entry = LogEntry {
+        timestamp: "10:42:18".to_string(),
+        agent: "unknown-agent".to_string(),
+        level: LogLevel::Info,
+        message: "hello".to_string(),
+    };
+    let buffer = render_state(&state_with_log(vec![entry]));
+
+    let (col, row) =
+        find_in_buffer(&buffer, "unknown-agent", 140, 40)
+            .expect("'unknown-agent' not found in buffer");
+    // 'u' is the first char of "unknown-agent".
+    let cell = buffer.cell((col, row)).unwrap();
+    assert_eq!(
+        cell.style().fg,
+        Some(agentic_tui::theme::DIM),
+        "expected 'u' of 'unknown-agent' at ({col}, {row}) to have fg=DIM, got {:?}",
+        cell.style().fg
+    );
+}
+
+// ── Test 11 (S4): each canonical agent renders in its own color ───────────────
+
+/// Per tui-view.jsx:290-292:
+///   architect → BLUE, developer → GREEN, qa → PURPLE, reviewer → YELLOW.
+#[test]
+fn logs_pane_renders_each_agent_in_its_own_color() {
+    let entries = vec![
+        LogEntry {
+            timestamp: "10:42:19".to_string(),
+            agent: "architect".to_string(),
+            level: LogLevel::Info,
+            message: "arch-msg".to_string(),
+        },
+        LogEntry {
+            timestamp: "10:42:20".to_string(),
+            agent: "developer".to_string(),
+            level: LogLevel::Info,
+            message: "dev-msg".to_string(),
+        },
+        LogEntry {
+            timestamp: "10:42:21".to_string(),
+            agent: "qa".to_string(),
+            level: LogLevel::Info,
+            message: "qa-msg".to_string(),
+        },
+        LogEntry {
+            timestamp: "10:42:22".to_string(),
+            agent: "reviewer".to_string(),
+            level: LogLevel::Info,
+            message: "rev-msg".to_string(),
+        },
+    ];
+    let buffer = render_state(&state_with_log(entries));
+
+    // architect → BLUE
+    let (_, row) =
+        find_in_buffer(&buffer, "arch-msg", 140, 40).expect("'arch-msg' not found");
+    // Find "architect" on the same row: start of agent column is time_col + 10.
+    // Use the row from arch-msg and look for 'a' of "architect".
+    // We can search for "architect" restricted to that row by checking the buffer directly.
+    let arch_col = find_in_buffer(&buffer, "architect", 140, 40)
+        .map(|(c, r)| { assert_eq!(r, row, "architect row mismatch"); c })
+        .expect("'architect' not found");
+    let cell = buffer.cell((arch_col, row)).unwrap();
+    assert_eq!(
+        cell.style().fg,
+        Some(agentic_tui::theme::BLUE),
+        "architect: expected BLUE at ({arch_col}, {row}), got {:?}",
+        cell.style().fg
+    );
+
+    // developer → GREEN
+    let (_, dev_row) =
+        find_in_buffer(&buffer, "dev-msg", 140, 40).expect("'dev-msg' not found");
+    let (dev_col, _) =
+        find_in_buffer(&buffer, "developer", 140, 40).expect("'developer' not found");
+    let dev_cell = buffer.cell((dev_col, dev_row)).unwrap();
+    assert_eq!(
+        dev_cell.style().fg,
+        Some(agentic_tui::theme::GREEN),
+        "developer: expected GREEN at ({dev_col}, {dev_row}), got {:?}",
+        dev_cell.style().fg
+    );
+
+    // qa → PURPLE
+    let (_, qa_row) =
+        find_in_buffer(&buffer, "qa-msg", 140, 40).expect("'qa-msg' not found");
+    // Search for "qa" starting at the agent column on qa_row.
+    // Since "qa" is short we find it by scanning.
+    let qa_col = (0..140_u16)
+        .find(|&x| {
+            buffer.cell((x, qa_row)).map(|c| c.symbol() == "q").unwrap_or(false)
+                && buffer.cell((x + 1, qa_row)).map(|c| c.symbol() == "a").unwrap_or(false)
+        })
+        .expect("'qa' not found in qa row");
+    let qa_cell = buffer.cell((qa_col, qa_row)).unwrap();
+    assert_eq!(
+        qa_cell.style().fg,
+        Some(agentic_tui::theme::PURPLE),
+        "qa: expected PURPLE at ({qa_col}, {qa_row}), got {:?}",
+        qa_cell.style().fg
+    );
+
+    // reviewer → YELLOW
+    let (_, rev_row) =
+        find_in_buffer(&buffer, "rev-msg", 140, 40).expect("'rev-msg' not found");
+    let (rev_col, _) =
+        find_in_buffer(&buffer, "reviewer", 140, 40).expect("'reviewer' not found");
+    let rev_cell = buffer.cell((rev_col, rev_row)).unwrap();
+    assert_eq!(
+        rev_cell.style().fg,
+        Some(agentic_tui::theme::YELLOW),
+        "reviewer: expected YELLOW at ({rev_col}, {rev_row}), got {:?}",
+        rev_cell.style().fg
+    );
+}
