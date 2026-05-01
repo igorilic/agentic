@@ -76,6 +76,10 @@ pub struct AppState {
     /// Elapsed wall-clock seconds since the current run started.
     /// Formatted as `MM:SS` in the issue header pill.
     pub run_elapsed_secs: u64,
+    /// Toggled by the render loop on every frame to drive the `●` pulse
+    /// in the issue-header pill (spec §4.3). `false` = "on" phase (BLUE);
+    /// `true` = "off" phase (DIM). Defaults to `false` (start lit).
+    pub frame_parity: bool,
 }
 
 impl Default for AppState {
@@ -92,6 +96,7 @@ impl Default for AppState {
             run_label: None,
             run_title: None,
             run_elapsed_secs: 0,
+            frame_parity: false,
         }
     }
 }
