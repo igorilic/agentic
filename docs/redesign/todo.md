@@ -2339,7 +2339,7 @@ Phase 11 — TUI pipeline + tabs
 - [x] T.11.2 Pipeline bar boxes
 - [x] T.11.3 Pipeline hint
 - [x] T.11.4 Tab bar
-- [ ] T.11.5 1/2/3 keys
+- [x] T.11.5 1/2/3 keys
 
 Phase 12 — TUI body panes
 - [ ] T.12.1 Logs pane
