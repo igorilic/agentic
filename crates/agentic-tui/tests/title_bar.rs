@@ -65,14 +65,16 @@ fn title_bar_does_not_clobber_lower_rows() {
     terminal.draw(|f| draw_app(f, &state)).unwrap();
     let buffer = terminal.backend().buffer();
 
-    // Row 1 should still render normal cockpit/chat content (not just HEADER_BG).
-    // Spot-check: not every cell on row 1 is HEADER_BG (0x16, 0x17, 0x1b).
+    // Row 2+ should be the body (cockpit/chat), not the top-chrome strip.
+    // Spot-check: not every cell on row 2 is HEADER_BG.
+    // (Row 1 is now the issue header, which correctly paints HEADER_BG as
+    // part of the unified top-chrome surface — that's intentional per F-2.)
     let header_bg = ratatui::style::Color::Rgb(0x16, 0x17, 0x1b);
     let all_header: bool = (0..80u16)
-        .map(|x| buffer.cell((x, 1)).unwrap())
+        .map(|x| buffer.cell((x, 2)).unwrap())
         .all(|cell| cell.bg == header_bg);
     assert!(
         !all_header,
-        "row 1 should render below the title bar (not all HEADER_BG)"
+        "row 2 should render body content (cockpit/chat), not all HEADER_BG"
     );
 }

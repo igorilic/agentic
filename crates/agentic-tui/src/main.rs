@@ -37,6 +37,10 @@ fn main() -> io::Result<()> {
 fn run_loop<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
     let mut state = AppState::default();
     loop {
+        // Toggle frame_parity before each draw to pulse the issue-header dot
+        // (spec §4.3). One flip per render keeps the cadence tied to the
+        // terminal's event rate rather than a separate timer.
+        state.frame_parity = !state.frame_parity;
         terminal.draw(|f| draw_app(f, &state))?;
         // Filter to Press only — on Linux/Windows with the keyboard
         // enhancement flag enabled, crossterm emits Press AND Release

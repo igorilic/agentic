@@ -211,7 +211,7 @@ fn pill_starts_at_correct_column_using_char_count() {
     let cells: Vec<String> = (0..width)
         .map(|x| buffer.cell((x, 1)).unwrap().symbol().to_string())
         .collect();
-    let row_str: String = cells.join("");
+    let _row_str: String = cells.join("");
 
     // "● running 02:34" — 15 chars total.
     // 'r' of "running" is 2 chars into the pill, so expected col = 65 + 2 = 67.

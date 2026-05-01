@@ -38,7 +38,15 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
     match (&state.run_label, &state.run_title) {
         (Some(label), Some(title)) => {
             let pill_text = format!("● running {mm_ss}");
-            let pill_width = pill_text.len() as u16;
+            // F-1: count chars, not bytes — '●' is 3 UTF-8 bytes but 1 column.
+            let pill_width = pill_text.chars().count() as u16;
+
+            // F-3: pulse dot between BLUE (on) and DIM (off) via frame_parity.
+            let dot_color = if state.frame_parity {
+                theme::DIM
+            } else {
+                theme::BLUE
+            };
 
             // Left group: "▰ agentic │ AGT-204 <title>"
             // We build a single Line so ratatui handles clipping/fill.
@@ -67,14 +75,27 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
             if pad_width > 0 {
                 spans.push(Span::raw(" ".repeat(pad_width)));
             }
-            spans.push(Span::styled(pill_text, Style::default().fg(theme::BLUE)));
+            // Build the pill with a pulsing dot and the rest in BLUE.
+            spans.push(Span::styled("●", Style::default().fg(dot_color)));
+            spans.push(Span::styled(
+                format!(" running {mm_ss}"),
+                Style::default().fg(theme::BLUE),
+            ));
 
             let line = Line::from(spans);
-            f.render_widget(Paragraph::new(line), area);
+            // F-2: paint HEADER_BG so the issue header shares the top-chrome surface.
+            f.render_widget(
+                Paragraph::new(line).style(Style::default().bg(theme::HEADER_BG)),
+                area,
+            );
         }
         _ => {
             // No active run — render a blank row (background only).
-            f.render_widget(Paragraph::new(""), area);
+            // F-2: paint HEADER_BG on blank branch too.
+            f.render_widget(
+                Paragraph::new("").style(Style::default().bg(theme::HEADER_BG)),
+                area,
+            );
         }
     }
 }
