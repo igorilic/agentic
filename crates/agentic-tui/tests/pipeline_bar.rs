@@ -124,9 +124,10 @@ fn make_four_card_state() -> AppState {
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
-/// T.11.2 — Test 1: Top-row borders contain 4× `┌─` and 3× `──▶`.
+/// T.11.2 — Test 1a: Top border row has 4× `┌─` and ZERO `──▶` connectors.
+/// Per spec §4.4: the top row is just corners/dashes; connectors belong on the content row.
 #[test]
-fn top_row_has_four_open_corners_and_three_connectors() {
+fn top_border_row_has_four_open_corners_and_no_connectors() {
     let backend = TestBackend::new(140, 40);
     let mut terminal = Terminal::new(backend).unwrap();
     let state = make_four_card_state();
@@ -135,7 +136,6 @@ fn top_row_has_four_open_corners_and_three_connectors() {
     let buffer = terminal.backend().buffer().clone();
 
     // Pipeline bar starts at row 2 (after title=0, header=1).
-    // Top border is at row 2.
     let top_row = row_string(&buffer, 2, 140);
 
     let corner_count = top_row.matches("┌─").count();
@@ -146,8 +146,31 @@ fn top_row_has_four_open_corners_and_three_connectors() {
 
     let connector_count = top_row.matches("──▶").count();
     assert_eq!(
+        connector_count, 0,
+        "expected 0× '──▶' in top border row (connectors belong on content row), got {connector_count}; row:\n{top_row}"
+    );
+}
+
+/// T.11.2 — Test 1b: Content row (row with glyphs) has 3× `──▶` connectors.
+/// Per spec §4.4: `│ ✓ 01 Arch │──▶ │ ● 02 Dev │──▶ │ ...`
+#[test]
+fn content_row_has_three_connectors_between_cards() {
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = make_four_card_state();
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // Find the content row by locating "01 Architect".
+    let (_col, content_row) =
+        find_in_buffer(&buffer, "01 Architect", 140, 40).expect("'01 Architect' not found in buffer");
+
+    let content_row_str = row_string(&buffer, content_row, 140);
+    let connector_count = content_row_str.matches("──▶").count();
+    assert_eq!(
         connector_count, 3,
-        "expected 3× '──▶' in top border row, got {connector_count}; row:\n{top_row}"
+        "expected 3× '──▶' on content row {content_row}, got {connector_count}; row:\n{content_row_str}"
     );
 }
 
@@ -324,7 +347,7 @@ fn empty_pipeline_renders_no_pipeline_bar_without_panic() {
     );
 }
 
-/// T.11.2 — Test 9: Connectors `──▶` in the top border row are styled in BORDER color.
+/// T.11.2 — Test 9: Connectors `──▶` on the content row are styled in BORDER color.
 #[test]
 fn connectors_use_border_color() {
     let backend = TestBackend::new(140, 40);
@@ -336,17 +359,18 @@ fn connectors_use_border_color() {
 
     let border_color = agentic_tui::theme::BORDER;
 
-    // Find first `──▶` connector in the buffer.
-    // `──` is two box-drawing dashes, `▶` is the arrow.
-    // Search top border row (row 2).
-    let row = row_cells(&buffer, 2, 140);
+    // Connectors live on the content row (where glyphs and labels appear), not the top border.
+    let (_col, content_row) =
+        find_in_buffer(&buffer, "01 Architect", 140, 40).expect("'01 Architect' not found in buffer");
+
+    let row = row_cells(&buffer, content_row, 140);
 
     let arrow_pos = row
         .iter()
         .position(|cell| cell.symbol() == "▶")
-        .expect("'▶' not found in top border row");
+        .expect("'▶' not found on content row — connector may be on wrong row");
 
-    let arrow_cell = buffer.cell((arrow_pos as u16, 2)).unwrap();
+    let arrow_cell = buffer.cell((arrow_pos as u16, content_row)).unwrap();
     assert_eq!(
         arrow_cell.style().fg,
         Some(border_color),
@@ -378,4 +402,144 @@ fn active_card_border_is_yellow() {
         found_yellow_corner,
         "expected at least one YELLOW '┌' on the pipeline top border row for the active card"
     );
+}
+
+/// T.11.2 (F-2) — Test 11: Active card interior cells have the dark amber tint bg.
+/// Per spec §4.4 + hand-off tui-view.jsx: active card uses a tinted background
+/// (ACTIVE_TINT = Color::Rgb(0x1c, 0x1a, 0x10)) for interior cells.
+#[test]
+fn active_card_interior_cells_have_tint_bg() {
+    use ratatui::style::Color;
+
+    // This constant must match pipeline_bar.rs ACTIVE_TINT.
+    let active_tint = Color::Rgb(0x1c, 0x1a, 0x10);
+
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = make_four_card_state();
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // Find the `e` in "Developer" which is an interior cell of the active card.
+    // The active card content row contains "● 02 Developer".
+    let (col, row) =
+        find_in_buffer(&buffer, "02 Developer", 140, 40).expect("'02 Developer' not found");
+
+    // The `e` of "Developer" is at offset 3 within "02 Developer" — that's an interior cell.
+    // Use `D` at offset 3 of "02 Developer" -> "Developer" starts 3 chars in ("02 ")
+    let dev_col = col + 3; // 'D' of 'Developer'
+    let cell = buffer.cell((dev_col, row)).unwrap();
+    assert_eq!(
+        cell.style().bg,
+        Some(active_tint),
+        "expected active card interior cell at ({dev_col}, {row}) to have bg=ACTIVE_TINT \
+         Color::Rgb(0x1c, 0x1a, 0x10), got {:?}",
+        cell.style().bg
+    );
+}
+
+/// T.11.2 (F-2) — Test 12: Non-active card interior cells keep HEADER_BG.
+/// Done/Queued cards must NOT receive the active tint.
+#[test]
+fn non_active_card_interior_cells_keep_header_bg() {
+    let header_bg = agentic_tui::theme::HEADER_BG;
+
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = make_four_card_state();
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // Find an interior cell of the done architect card: "01 Architect"
+    let (col, row) =
+        find_in_buffer(&buffer, "01 Architect", 140, 40).expect("'01 Architect' not found");
+
+    // Use the `0` of "01 Architect" — a label interior cell.
+    let cell = buffer.cell((col, row)).unwrap();
+    assert_eq!(
+        cell.style().bg,
+        Some(header_bg),
+        "expected done card interior cell at ({col}, {row}) to have bg=HEADER_BG, got {:?}",
+        cell.style().bg
+    );
+}
+
+/// T.11.2 (TD-1) — Test 13: Single-card pipeline renders without panic, no connectors.
+#[test]
+fn single_card_pipeline_has_no_connectors() {
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        pipeline: vec![architect_done()],
+        ..Default::default()
+    };
+
+    // Must not panic.
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // Top border row: exactly 1× `┌─` and 0× `──▶`.
+    let top_row = row_string(&buffer, 2, 140);
+    let corner_count = top_row.matches("┌─").count();
+    assert_eq!(
+        corner_count, 1,
+        "expected 1× '┌─' in top border row for single card, got {corner_count}; row:\n{top_row}"
+    );
+    let connector_count = top_row.matches("──▶").count();
+    assert_eq!(
+        connector_count, 0,
+        "expected 0× '──▶' in top border row for single card, got {connector_count}; row:\n{top_row}"
+    );
+
+    // Content row contains the label.
+    let full = buffer_string(&buffer, 140, 40);
+    assert!(
+        full.contains("✓ 01 Architect"),
+        "expected '✓ 01 Architect' in buffer for single-card pipeline"
+    );
+}
+
+/// T.11.2 (TD-1) — Test 14: Top border row gaps between cards are HEADER_BG spaces.
+/// The 4-column gap after card 0's `┐` and before card 1's `┌` must be space chars
+/// with bg=HEADER_BG (no connector overwriting on the top border row).
+#[test]
+fn gaps_on_top_border_row_are_header_bg_spaces() {
+    let header_bg = agentic_tui::theme::HEADER_BG;
+
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = make_four_card_state();
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // Find the first `┐` on the top border row (row 2) — right edge of card 0.
+    // After it come 4 gap columns before the next `┌`.
+    let top_border_row = 2u16;
+    let first_close_corner_col = (0..140u16)
+        .find(|&x| {
+            let cell = buffer.cell((x, top_border_row)).unwrap();
+            cell.symbol() == "┐"
+        })
+        .expect("no '┐' found on top border row");
+
+    // The 4 gap columns immediately follow the first `┐`.
+    let gap_start = first_close_corner_col + 1;
+    for dx in 0..4u16 {
+        let gx = gap_start + dx;
+        let cell = buffer.cell((gx, top_border_row)).unwrap();
+        assert_eq!(
+            cell.symbol(), " ",
+            "expected gap cell at col {gx} on top border row to be ' ', got {:?}",
+            cell.symbol()
+        );
+        assert_eq!(
+            cell.style().bg,
+            Some(header_bg),
+            "expected gap cell at col {gx} on top border row to have bg=HEADER_BG, got {:?}",
+            cell.style().bg
+        );
+    }
 }
