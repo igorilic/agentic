@@ -2358,7 +2358,7 @@ Phase 11 — TUI pipeline + tabs
 
 Phase 12 — TUI body panes
 - [x] T.12.1 Logs pane
-- [ ] T.12.2 Chat pane
+- [x] T.12.2 Chat pane
 - [ ] T.12.3 Issue pane
 
 Phase 13 — TUI permission + status line
