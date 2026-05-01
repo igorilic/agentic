@@ -2,7 +2,7 @@
 //! that takes a sub-rect plus the relevant slice of `AppState` and
 //! draws into the frame.
 
-pub mod chat;
+mod chat;
 pub mod chat_pane;
 pub mod cockpit;
 pub mod diff;

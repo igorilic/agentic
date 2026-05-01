@@ -5,6 +5,10 @@
 //! a command-mode prompt at the bottom (`:plan hello█`). Step 12.5
 //! adds chat scrollback + a real text-input field.
 
+// Suppress dead_code warnings: this module is an orphan pending T.12.x
+// cleanup. The file is intentionally retained per T.12.2 rules.
+#![allow(dead_code)]
+
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};

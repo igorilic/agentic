@@ -18,6 +18,7 @@ use ratatui::style::{Color, Modifier, Style};
 
 use crate::app::{AppState, ChatMessage};
 use crate::theme;
+use crate::views::diff;
 
 /// Dark amber tint approximating rgba(253,230,138,0.1) composited on HEADER_BG.
 /// Computed: 0.9 * HEADER_BG + 0.1 * (253,230,138).
@@ -28,8 +29,18 @@ use crate::theme;
 const SLASH_TINT: Color = Color::Rgb(0x2d, 0x2c, 0x26);
 
 /// Render the chat pane into `area`.
+///
+/// When `state.current_diff` is `Some`, the entire area is given to the diff
+/// renderer (restoring the pre-T.12.2 behavior from `views::chat`). When it
+/// is `None`, message blocks are rendered instead.
 pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
     if area.height == 0 || area.width == 0 {
+        return;
+    }
+
+    // Diff view takes over the entire chat pane area when active.
+    if let Some(diff_text) = &state.current_diff {
+        diff::render(area, diff_text, state.diff_scroll_offset, f);
         return;
     }
 
@@ -163,7 +174,7 @@ fn render_body(buf: &mut Buffer, area: Rect, row_offset: u16, body: &str, max_he
                     break;
                 }
                 let style = if highlighted {
-                    Style::default().fg(theme::FG).bg(SLASH_TINT)
+                    Style::default().fg(theme::YELLOW).bg(SLASH_TINT)
                 } else {
                     Style::default().fg(theme::FG).bg(theme::HEADER_BG)
                 };
