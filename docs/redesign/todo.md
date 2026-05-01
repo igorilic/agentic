@@ -2256,6 +2256,11 @@ pane**. The dual binding is the contract:
     - Why deferred: the `run_status` field doesn't exist yet; scaffolding it without a producer is premature.
     - Trigger: alongside T.13.x runner wiring when `run_status` is added.
 
+12. **TUI Pane::Issue body placeholder** (GH #98).
+    - What's missing: pressing `3` (or Tab-cycling to Issue) sets `state.focus = Pane::Issue` and the tab bar highlights `③ issue`, but `draw_app` has no Issue branch — the body silently shows Logs+Chat split, leaving the tab indicator out of sync with the body content.
+    - Why deferred: adding a placeholder requires touching `draw_app`'s body composition, which is T.12.1's explicit surface. Bundling the empty-state placeholder with T.12.1 avoids two separate touches.
+    - Trigger: when T.12.1 (Logs pane restyle) lands — add the Issue empty-state in the same pass.
+
 ---
 
 ## Status checklist
