@@ -94,10 +94,15 @@ fn tab_cycles_focus_through_logs_chat_issue() {
     assert_eq!(s.focus, Pane::Logs);
 }
 
-// ─── render integration — both pane titles appear in the buffer ─────────────
+// ─── render integration — pane titles appear in the buffer ──────────────────
+// NOTE(T.12.1): The left pane is now the borderless logs_pane; there is no
+// longer a "Cockpit" border title. The Chat border title remains. The
+// focus-star (*) indicator only applies to the Chat pane border, which still
+// has a titled Block. The logs pane focus state is tracked in AppState but
+// not reflected as a border title.
 
 #[test]
-fn first_frame_renders_both_pane_titles() {
+fn first_frame_renders_chat_pane_title() {
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
     let s = AppState::default();
@@ -105,37 +110,31 @@ fn first_frame_renders_both_pane_titles() {
 
     let content = flatten(&terminal);
     assert!(
-        content.contains("Cockpit"),
-        "expected 'Cockpit' title in frame; got: {content:?}"
-    );
-    assert!(
         content.contains("Chat"),
         "expected 'Chat' title in frame; got: {content:?}"
     );
 }
 
 #[test]
-fn focus_indicator_renders_in_focused_pane_title() {
+fn focus_indicator_renders_in_chat_pane_title_when_focused() {
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
-    let mut s = AppState::default(); // focus = Cockpit
+    let mut s = AppState::default(); // focus = Logs (logs_pane, no border title)
     terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content_cockpit = flatten(&terminal);
+    let content_logs = flatten(&terminal);
 
     s.handle(AppEvent::ToggleFocus); // focus = Chat
     terminal.draw(|f| draw_app(f, &s)).unwrap();
     let content_chat = flatten(&terminal);
 
-    // The focused pane title is decorated with a `*` marker.
-    assert!(
-        content_cockpit.contains("Cockpit *"),
-        "cockpit-focused frame should show 'Cockpit *'; got: {content_cockpit:?}"
-    );
+    // When Chat is focused, the Chat pane border shows "Chat *".
     assert!(
         content_chat.contains("Chat *"),
         "chat-focused frame should show 'Chat *'; got: {content_chat:?}"
     );
-    // And the unfocused pane should NOT carry the marker.
-    assert!(!content_cockpit.contains("Chat *"));
-    assert!(!content_chat.contains("Cockpit *"));
+    // When Logs is focused, Chat border should NOT carry the marker.
+    assert!(
+        !content_logs.contains("Chat *"),
+        "logs-focused frame must not show 'Chat *'; got: {content_logs:?}"
+    );
 }

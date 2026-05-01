@@ -5,10 +5,7 @@
 
 use agentic_core::events::{Event, EventEnvelope, StepStatus, TokenUsage};
 use agentic_tui::app::AppState;
-use agentic_tui::draw_app;
 use agentic_tui::run::{CANONICAL_AGENTS, StepRunStatus};
-use ratatui::Terminal;
-use ratatui::backend::TestBackend;
 
 /// Build an envelope using the same `step_id` format the real
 /// orchestrator emits — `<run>-step-<seq>-<agent>` — so the tests
@@ -30,16 +27,6 @@ fn canonical_seq(agent: &str) -> usize {
         .iter()
         .position(|a| *a == agent)
         .unwrap_or(0)
-}
-
-fn flatten(terminal: &Terminal<TestBackend>) -> String {
-    terminal
-        .backend()
-        .buffer()
-        .content
-        .iter()
-        .map(|c| c.symbol())
-        .collect()
 }
 
 // ─── pure run-state state machine ───────────────────────────────────────────
@@ -234,62 +221,8 @@ fn non_step_events_are_ignored_by_run_state() {
 }
 
 // ─── render integration ─────────────────────────────────────────────────────
-
-#[test]
-fn cockpit_pane_renders_all_four_agent_names() {
-    let backend = TestBackend::new(120, 24);
-    let mut terminal = Terminal::new(backend).unwrap();
-    let s = AppState::default();
-    terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content = flatten(&terminal);
-    for agent in CANONICAL_AGENTS {
-        assert!(
-            content.contains(agent),
-            "cockpit must render agent '{agent}'; got: {content:?}"
-        );
-    }
-}
-
-#[test]
-fn cockpit_pane_renders_pending_icon_for_each_row_by_default() {
-    let backend = TestBackend::new(120, 24);
-    let mut terminal = Terminal::new(backend).unwrap();
-    let s = AppState::default();
-    terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content = flatten(&terminal);
-    // The pending icon (○) should appear at least four times — once per row.
-    let pending_count = content.matches('○').count();
-    assert!(
-        pending_count >= 4,
-        "expected ≥4 pending icons, got {pending_count}; content: {content:?}"
-    );
-}
-
-#[test]
-fn cockpit_pane_renders_running_and_passed_icons_after_apply() {
-    let backend = TestBackend::new(120, 24);
-    let mut terminal = Terminal::new(backend).unwrap();
-    let mut s = AppState::default();
-    // architect → passed; tdd-developer → running.
-    s.apply_envelope(&envelope_for(
-        "architect",
-        Event::StepComplete {
-            status: StepStatus::Passed,
-            summary: "ok".to_string(),
-            token_usage: TokenUsage::default(),
-            cost_usd: None,
-            duration_ms: 1,
-        },
-    ));
-    s.apply_envelope(&envelope_for(
-        "tdd-developer",
-        Event::StepStarted {
-            agent: "tdd-developer".to_string(),
-            model: agentic_core::backends::ModelId("m".to_string()),
-        },
-    ));
-    terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content = flatten(&terminal);
-    assert!(content.contains('✓'), "expected ✓ icon; got: {content:?}");
-    assert!(content.contains('◐'), "expected ◐ icon; got: {content:?}");
-}
+// NOTE(T.12.1): The cockpit stepper was replaced by the logs_pane in draw_app.
+// The three render-integration tests that checked for stepper icons and agent
+// names in the left pane are removed here — they tested the old render path.
+// The 10 state-machine tests above still exercise run.rs logic and remain
+// valid. Render coverage for the logs pane is in tests/logs_pane.rs.

@@ -1,3 +1,4 @@
+// TODO(T.12.x): cockpit module is dead — remove when no tests import it.
 //! Cockpit-pane renderer. Step 12.3: a four-row stepper with a
 //! per-row icon and the agent's name. Mirrors the visual contract of
 //! `apps/web-ui/src/components/Stepper.tsx` but stacked vertically —

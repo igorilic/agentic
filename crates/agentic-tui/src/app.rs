@@ -30,6 +30,39 @@ pub struct AgentInstance {
     pub status: AgentRunStatus,
 }
 
+/// Level of a log entry, including tool-call variant with structured fields.
+///
+/// Tool calls carry `name`, `arg`, and `result` separately so the renderer
+/// can apply distinct styles (name=BLUE, result=DIM) without string-splitting.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LogLevel {
+    /// Informational row — rendered as "INFO" in DIM.
+    Info,
+    /// Tool invocation — rendered as `name("arg") → result`.
+    Tool {
+        name: String,
+        arg: String,
+        result: String,
+    },
+    /// Warning row — rendered as "WARN" in YELLOW.
+    Warn,
+    /// Error row — rendered as "ERROR" in RED.
+    Error,
+}
+
+/// A single row in the logs pane (spec §4.6).
+#[derive(Debug, Clone)]
+pub struct LogEntry {
+    /// `HH:MM:SS` timestamp string.
+    pub timestamp: String,
+    /// Agent name, e.g. `"architect"`.
+    pub agent: String,
+    /// Level and optional tool-call data.
+    pub level: LogLevel,
+    /// Human-readable message (unused for `LogLevel::Tool`).
+    pub message: String,
+}
+
 /// Which pane currently receives input. Pure state — the renderer reads
 /// it to decorate the focused pane's title; future steps (12.5 chat) will
 /// route key events to the focused pane.
@@ -103,6 +136,9 @@ pub struct AppState {
     /// Agent pipeline cards rendered in the 4-row pipeline bar (spec §4.4).
     /// When empty, the pipeline bar is not rendered (zero-height constraint).
     pub pipeline: Vec<AgentInstance>,
+    /// Log entries rendered in the logs pane (spec §4.6).
+    /// Populated by the runner wiring in T.13.x; empty by default.
+    pub log: Vec<LogEntry>,
 }
 
 impl Default for AppState {
@@ -121,6 +157,7 @@ impl Default for AppState {
             run_elapsed_secs: 0,
             frame_parity: false,
             pipeline: vec![],
+            log: vec![],
         }
     }
 }
