@@ -501,6 +501,106 @@ fn single_card_pipeline_has_no_connectors() {
     );
 }
 
+// ── T.11.3 tests ──────────────────────────────────────────────────────────
+
+/// T.11.3 — Test 1: Hint row directly below the bottom card border contains
+/// the exact affordance string `[a]dd  [r]eorder  [d]rop` (two spaces between
+/// each affordance), per spec §4.4 "Hint footer in DIM 1 row below the cards."
+#[test]
+fn hint_row_below_pipeline_contains_a_r_d_affordances() {
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = make_four_card_state();
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // Pipeline bar starts at row 2 (after title=0, header=1).
+    // 4 card rows (0–3) + 1 hint row = the hint is on row 2+4 = row 6.
+    let hint_row = row_string(&buffer, 6, 140);
+    assert!(
+        hint_row.contains("[a]dd  [r]eorder  [d]rop"),
+        "expected hint row at row 6 to contain '[a]dd  [r]eorder  [d]rop'; got:\n{hint_row}"
+    );
+}
+
+/// T.11.3 — Test 2: Hint row text uses FG_DIM (theme::DIM) fg and HEADER_BG bg.
+#[test]
+fn hint_row_uses_fg_dim_color() {
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = make_four_card_state();
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    let dim = agentic_tui::theme::DIM;
+    let header_bg = agentic_tui::theme::HEADER_BG;
+
+    // Find the `[` of `[a]dd` on the hint row (row 6).
+    let (col, row) = find_in_buffer(&buffer, "[a]dd", 140, 40)
+        .expect("'[a]dd' not found in buffer — hint row missing");
+
+    assert_eq!(
+        row, 6,
+        "expected '[a]dd' to be on row 6 (hint row), found on row {row}"
+    );
+
+    // The `a` is at col+1 — check its style.
+    let a_cell = buffer.cell((col + 1, row)).unwrap();
+    assert_eq!(
+        a_cell.style().fg,
+        Some(dim),
+        "expected 'a' in '[a]dd' at ({}, {row}) to have fg=DIM, got {:?}",
+        col + 1,
+        a_cell.style().fg
+    );
+    assert_eq!(
+        a_cell.style().bg,
+        Some(header_bg),
+        "expected 'a' in '[a]dd' at ({}, {row}) to have bg=HEADER_BG, got {:?}",
+        col + 1,
+        a_cell.style().bg
+    );
+}
+
+/// T.11.3 — Test 3: Empty pipeline renders no hint row — body starts at row 2,
+/// not pushed down by 5 rows.
+#[test]
+fn empty_pipeline_renders_no_hint_row() {
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState::default(); // pipeline = vec![]
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // Row 6 is where the hint would be if a 5-row pipeline strip were rendered.
+    // With empty pipeline, row 6 is deep inside the body (cockpit/chat), so it
+    // must NOT have HEADER_BG across all columns (which is what the hint row
+    // looks like).
+    let header_bg = agentic_tui::theme::HEADER_BG;
+    let all_header: bool = (0..140u16)
+        .map(|x| buffer.cell((x, 6)).unwrap())
+        .all(|cell| cell.style().bg == Some(header_bg));
+    assert!(
+        !all_header,
+        "row 6 should not be all HEADER_BG when pipeline is empty (no hint should render)"
+    );
+
+    // Also verify: body content is NOT pushed down — it must start at row 2,
+    // same as when there is no pipeline at all.
+    // The existing test verifies row 2 is NOT all HEADER_BG for empty pipeline;
+    // re-assert it here to be explicit.
+    let all_header_row2: bool = (0..140u16)
+        .map(|x| buffer.cell((x, 2)).unwrap())
+        .all(|cell| cell.style().bg == Some(header_bg));
+    assert!(
+        !all_header_row2,
+        "row 2 should render body content when pipeline is empty (body must not be pushed to row 7)"
+    );
+}
+
 /// T.11.2 (TD-1) — Test 14: Top border row gaps between cards are HEADER_BG spaces.
 /// The 4-column gap after card 0's `┐` and before card 1's `┌` must be space chars
 /// with bg=HEADER_BG (no connector overwriting on the top border row).
