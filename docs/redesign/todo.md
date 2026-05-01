@@ -2246,6 +2246,16 @@ pane**. The dual binding is the contract:
    - Why deferred: streaming-state plumbing arrives with the App.tsx integration in Phase 8 (which threads the live event source). The animation class itself is trivial; the prop wiring + live-event correlation is the load-bearing work.
    - Trigger: Phase 8 App integration when ActivityColumn first sees a live event stream.
 
+10. **TUI issue header: ellipsis truncation** (GH #96).
+    - What's missing: `crates/agentic-tui/src/views/issue_header.rs` doesn't truncate the title with `…` on overflow per spec §4.3. `pad_width` underflows via `saturating_sub` and ratatui clips at the right edge.
+    - Why deferred: proper Unicode-aware truncation needs `unicode-width` (or ratatui `Block::title` trim) + a tested boundary policy — warrants a focused sub-step rather than a review-fix tack-on.
+    - Trigger: before T.11.2 (ASCII pipeline bar) lands.
+
+11. **TUI issue header: failed-state pill color test** (GH #97).
+    - What's missing: tests only cover the `running → BLUE` pill. When `AppState.run_status` lands in T.13.x, `completed → GREEN` and `failed → RED` will need test coverage.
+    - Why deferred: the `run_status` field doesn't exist yet; scaffolding it without a producer is premature.
+    - Trigger: alongside T.13.x runner wiring when `run_status` is added.
+
 ---
 
 ## Status checklist
