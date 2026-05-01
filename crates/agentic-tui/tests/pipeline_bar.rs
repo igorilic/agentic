@@ -75,14 +75,8 @@ fn buffer_string(buffer: &ratatui::buffer::Buffer, width: u16, height: u16) -> S
 }
 
 /// Return all cells in a given row.
-fn row_cells(
-    buffer: &ratatui::buffer::Buffer,
-    y: u16,
-    width: u16,
-) -> Vec<&ratatui::buffer::Cell> {
-    (0..width)
-        .map(|x| buffer.cell((x, y)).unwrap())
-        .collect()
+fn row_cells(buffer: &ratatui::buffer::Buffer, y: u16, width: u16) -> Vec<&ratatui::buffer::Cell> {
+    (0..width).map(|x| buffer.cell((x, y)).unwrap()).collect()
 }
 
 /// Find the first occurrence of `needle` in the buffer and return the (col, row)
@@ -101,20 +95,10 @@ fn find_in_buffer(
             let cell = buffer.cell((x, y)).unwrap();
             if cell.symbol() == first_str {
                 // Check if the remaining chars match
-                let mut matches = true;
-                let mut col = x;
-                for ch in needle.chars() {
-                    if col >= width {
-                        matches = false;
-                        break;
-                    }
-                    let c = buffer.cell((col, y)).unwrap();
-                    if c.symbol() != ch.to_string() {
-                        matches = false;
-                        break;
-                    }
-                    col += 1;
-                }
+                let matches = needle.chars().enumerate().all(|(i, ch)| {
+                    let col = x + i as u16;
+                    col < width && buffer.cell((col, y)).unwrap().symbol() == ch.to_string()
+                });
                 if matches {
                     return Some((x, y));
                 }
@@ -186,10 +170,7 @@ fn content_row_shows_agent_glyphs_and_labels() {
         full.contains("● 02 Developer"),
         "expected '● 02 Developer' in buffer"
     );
-    assert!(
-        full.contains("○ 03 QA"),
-        "expected '○ 03 QA' in buffer"
-    );
+    assert!(full.contains("○ 03 QA"), "expected '○ 03 QA' in buffer");
     assert!(
         full.contains("○ 04 Reviewer"),
         "expected '○ 04 Reviewer' in buffer"
@@ -228,8 +209,8 @@ fn active_card_status_word_is_yellow() {
     let buffer = terminal.backend().buffer().clone();
 
     let yellow = agentic_tui::theme::YELLOW;
-    let (col, row) = find_in_buffer(&buffer, "ACTIVE", 140, 40)
-        .expect("'ACTIVE' not found in buffer");
+    let (col, row) =
+        find_in_buffer(&buffer, "ACTIVE", 140, 40).expect("'ACTIVE' not found in buffer");
 
     // Check each cell of "ACTIVE" (6 chars) has fg=YELLOW.
     for i in 0..6u16 {
@@ -255,8 +236,7 @@ fn done_card_checkmark_glyph_is_green() {
     let buffer = terminal.backend().buffer().clone();
 
     let green = agentic_tui::theme::GREEN;
-    let (col, row) = find_in_buffer(&buffer, "✓", 140, 40)
-        .expect("'✓' not found in buffer");
+    let (col, row) = find_in_buffer(&buffer, "✓", 140, 40).expect("'✓' not found in buffer");
 
     let cell = buffer.cell((col, row)).unwrap();
     assert_eq!(
@@ -280,8 +260,7 @@ fn queued_card_circle_glyph_is_dim() {
     let dim = agentic_tui::theme::DIM;
 
     // Find the first `○` glyph (should be the QA queued card).
-    let (col, row) = find_in_buffer(&buffer, "○", 140, 40)
-        .expect("'○' not found in buffer");
+    let (col, row) = find_in_buffer(&buffer, "○", 140, 40).expect("'○' not found in buffer");
 
     let cell = buffer.cell((col, row)).unwrap();
     assert_eq!(
@@ -312,8 +291,7 @@ fn failed_card_x_glyph_is_red_and_failed_word_present() {
     );
 
     let red = agentic_tui::theme::RED;
-    let (col, row) = find_in_buffer(&buffer, "✗", 140, 40)
-        .expect("'✗' not found in buffer");
+    let (col, row) = find_in_buffer(&buffer, "✗", 140, 40).expect("'✗' not found in buffer");
 
     let cell = buffer.cell((col, row)).unwrap();
     assert_eq!(
@@ -363,7 +341,9 @@ fn connectors_use_border_color() {
     // Search top border row (row 2).
     let row = row_cells(&buffer, 2, 140);
 
-    let arrow_pos = row.iter().position(|cell| cell.symbol() == "▶")
+    let arrow_pos = row
+        .iter()
+        .position(|cell| cell.symbol() == "▶")
         .expect("'▶' not found in top border row");
 
     let arrow_cell = buffer.cell((arrow_pos as u16, 2)).unwrap();

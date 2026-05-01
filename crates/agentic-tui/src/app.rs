@@ -13,6 +13,23 @@ use crate::findings::{FindingsState, Triage};
 use crate::modes::{AppCommand, Mode, ParseResult, parse_command};
 use crate::run::RunState;
 
+/// Status of a single agent run slot in the pipeline bar (spec §4.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentRunStatus {
+    Queued,
+    Active,
+    Done,
+    Failed,
+}
+
+/// A single agent card rendered in the pipeline bar.
+#[derive(Debug, Clone)]
+pub struct AgentInstance {
+    /// Zero-padded index + name, e.g. `"01 Architect"`.
+    pub label: String,
+    pub status: AgentRunStatus,
+}
+
 /// Which pane currently receives input. Pure state — the renderer reads
 /// it to decorate the focused pane's title; future steps (12.5 chat) will
 /// route key events to the focused pane.
@@ -80,6 +97,9 @@ pub struct AppState {
     /// in the issue-header pill (spec §4.3). `false` = "on" phase (BLUE);
     /// `true` = "off" phase (DIM). Defaults to `false` (start lit).
     pub frame_parity: bool,
+    /// Agent pipeline cards rendered in the 4-row pipeline bar (spec §4.4).
+    /// When empty, the pipeline bar is not rendered (zero-height constraint).
+    pub pipeline: Vec<AgentInstance>,
 }
 
 impl Default for AppState {
@@ -97,6 +117,7 @@ impl Default for AppState {
             run_title: None,
             run_elapsed_secs: 0,
             frame_parity: false,
+            pipeline: vec![],
         }
     }
 }
