@@ -1740,7 +1740,7 @@ opens `SpecDialog` from the chat column.
 
 ---
 
-### Step T.11.3: Pipeline footer hint
+### [x] Step T.11.3: Pipeline footer hint
 
 **Goal**: Render `[a]dd  [r]eorder  [d]rop` in DIM below the pipeline bar.
 
@@ -2337,7 +2337,7 @@ Phase 10 — TUI palette + title bar
 Phase 11 — TUI pipeline + tabs
 - [ ] T.11.1 Issue header
 - [x] T.11.2 Pipeline bar boxes
-- [ ] T.11.3 Pipeline hint
+- [x] T.11.3 Pipeline hint
 - [ ] T.11.4 Tab bar
 - [ ] T.11.5 1/2/3 keys
 
