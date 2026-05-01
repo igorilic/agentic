@@ -423,9 +423,8 @@ fn logs_pane_unknown_agent_falls_back_to_dim() {
     };
     let buffer = render_state(&state_with_log(vec![entry]));
 
-    let (col, row) =
-        find_in_buffer(&buffer, "unknown-agent", 140, 40)
-            .expect("'unknown-agent' not found in buffer");
+    let (col, row) = find_in_buffer(&buffer, "unknown-agent", 140, 40)
+        .expect("'unknown-agent' not found in buffer");
     // 'u' is the first char of "unknown-agent".
     let cell = buffer.cell((col, row)).unwrap();
     assert_eq!(
@@ -471,13 +470,15 @@ fn logs_pane_renders_each_agent_in_its_own_color() {
     let buffer = render_state(&state_with_log(entries));
 
     // architect → BLUE
-    let (_, row) =
-        find_in_buffer(&buffer, "arch-msg", 140, 40).expect("'arch-msg' not found");
+    let (_, row) = find_in_buffer(&buffer, "arch-msg", 140, 40).expect("'arch-msg' not found");
     // Find "architect" on the same row: start of agent column is time_col + 10.
     // Use the row from arch-msg and look for 'a' of "architect".
     // We can search for "architect" restricted to that row by checking the buffer directly.
     let arch_col = find_in_buffer(&buffer, "architect", 140, 40)
-        .map(|(c, r)| { assert_eq!(r, row, "architect row mismatch"); c })
+        .map(|(c, r)| {
+            assert_eq!(r, row, "architect row mismatch");
+            c
+        })
         .expect("'architect' not found");
     let cell = buffer.cell((arch_col, row)).unwrap();
     assert_eq!(
@@ -488,8 +489,7 @@ fn logs_pane_renders_each_agent_in_its_own_color() {
     );
 
     // developer → GREEN
-    let (_, dev_row) =
-        find_in_buffer(&buffer, "dev-msg", 140, 40).expect("'dev-msg' not found");
+    let (_, dev_row) = find_in_buffer(&buffer, "dev-msg", 140, 40).expect("'dev-msg' not found");
     let (dev_col, _) =
         find_in_buffer(&buffer, "developer", 140, 40).expect("'developer' not found");
     let dev_cell = buffer.cell((dev_col, dev_row)).unwrap();
@@ -501,14 +501,19 @@ fn logs_pane_renders_each_agent_in_its_own_color() {
     );
 
     // qa → PURPLE
-    let (_, qa_row) =
-        find_in_buffer(&buffer, "qa-msg", 140, 40).expect("'qa-msg' not found");
+    let (_, qa_row) = find_in_buffer(&buffer, "qa-msg", 140, 40).expect("'qa-msg' not found");
     // Search for "qa" starting at the agent column on qa_row.
     // Since "qa" is short we find it by scanning.
     let qa_col = (0..140_u16)
         .find(|&x| {
-            buffer.cell((x, qa_row)).map(|c| c.symbol() == "q").unwrap_or(false)
-                && buffer.cell((x + 1, qa_row)).map(|c| c.symbol() == "a").unwrap_or(false)
+            buffer
+                .cell((x, qa_row))
+                .map(|c| c.symbol() == "q")
+                .unwrap_or(false)
+                && buffer
+                    .cell((x + 1, qa_row))
+                    .map(|c| c.symbol() == "a")
+                    .unwrap_or(false)
         })
         .expect("'qa' not found in qa row");
     let qa_cell = buffer.cell((qa_col, qa_row)).unwrap();
@@ -520,10 +525,8 @@ fn logs_pane_renders_each_agent_in_its_own_color() {
     );
 
     // reviewer → YELLOW
-    let (_, rev_row) =
-        find_in_buffer(&buffer, "rev-msg", 140, 40).expect("'rev-msg' not found");
-    let (rev_col, _) =
-        find_in_buffer(&buffer, "reviewer", 140, 40).expect("'reviewer' not found");
+    let (_, rev_row) = find_in_buffer(&buffer, "rev-msg", 140, 40).expect("'rev-msg' not found");
+    let (rev_col, _) = find_in_buffer(&buffer, "reviewer", 140, 40).expect("'reviewer' not found");
     let rev_cell = buffer.cell((rev_col, rev_row)).unwrap();
     assert_eq!(
         rev_cell.style().fg,

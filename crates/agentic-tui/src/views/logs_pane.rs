@@ -164,8 +164,13 @@ fn write_text(
 
 /// Render `tool_name("arg") → result` with:
 ///   - `tool_name` in BLUE
-///   - `(`, `"arg"`, `)` in DIM (parentheses + arg) / FG (arg text)
+///   - `(` in DIM, `"arg"` (both quote chars + body) in FG, `)` in DIM
 ///   - ` → result` in DIM
+///
+/// NOTE: tool names and args are conventionally ASCII (edit_file, bash,
+/// read_file, etc.). Non-ASCII args (e.g. Unicode file paths) may misalign
+/// visually because col advances by 1 per char rather than by display width.
+/// Track as tech-debt if real-world misalignment is observed.
 fn render_tool_call(
     buf: &mut Buffer,
     start_x: u16,
@@ -189,20 +194,21 @@ fn render_tool_call(
         col += 1;
     }
 
-    // `("` in DIM
-    for ch in ['(', '"'] {
-        if col >= max_x {
-            return;
-        }
-        if let Some(cell) = buf.cell_mut((col, y)) {
-            cell.set_symbol(&ch.to_string());
-            cell.set_style(Style::default().fg(theme::DIM).bg(theme::HEADER_BG));
-        }
-        col += 1;
+    // `(` in DIM — only the parenthesis, not the quote char
+    if col >= max_x {
+        return;
     }
+    if let Some(cell) = buf.cell_mut((col, y)) {
+        cell.set_symbol("(");
+        cell.set_style(Style::default().fg(theme::DIM).bg(theme::HEADER_BG));
+    }
+    col += 1;
 
-    // arg text in FG
-    for ch in arg.chars() {
+    // `"arg"` in FG — both quote chars wrap the arg body, all in FG
+    for ch in std::iter::once('"')
+        .chain(arg.chars())
+        .chain(std::iter::once('"'))
+    {
         if col >= max_x {
             return;
         }
@@ -213,17 +219,15 @@ fn render_tool_call(
         col += 1;
     }
 
-    // `") → ` in DIM
-    for ch in ['"', ')'] {
-        if col >= max_x {
-            return;
-        }
-        if let Some(cell) = buf.cell_mut((col, y)) {
-            cell.set_symbol(&ch.to_string());
-            cell.set_style(Style::default().fg(theme::DIM).bg(theme::HEADER_BG));
-        }
-        col += 1;
+    // `)` in DIM — only the parenthesis
+    if col >= max_x {
+        return;
     }
+    if let Some(cell) = buf.cell_mut((col, y)) {
+        cell.set_symbol(")");
+        cell.set_style(Style::default().fg(theme::DIM).bg(theme::HEADER_BG));
+    }
+    col += 1;
 
     // ` → ` separator in DIM
     for ch in " → ".chars() {
