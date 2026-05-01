@@ -273,7 +273,7 @@ fn k_in_chat_focus_with_diff_set_scrolls_diff_up_saturating() {
 fn j_in_cockpit_focus_still_navigates_findings_not_diff() {
     use agentic_core::events::{Event, EventEnvelope, Severity};
     let mut s = AppState {
-        focus: Pane::Cockpit,
+        focus: Pane::Logs,
         current_diff: Some(SAMPLE.to_string()),
         ..Default::default()
     };

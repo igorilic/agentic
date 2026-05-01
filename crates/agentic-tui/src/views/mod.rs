@@ -8,4 +8,5 @@ pub mod diff;
 pub mod findings;
 pub mod issue_header;
 pub mod pipeline_bar;
+pub mod tab_bar;
 pub mod title_bar;

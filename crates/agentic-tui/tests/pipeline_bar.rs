@@ -325,7 +325,8 @@ fn failed_card_x_glyph_is_red_and_failed_word_present() {
     );
 }
 
-/// T.11.2 — Test 8: Empty pipeline renders no pipeline rows (no panic, body starts at row 2).
+/// T.11.2 — Test 8: Empty pipeline renders no pipeline rows (no panic, body starts at row 4).
+/// Layout with empty pipeline: row 0=title, row 1=issue header, rows 2-3=tab bar, row 4+=body.
 #[test]
 fn empty_pipeline_renders_no_pipeline_bar_without_panic() {
     let backend = TestBackend::new(140, 40);
@@ -336,14 +337,15 @@ fn empty_pipeline_renders_no_pipeline_bar_without_panic() {
     terminal.draw(|f| draw_app(f, &state)).unwrap();
     let buffer = terminal.backend().buffer().clone();
 
-    // Row 2 should be body content (no HEADER_BG on all cells, same as title_bar test).
+    // With empty pipeline the tab bar lands at rows 2-3. Row 4 is where the body starts.
+    // Row 4 should render body content (NOT all HEADER_BG).
     let header_bg = agentic_tui::theme::HEADER_BG;
     let all_header: bool = (0..140u16)
-        .map(|x| buffer.cell((x, 2)).unwrap())
+        .map(|x| buffer.cell((x, 4)).unwrap())
         .all(|cell| cell.style().bg == Some(header_bg));
     assert!(
         !all_header,
-        "row 2 should render body content when pipeline is empty, not all HEADER_BG"
+        "row 4 should render body content when pipeline is empty, not all HEADER_BG"
     );
 }
 
@@ -642,8 +644,9 @@ fn hint_row_does_not_panic_on_narrow_terminal() {
     terminal.draw(|f| draw_app(f, &state)).unwrap();
 }
 
-/// T.11.3 — Test 3: Empty pipeline renders no hint row — body starts at row 2,
-/// not pushed down by 5 rows.
+/// T.11.3 — Test 3: Empty pipeline renders no hint row — body starts at row 4
+/// (row 0=title, row 1=issue header, rows 2-3=tab bar, row 4+=body).
+/// Previously body started at row 2 (before the tab bar was added in T.11.4).
 #[test]
 fn empty_pipeline_renders_no_hint_row() {
     let backend = TestBackend::new(140, 40);
@@ -653,29 +656,27 @@ fn empty_pipeline_renders_no_hint_row() {
     terminal.draw(|f| draw_app(f, &state)).unwrap();
     let buffer = terminal.backend().buffer().clone();
 
-    // Row 6 is where the hint would be if a 5-row pipeline strip were rendered.
-    // With empty pipeline, row 6 is deep inside the body (cockpit/chat), so it
-    // must NOT have HEADER_BG across all columns (which is what the hint row
-    // looks like).
+    // Row 8 is where the hint would be if a 5-row pipeline strip were rendered
+    // (rows 2-6 pipeline + rows 7-8 tab bar = hint would be at row 8 if empty pipeline pushed body).
+    // With empty pipeline the tab bar lands at rows 2-3 and body at row 4+.
+    // Row 8 must NOT have HEADER_BG across all columns — it's inside the body.
     let header_bg = agentic_tui::theme::HEADER_BG;
     let all_header: bool = (0..140u16)
-        .map(|x| buffer.cell((x, 6)).unwrap())
+        .map(|x| buffer.cell((x, 8)).unwrap())
         .all(|cell| cell.style().bg == Some(header_bg));
     assert!(
         !all_header,
-        "row 6 should not be all HEADER_BG when pipeline is empty (no hint should render)"
+        "row 8 should not be all HEADER_BG when pipeline is empty (no hint should render there)"
     );
 
-    // Also verify: body content is NOT pushed down — it must start at row 2,
-    // same as when there is no pipeline at all.
-    // The existing test verifies row 2 is NOT all HEADER_BG for empty pipeline;
-    // re-assert it here to be explicit.
-    let all_header_row2: bool = (0..140u16)
-        .map(|x| buffer.cell((x, 2)).unwrap())
+    // Verify: body content is NOT pushed down — it must start at row 4 when pipeline is empty.
+    // Row 4 should NOT be all HEADER_BG (the body's Block widgets don't fill with HEADER_BG).
+    let all_header_row4: bool = (0..140u16)
+        .map(|x| buffer.cell((x, 4)).unwrap())
         .all(|cell| cell.style().bg == Some(header_bg));
     assert!(
-        !all_header_row2,
-        "row 2 should render body content when pipeline is empty (body must not be pushed to row 7)"
+        !all_header_row4,
+        "row 4 should render body content when pipeline is empty (body must start at row 4)"
     );
 }
 

@@ -177,7 +177,7 @@ fn enter_unknown_command_returns_none_and_exits_command_mode() {
 fn tab_in_normal_mode_toggles_focus() {
     use agentic_tui::app::Pane;
     let mut s = AppState::default();
-    assert_eq!(s.focus, Pane::Cockpit);
+    assert_eq!(s.focus, Pane::Logs);
     s.handle_key(KeyCode::Tab);
     assert_eq!(s.focus, Pane::Chat);
 }
@@ -214,7 +214,7 @@ fn tab_in_command_mode_is_a_noop() {
     s.handle_key(KeyCode::Char(':'));
     s.handle_key(KeyCode::Tab);
     // Focus must NOT have toggled.
-    assert_eq!(s.focus, Pane::Cockpit);
+    assert_eq!(s.focus, Pane::Logs);
     // Tab must NOT have appended to the buffer.
     assert_eq!(
         s.mode,

@@ -35,8 +35,11 @@ pub struct AgentInstance {
 /// route key events to the focused pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pane {
-    Cockpit,
+    /// Logs / cockpit pane (left side, formerly `Cockpit`).
+    Logs,
     Chat,
+    /// Issue tracker pane (spec §4.6 issue variant).
+    Issue,
 }
 
 /// High-level events the bin maps key presses onto. Keeping this an enum
@@ -105,7 +108,7 @@ pub struct AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            focus: Pane::Cockpit,
+            focus: Pane::Logs,
             cockpit_ratio: 0.50,
             run: RunState::default(),
             mode: Mode::Normal,
@@ -127,8 +130,9 @@ impl AppState {
         match event {
             AppEvent::ToggleFocus => {
                 self.focus = match self.focus {
-                    Pane::Cockpit => Pane::Chat,
-                    Pane::Chat => Pane::Cockpit,
+                    Pane::Logs => Pane::Chat,
+                    Pane::Chat => Pane::Issue,
+                    Pane::Issue => Pane::Logs,
                 };
             }
             AppEvent::WidenCockpit => {

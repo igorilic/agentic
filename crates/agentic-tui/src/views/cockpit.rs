@@ -14,12 +14,12 @@ use crate::run::StepRunStatus;
 use crate::views::findings;
 
 pub fn render(area: Rect, state: &AppState, frame: &mut Frame<'_>) {
-    let title = if state.focus == Pane::Cockpit {
+    let title = if state.focus == Pane::Logs {
         "Cockpit *"
     } else {
         "Cockpit"
     };
-    let title_style = if state.focus == Pane::Cockpit {
+    let title_style = if state.focus == Pane::Logs {
         Style::default().add_modifier(Modifier::BOLD)
     } else {
         Style::default()

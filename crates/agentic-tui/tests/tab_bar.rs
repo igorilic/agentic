@@ -19,13 +19,6 @@ use ratatui::style::Modifier;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/// Collect every symbol in a given row into a single string.
-fn row_string(buffer: &ratatui::buffer::Buffer, y: u16, width: u16) -> String {
-    (0..width)
-        .map(|x| buffer.cell((x, y)).unwrap().symbol().to_string())
-        .collect()
-}
-
 /// Collect all rows into a flat string (for substring searches).
 fn buffer_string(buffer: &ratatui::buffer::Buffer, width: u16, height: u16) -> String {
     (0..height)
@@ -301,7 +294,10 @@ fn tab_bar_highlight_moves_when_pane_changes() {
     let underline_row_chat = label_row_chat + 1;
     let chat_check = chat_col + 2;
     assert_eq!(
-        buf_chat.cell((chat_check, underline_row_chat)).unwrap().symbol(),
+        buf_chat
+            .cell((chat_check, underline_row_chat))
+            .unwrap()
+            .symbol(),
         "─",
         "Chat: expected '─' underline at ({chat_check}, {underline_row_chat})"
     );
@@ -339,7 +335,10 @@ fn tab_bar_highlight_moves_when_pane_changes() {
     let underline_row_issue = label_row_issue + 1;
     let issue_check = issue_col + 2;
     assert_eq!(
-        buf_issue.cell((issue_check, underline_row_issue)).unwrap().symbol(),
+        buf_issue
+            .cell((issue_check, underline_row_issue))
+            .unwrap()
+            .symbol(),
         "─",
         "Issue: expected '─' underline at ({issue_check}, {underline_row_issue})"
     );

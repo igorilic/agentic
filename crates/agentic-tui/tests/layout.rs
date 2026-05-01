@@ -83,13 +83,15 @@ fn cockpit_ratio_clamps_between_20_and_80_percent() {
 // ─── focus state machine ─────────────────────────────────────────────────────
 
 #[test]
-fn tab_toggles_focus_between_cockpit_and_chat() {
+fn tab_cycles_focus_through_logs_chat_issue() {
     let mut s = AppState::default();
-    assert_eq!(s.focus, Pane::Cockpit);
+    assert_eq!(s.focus, Pane::Logs);
     s.handle(AppEvent::ToggleFocus);
     assert_eq!(s.focus, Pane::Chat);
     s.handle(AppEvent::ToggleFocus);
-    assert_eq!(s.focus, Pane::Cockpit);
+    assert_eq!(s.focus, Pane::Issue);
+    s.handle(AppEvent::ToggleFocus);
+    assert_eq!(s.focus, Pane::Logs);
 }
 
 // ─── render integration — both pane titles appear in the buffer ─────────────
