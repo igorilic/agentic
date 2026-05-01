@@ -2336,7 +2336,7 @@ Phase 10 — TUI palette + title bar
 
 Phase 11 — TUI pipeline + tabs
 - [ ] T.11.1 Issue header
-- [ ] T.11.2 Pipeline bar boxes
+- [x] T.11.2 Pipeline bar boxes
 - [ ] T.11.3 Pipeline hint
 - [ ] T.11.4 Tab bar
 - [ ] T.11.5 1/2/3 keys
