@@ -28,6 +28,8 @@ use crate::theme;
 
 /// Minimum inner card width per spec §4.4 (13 inner cols = 15 total).
 const INNER_WIDTH_MIN: u16 = 13;
+/// Hint footer text rendered in DIM 1 row below the bottom card border (spec §4.4).
+const HINT_TEXT: &str = "[a]dd  [r]eorder  [d]rop";
 /// Gap between card right-border and next card left-border: `──▶ ` = 4 cols.
 const GAP_WIDTH: u16 = 4;
 /// Tinted background for active card interior cells.
@@ -150,11 +152,11 @@ fn render_connector(buf: &mut Buffer, gap_x: u16, y: u16, bg: Color) {
     set_cell(buf, gap_x + 3, y + 1, " ", theme::FG, bg);
 }
 
-/// Render the pipeline bar into `area`. `area.height` must be >= 4.
+/// Render the pipeline bar into `area`. `area.height` must be >= 5.
 /// When `state.pipeline` is empty, nothing is drawn (caller must ensure
 /// area has height 0 by passing a zero-height `Rect`).
 pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
-    if state.pipeline.is_empty() || area.height < 4 || area.width == 0 {
+    if state.pipeline.is_empty() || area.height < 5 || area.width == 0 {
         return;
     }
 
@@ -163,7 +165,7 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
     let card_width = inner_width + 2;
     let buf = f.buffer_mut();
 
-    // Fill background
+    // Fill background for the 4 card rows.
     for dy in 0..4u16 {
         for dx in 0..area.width {
             set_cell(buf, area.x + dx, area.y + dy, " ", theme::FG, bg);
@@ -191,4 +193,13 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
             x += GAP_WIDTH;
         }
     }
+
+    // Row 4: hint footer `[a]dd  [r]eorder  [d]rop` in DIM, per spec §4.4.
+    let hint_y = area.y + 4;
+    // Fill the entire hint row with HEADER_BG first.
+    for dx in 0..area.width {
+        set_cell(buf, area.x + dx, hint_y, " ", theme::FG, bg);
+    }
+    // Write hint text in DIM.
+    set_str(buf, area.x, hint_y, HINT_TEXT, theme::DIM, bg);
 }

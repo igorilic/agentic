@@ -29,18 +29,18 @@ use crate::layout::compute_panes;
 /// Row order matches spec §4 (TUI layout):
 ///   0 — title bar (1 row)
 ///   1 — issue header (1 row, full width)
-///   2 — pipeline bar (4 rows, only when `state.pipeline` is non-empty; else 0)
+///   2 — pipeline bar (5 rows, only when `state.pipeline` is non-empty; else 0)
 ///   3 — two-pane body (cockpit | chat)
 pub fn draw_app(f: &mut Frame<'_>, state: &AppState) {
     let total = f.area();
-    let pipeline_height: u16 = if state.pipeline.is_empty() { 0 } else { 4 };
+    let pipeline_height: u16 = if state.pipeline.is_empty() { 0 } else { 5 };
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),               // row 0: title bar
             Constraint::Length(1),               // row 1: issue header
-            Constraint::Length(pipeline_height), // row 2: pipeline bar (0 or 4)
+            Constraint::Length(pipeline_height), // row 2: pipeline bar (0 or 5)
             Constraint::Min(0),                  // row 3: body panes
         ])
         .split(total);
