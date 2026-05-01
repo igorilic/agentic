@@ -163,8 +163,8 @@ fn content_row_has_three_connectors_between_cards() {
     let buffer = terminal.backend().buffer().clone();
 
     // Find the content row by locating "01 Architect".
-    let (_col, content_row) =
-        find_in_buffer(&buffer, "01 Architect", 140, 40).expect("'01 Architect' not found in buffer");
+    let (_col, content_row) = find_in_buffer(&buffer, "01 Architect", 140, 40)
+        .expect("'01 Architect' not found in buffer");
 
     let content_row_str = row_string(&buffer, content_row, 140);
     let connector_count = content_row_str.matches("──▶").count();
@@ -360,8 +360,8 @@ fn connectors_use_border_color() {
     let border_color = agentic_tui::theme::BORDER;
 
     // Connectors live on the content row (where glyphs and labels appear), not the top border.
-    let (_col, content_row) =
-        find_in_buffer(&buffer, "01 Architect", 140, 40).expect("'01 Architect' not found in buffer");
+    let (_col, content_row) = find_in_buffer(&buffer, "01 Architect", 140, 40)
+        .expect("'01 Architect' not found in buffer");
 
     let row = row_cells(&buffer, content_row, 140);
 
@@ -531,7 +531,8 @@ fn gaps_on_top_border_row_are_header_bg_spaces() {
         let gx = gap_start + dx;
         let cell = buffer.cell((gx, top_border_row)).unwrap();
         assert_eq!(
-            cell.symbol(), " ",
+            cell.symbol(),
+            " ",
             "expected gap cell at col {gx} on top border row to be ' ', got {:?}",
             cell.symbol()
         );
