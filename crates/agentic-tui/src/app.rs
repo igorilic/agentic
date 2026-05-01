@@ -163,8 +163,8 @@ impl AppState {
 
     /// Process a key event. The interpretation depends on `self.mode`:
     ///
-    /// - `Normal`: `:` enters command mode; `Tab` toggles focus; `[`/`]`
-    ///   resize. Other keys are no-ops (chat input lands in 12.5).
+    /// - `Normal`: `:` enters command mode; `Tab` cycles focus; `1`/`2`/`3`
+    ///   jump to logs/chat/issue; `[`/`]` resize. Unmapped keys are no-ops.
     /// - `Command`: characters append to the buffer; Enter parses and
     ///   may return an `AppCommand`; Esc cancels back to Normal.
     ///

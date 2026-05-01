@@ -98,7 +98,34 @@ fn pane_switch_keys_ignored_in_command_mode() {
     );
 }
 
-// ── Test 6: direct-jump keys interoperate with Tab cycling ────────────────
+// ── Test 6: unmapped digits are no-ops in Normal mode ────────────────────
+
+/// Digits '4' through '0' must not move focus or enter Command mode.
+/// This locks in the spec contract: ONLY '1'/'2'/'3' switch panes.
+#[test]
+fn unmapped_digits_are_no_ops_in_normal_mode() {
+    let mut state = AppState {
+        focus: Pane::Logs,
+        ..Default::default()
+    };
+
+    for c in ['4', '5', '6', '7', '8', '9', '0'] {
+        state.handle_key(KeyCode::Char(c));
+        assert_eq!(
+            state.focus,
+            Pane::Logs,
+            "expected focus to stay Pane::Logs after pressing '{c}', got {:?}",
+            state.focus
+        );
+        assert!(
+            matches!(state.mode, agentic_tui::modes::Mode::Normal),
+            "expected Normal mode after pressing '{c}', got {:?}",
+            state.mode
+        );
+    }
+}
+
+// ── Test 7: direct-jump keys interoperate with Tab cycling ────────────────
 
 /// Tab cycles normally; '3' and '1' then jump directly.
 #[test]
