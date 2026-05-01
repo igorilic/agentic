@@ -525,6 +525,7 @@ fn hint_row_below_pipeline_contains_a_r_d_affordances() {
 }
 
 /// T.11.3 — Test 2: Hint row text uses FG_DIM (theme::DIM) fg and HEADER_BG bg.
+/// Checks `[a]dd`, `[r]eorder`, `[d]rop` affordance chars plus trailing fill cells.
 #[test]
 fn hint_row_uses_fg_dim_color() {
     let backend = TestBackend::new(140, 40);
@@ -562,6 +563,83 @@ fn hint_row_uses_fg_dim_color() {
         col + 1,
         a_cell.style().bg
     );
+
+    // S3: Also check `r` in `[r]eorder` and `d` in `[d]rop` — ensures all three
+    // affordance chars are styled DIM, not just `a`.
+    let (reorder_col, reorder_row) = find_in_buffer(&buffer, "[r]eorder", 140, 40)
+        .expect("'[r]eorder' not found in buffer — hint row missing");
+    assert_eq!(
+        reorder_row, 6,
+        "expected '[r]eorder' on row 6, found row {reorder_row}"
+    );
+    let r_cell = buffer.cell((reorder_col + 1, reorder_row)).unwrap();
+    assert_eq!(
+        r_cell.style().fg,
+        Some(dim),
+        "expected 'r' in '[r]eorder' at ({}, {reorder_row}) to have fg=DIM, got {:?}",
+        reorder_col + 1,
+        r_cell.style().fg
+    );
+    assert_eq!(
+        r_cell.style().bg,
+        Some(header_bg),
+        "expected 'r' in '[r]eorder' at ({}, {reorder_row}) to have bg=HEADER_BG, got {:?}",
+        reorder_col + 1,
+        r_cell.style().bg
+    );
+
+    let (drop_col, drop_row) = find_in_buffer(&buffer, "[d]rop", 140, 40)
+        .expect("'[d]rop' not found in buffer — hint row missing");
+    assert_eq!(
+        drop_row, 6,
+        "expected '[d]rop' on row 6, found row {drop_row}"
+    );
+    let d_cell = buffer.cell((drop_col + 1, drop_row)).unwrap();
+    assert_eq!(
+        d_cell.style().fg,
+        Some(dim),
+        "expected 'd' in '[d]rop' at ({}, {drop_row}) to have fg=DIM, got {:?}",
+        drop_col + 1,
+        d_cell.style().fg
+    );
+    assert_eq!(
+        d_cell.style().bg,
+        Some(header_bg),
+        "expected 'd' in '[d]rop' at ({}, {drop_row}) to have bg=HEADER_BG, got {:?}",
+        drop_col + 1,
+        d_cell.style().bg
+    );
+
+    // S3: Assert at least one trailing-fill cell (past the end of hint text) has
+    // bg=HEADER_BG. hint text "[a]dd  [r]eorder  [d]rop" is 24 chars; trailing
+    // cells at col >= col+24 on the hint row should still be HEADER_BG.
+    let trailing_col = col + 24; // one past the end of the hint text
+    assert!(
+        trailing_col < 140,
+        "trailing_col {trailing_col} is outside buffer width — test setup error"
+    );
+    let trailing_cell = buffer.cell((trailing_col, row)).unwrap();
+    assert_eq!(
+        trailing_cell.style().bg,
+        Some(header_bg),
+        "expected trailing fill cell at ({trailing_col}, {row}) to have bg=HEADER_BG, got {:?}",
+        trailing_cell.style().bg
+    );
+}
+
+/// T.11.3 (S2) — Narrow terminal: drawing a single-card pipeline into a 10×10 terminal
+/// must not panic. `set_cell` silently no-ops past buf width, so text clips without
+/// crashing. This test locks in the panic-safety contract for narrow terminals.
+#[test]
+fn hint_row_does_not_panic_on_narrow_terminal() {
+    let backend = TestBackend::new(10, 10);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        pipeline: vec![architect_done()],
+        ..Default::default()
+    };
+    // Must not panic — success is simply returning without unwinding.
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
 }
 
 /// T.11.3 — Test 3: Empty pipeline renders no hint row — body starts at row 2,

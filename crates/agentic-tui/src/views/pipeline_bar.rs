@@ -1,4 +1,4 @@
-//! Spec §4.4 — ASCII pipeline bar (4 rows).
+//! Spec §4.4 — ASCII pipeline bar (4 card rows + 1 hint row).
 //!
 //! Renders per-agent status cards joined by `──▶` connectors:
 //!
@@ -201,5 +201,6 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
         set_cell(buf, area.x + dx, hint_y, " ", theme::FG, bg);
     }
     // Write hint text in DIM.
+    // set_cell silently no-ops past buf width — text clips naturally on narrow terminals.
     set_str(buf, area.x, hint_y, HINT_TEXT, theme::DIM, bg);
 }
