@@ -383,6 +383,38 @@ fn chat_pane_uses_header_bg_continuity() {
     );
 }
 
+// ── Test 11: highlighted tokens use YELLOW fg (F-2) ─────────────────────────
+
+/// Seed `state.chat = [user_msg("Run /develop now")]`.
+/// Find a cell on `/develop`. Assert `fg == theme::YELLOW` AND `bg == SLASH_TINT`.
+#[test]
+fn chat_pane_highlighted_token_uses_yellow_fg() {
+    let state = state_with_chat(vec![user_msg("Run /develop now")]);
+    let buffer = render(&state);
+
+    let (start_col, row) =
+        find_in_buffer(&buffer, "/develop", 100, 20).expect("'/develop' not found in buffer");
+
+    // Every character of "/develop" must have fg == YELLOW and bg == SLASH_TINT.
+    let token = "/develop";
+    for (i, ch) in token.chars().enumerate() {
+        let col = start_col + i as u16;
+        let cell = buffer.cell((col, row)).unwrap();
+        assert_eq!(
+            cell.style().fg,
+            Some(theme::YELLOW),
+            "expected '/develop'[{i}] ('{ch}') at ({col}, {row}) to have fg=YELLOW, got {:?}",
+            cell.style().fg
+        );
+        assert_eq!(
+            cell.style().bg,
+            Some(SLASH_TINT),
+            "expected '/develop'[{i}] ('{ch}') at ({col}, {row}) to have bg=SLASH_TINT, got {:?}",
+            cell.style().bg
+        );
+    }
+}
+
 // ── Test 10: messages render in insertion order ───────────────────────────────
 
 /// Seed: user_msg, system_msg, agent_msg.
