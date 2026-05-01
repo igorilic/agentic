@@ -2258,8 +2258,18 @@ pane**. The dual binding is the contract:
 
 12. **TUI Pane::Issue body placeholder** (GH #98).
     - What's missing: pressing `3` (or Tab-cycling to Issue) sets `state.focus = Pane::Issue` and the tab bar highlights `③ issue`, but `draw_app` has no Issue branch — the body silently shows Logs+Chat split, leaving the tab indicator out of sync with the body content.
-    - Why deferred: adding a placeholder requires touching `draw_app`'s body composition, which is T.12.1's explicit surface. Bundling the empty-state placeholder with T.12.1 avoids two separate touches.
-    - Trigger: when T.12.1 (Logs pane restyle) lands — add the Issue empty-state in the same pass.
+    - Why deferred: adding a placeholder requires touching `draw_app`'s body composition, which is the body restructure scoped to T.12.3 (Issue pane). T.12.1 stayed narrow (logs content only) and kept the L|R split.
+    - Trigger: when T.12.3 (Issue pane) lands — restructure body to one-pane-at-a-time per spec §4.6, and the empty-state question dissolves (Issue gets a real renderer).
+
+13. **TUI logs pane: Finding events as WARN log rows** (GH #99).
+    - What's missing: `findings::render` is rendered as a separate widget below the log rows. Spec §4.6 line 476 specifies that Finding events should appear AS log rows at `LogLevel::Warn`, not as a sidebar widget.
+    - Why deferred: the translation requires runner integration (T.13.x) — the event-application path must push `Finding` envelopes as `LogEntry { level: LogLevel::Warn, ... }`. The plumbing for T.13.x to consume is in place (`LogEntry`, `LogLevel::Warn`, `pub log: Vec<LogEntry>` are all public).
+    - Trigger: T.13.x runner→AppState bridge. Remove `findings::render` call from `logs_pane::render` at the same time.
+
+14. **TUI logs pane: vertical scroll for long sessions** (GH #100).
+    - What's missing: `logs_pane::render` has no scroll offset. When `state.log.len() > area.height`, rows beyond the visible area are silently dropped.
+    - Why deferred: T.12.1 ships the visual contract (column-aligned rows). Scroll behavior isn't in the spec for this step and isn't visible until T.13.x produces real event volume.
+    - Trigger: when runner produces enough events to fill the pane — add scroll offset, j/k navigation, and a "+N earlier" indicator.
 
 ---
 
