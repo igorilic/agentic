@@ -1927,7 +1927,7 @@ opens `SpecDialog` from the chat column.
 
 ---
 
-### Step T.13.3: Mode indicator in status line
+### Step T.13.3: Mode indicator in status line [x]
 
 **Goal**: Bottom-row status line with mode indicator at right (NORMAL/INSERT/COMMAND in matching colors).
 
