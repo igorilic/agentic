@@ -2198,7 +2198,7 @@ pane**. The dual binding is the contract:
    - Why deferred: no backend `pipeline.toml` per-agent override API yet.
    - Trigger: when core ships a `set_agent_config` IPC.
 
-2. **Backend permission-request event** (GH #88).
+2. **Backend permission-request event** (GH #88 — in-progress, see Phase P).
    - What's missing: real-time permission events from `agentic-core` —
      `PermissionCard` currently renders against a fixture only and there
      is no IPC channel to deliver live `PermissionRequest`/`PermissionDecision`
@@ -2207,6 +2207,14 @@ pane**. The dual binding is the contract:
      are out of scope.
    - Trigger: when the orchestrator gains a permission-gate hook in
      `agentic-core`.
+   - Status: Phase P delivers an **observational** gate (annotates after
+     the fact under `--dangerously-skip-permissions`; session allowlist
+     blocks future prompts but cannot un-execute the call that produced
+     the prompt). A real **blocking** gate requires an MCP/proxy
+     interception architecture and is tracked in a follow-up tech-debt
+     issue (P.6.2 files: "Real blocking permission gate (MCP/proxy
+     intercept)"). Mark this entry "(GH #88 — closed by P.6.2)" once
+     Phase P lands and the follow-up issue is filed.
 
 3. **Real ticket-source body in Issue column** (GH #TBD).
    - What's missing: `IssueColumn.body` is always the placeholder `["No description available — …"]`.
@@ -2276,7 +2284,860 @@ pane**. The dual binding is the contract:
 
 ---
 
-## Status checklist
+## Phase P — Backend permission stream (GH #88)
+
+This phase wires a backend permission gate into `agentic-core` and
+streams `PermissionRequest` / `PermissionResolved` envelopes onto the
+existing `EventBus` so the web UI, TUI, and Tauri shell can present
+real prompts instead of fixtures. The gate is **observational** in
+v1: because we run the underlying CLIs with `--dangerously-skip-permissions`
+(Claude) / equivalent (Copilot), tool calls have already executed by
+the time the orchestrator sees `Event::ToolUseStart`. The gate
+therefore annotates after the fact — allowlist hits are recorded as
+`AllowOnce`, denylist hits emit a `Deny` decision plus a warning log
+(advisory only, since the call already ran), and unknown patterns
+emit a `PermissionRequest` envelope and await user input. A `[s]
+session` decision adds the matched pattern to a per-run allowlist that
+the gate consults on subsequent calls (so future identical patterns
+auto-allow without prompting). A real blocking gate requires routing
+tool calls through an MCP server or process proxy that can pause the
+child process before it executes — that work is filed as a follow-up
+tech-debt GH issue ("Real blocking permission gate (MCP/proxy
+intercept)") in P.6.2 and closes the in-progress reference on
+tech-debt entry 2 above.
+
+Scope summary: 4 backend event/config sub-steps (P.1.x), 4 gate +
+orchestrator sub-steps (P.2.x), 2 Tauri IPC sub-steps (P.3.x), 3 web
+UI sub-steps (P.4.x), 1 TUI envelope-routing sub-step (P.5.1), 2 E2E +
+cleanup sub-steps (P.6.x). Total: 16 atomic steps. Each step targets a
+single TDD cycle (30 min – 2 hr) and must result in a green commit
+ahead of the next step.
+
+Tech-debt entry 2 (GH #88) is updated above to reference this phase
+and stays open until P.6.1 lands; P.6.2 then files the follow-up
+"real blocking gate" issue and closes #88 with a comment pointing at
+the new issue.
+
+### Step P.1.1: Add `PermissionRequest` + `PermissionResolved` event variants
+
+**Goal**: Extend `Event` (and the persistence tag table) with two
+additive variants that carry permission-gate signalling on the bus.
+No producer yet — variants must round-trip through MessagePack and
+through the JSON IPC layer.
+
+**Depends on**: nothing (pure data-model addition).
+
+**Test first** (RED):
+- New unit tests in `crates/agentic-core/src/events/mod.rs` (next to
+  existing variant round-trip tests):
+  - `permission_request_round_trips_msgpack`: build an envelope with
+    `Event::PermissionRequest { request_id: "req-01J...", agent:
+    "developer".into(), tool: "Bash".into(), arg: "rm -rf
+    node_modules".into(), scope: "shell.destructive".into(), risk:
+    PermissionRisk::High, reason: "destructive shell".into() }`,
+    encode via `rmp_serde::to_vec_named`, decode, assert equality.
+  - `permission_resolved_round_trips_msgpack`: same shape with
+    `Event::PermissionResolved { request_id: "req-01J...", decision:
+    PermissionDecision::AllowOnce, source: PermissionSource::User }`.
+  - `permission_request_serializes_to_json_kebab_case`: assert
+    `serde_json::to_value(&envelope).unwrap()` contains
+    `"type": "PermissionRequest"` and that nested enum fields use
+    snake_case discriminants (matches existing convention — confirm
+    by inspection against `Event::Finding` snapshot).
+- Extend `crates/agentic-core/src/events/persist.rs` test suite: add a
+  case to the existing `event_type_tag` round-trip / coverage test
+  asserting both new variants tag as `"PermissionRequest"` and
+  `"PermissionResolved"`.
+
+**Implement** (GREEN):
+- In `crates/agentic-core/src/events/mod.rs`:
+  - Add `pub enum PermissionRisk { Low, Medium, High }` with
+    `#[serde(rename_all = "snake_case")]`.
+  - Add `pub enum PermissionDecision { AllowOnce, AllowSession, Deny,
+    TimedOut }` with `#[serde(rename_all = "snake_case")]`.
+  - Add `pub enum PermissionSource { User, AllowlistConfig,
+    DenylistConfig, SessionAllowlist, Timeout }` with `#[serde(rename_all
+    = "snake_case")]`.
+  - Add `Event::PermissionRequest { request_id: String, agent: String,
+    tool: String, arg: String, scope: String, risk: PermissionRisk,
+    reason: String }`.
+  - Add `Event::PermissionResolved { request_id: String, decision:
+    PermissionDecision, source: PermissionSource }`.
+- In `crates/agentic-core/src/events/persist.rs::event_type_tag`,
+  extend the match: `Event::PermissionRequest { .. } =>
+  "PermissionRequest"`, `Event::PermissionResolved { .. } =>
+  "PermissionResolved"`.
+
+**Refactor**: Confirm `CURRENT_SCHEMA_VERSION` does not need bumping
+(additive variants are backward-compatible per the comment at line
+14–18 of `events/mod.rs`). Document this in a `// schema: additive`
+comment beside the new variants.
+
+**Commit**: `feat(core): add PermissionRequest + PermissionResolved event variants`
+
+**Verification**: `cargo test -p agentic-core --features all events::`
+
+---
+
+### Step P.1.2: `permissions.toml` config loader
+
+**Goal**: Stand up a `PermissionsConfig` struct loaded from a
+**separate** `permissions.toml` file (sibling of `pipeline.toml`, not
+nested inside it). Carries `[allowlist]`, `[denylist]`, and a
+`[settings]` block with `default_on_timeout` (`"deny"` | `"allow"`,
+default `"deny"`).
+
+**Depends on**: P.1.1.
+
+**Test first** (RED):
+- New module + tests `crates/agentic-core/src/pipeline/permissions/config.rs`
+  (or `crates/agentic-core/src/permissions/config.rs` — choose location
+  during P.2.1; pick one and stick to it):
+  - `loads_minimal_config`: write
+    ```toml
+    [allowlist]
+    patterns = ["Read(*)", "LS(*)"]
+
+    [denylist]
+    patterns = ["Bash(rm -rf /*)"]
+
+    [settings]
+    default_on_timeout = "deny"
+    ```
+    to a tempdir, call `PermissionsConfig::load(path)`, assert two
+    allow patterns and one deny pattern parsed.
+  - `defaults_when_file_missing`: call `PermissionsConfig::load` on a
+    non-existent path, assert it returns `PermissionsConfig::builtin_default()`
+    (no error). Defaults must contain a Claude-tool baseline (`Read`,
+    `LS`, `Grep`, `Glob` all `*`-matched in allowlist) AND a Copilot-tool
+    baseline (`view`, `ls`, `grep`, `find` — verify the actual Copilot
+    tool names from `crates/agentic-core/src/backends/copilot_cli/parser.rs`
+    during impl). High-risk Bash patterns (`rm -rf`, `sudo`, `kubectl
+    delete`, `git reset --hard`, `git push --force`) ship in the denylist.
+  - `rejects_invalid_pattern`: a pattern with regex syntax (`Bash(/.*/)`)
+    must return `PermissionsConfigError::InvalidPattern` (we explicitly
+    do not support regex per Q2).
+  - `default_on_timeout_round_trips`: settings block with
+    `default_on_timeout = "allow"` parses to
+    `OnTimeout::Allow`; `"deny"` to `OnTimeout::Deny`; missing → defaults
+    to `Deny`.
+
+**Implement** (GREEN):
+- Add `[dependencies] serde = ...` (already present), `toml = ...`
+  (check `Cargo.toml`; add if missing).
+- Define `PermissionsConfig`, `PermissionRule`, `OnTimeout`, error
+  enum.
+- `builtin_default()` populates the per-backend tool tables. Embed
+  the actual tool names from
+  `crates/agentic-core/src/pipeline/tool_use_observer.rs:113`
+  (`Edit`, `Write`, `MultiEdit`, `create`, `str_replace`) **plus** the
+  read-only / navigation tools from the Claude allow-list seen at
+  `backends/claude_code/mod.rs:378` (`Read`, `Edit`, `Bash`) and the
+  Copilot tool names from `backends/copilot_cli/parser.rs`. Document
+  the source of each name in a `// from:` comment for grep-ability.
+- Use the matcher from P.1.3 once it exists (RED here passes a stub
+  that just checks the pattern parses, GREEN in P.1.3 makes
+  `matches()` work).
+
+**Refactor**: Move the file to its final location (`crates/agentic-core/src/permissions/`)
+if you didn't pick that in the RED phase. Add a `mod permissions;` to
+`lib.rs`.
+
+**Commit**: `feat(core): add PermissionsConfig with builtin tool defaults`
+
+**Verification**: `cargo test -p agentic-core permissions::config`
+
+---
+
+### Step P.1.3: Tool matcher (`<tool>(<arg-glob>)` and `<tool>:*`)
+
+**Goal**: Pure matcher that takes `(tool_name, arg)` and a pattern and
+returns bool. Supports two pattern shapes only:
+- `<tool>(<arg-glob>)` where `<arg-glob>` uses shell glob syntax
+  (`*`, `?`, `[abc]`) on the entire arg string. No anchoring needed —
+  the parens are the anchor.
+- `<tool>:*` matches any arg for that tool.
+
+No regex, no negation, no captures (Q2).
+
+**Depends on**: P.1.1.
+
+**Test first** (RED):
+- New tests `crates/agentic-core/src/permissions/matcher.rs`:
+  - `tool_wildcard_matches_any_arg`: pattern `Bash:*` matches
+    `("Bash", "ls -la")` and `("Bash", "")`. Does not match
+    `("Read", "/tmp/x")`.
+  - `arg_glob_basic`: pattern `Bash(rm -rf *)` matches `("Bash", "rm
+    -rf node_modules")`. Does not match `("Bash", "ls")`.
+  - `arg_glob_question_mark`: pattern `Read(/tmp/?.txt)` matches
+    `("Read", "/tmp/a.txt")` but not `("Read", "/tmp/ab.txt")`.
+  - `arg_glob_star_does_not_cross_quotes_no_special_handling`:
+    pattern `Bash(rm * /tmp)` matches the arg as a flat string with
+    no shell tokenization — document this explicitly.
+  - `unknown_pattern_shape_errors`: parsing `Bash` (no parens) returns
+    `PatternParseError::Malformed`. Parsing `Bash(/regex/)` parses but
+    treats the slashes as literal characters.
+  - `tool_name_is_case_sensitive`: pattern `bash:*` does not match
+    `("Bash", ...)` (Q2 — no case folding).
+
+**Implement** (GREEN):
+- Add `glob = "..."` (or use the lighter-weight `globset` already
+  potentially in the workspace — verify with
+  `cargo tree -p agentic-core | rg -i glob`).
+- Implement `Pattern::parse(&str) -> Result<Pattern, PatternParseError>`
+  and `Pattern::matches(tool: &str, arg: &str) -> bool`.
+- Wire the matcher into `PermissionRule` so `PermissionsConfig::load`
+  validates patterns at parse time (P.1.2's `rejects_invalid_pattern`
+  test now goes from "stub returns ok" to "matcher rejects").
+
+**Refactor**: Document the matcher grammar at the top of `matcher.rs`
+in a doc-comment block — this becomes the user-facing reference for
+`permissions.toml`.
+
+**Commit**: `feat(core): add permission tool matcher`
+
+**Verification**: `cargo test -p agentic-core permissions::`
+
+---
+
+### Step P.1.4: Risk classifier table
+
+**Goal**: Heuristic v1 risk classifier embedded in the gate. Given
+`(tool, arg)` returns `PermissionRisk`. Used to populate
+`Event::PermissionRequest.risk`. Per Q11, a fixed table with the
+following rules in priority order:
+- Match against denylist High patterns: `Bash(rm -rf *)`,
+  `Bash(sudo *)`, `Bash(kubectl delete *)`, `Bash(git reset --hard*)`,
+  `Bash(git push --force*)`, `Bash(* | sh)` → **High**.
+- Tool family `Bash(*)` not matched above → **Medium**.
+- File-write tools (`Write`, `Edit`, `MultiEdit`, `create`,
+  `str_replace`) → **Medium**.
+- Everything else (`Read`, `LS`, `Grep`, `Glob`) → **Low**.
+
+**Depends on**: P.1.3.
+
+**Test first** (RED):
+- New tests `crates/agentic-core/src/permissions/risk.rs`:
+  - `bash_rm_rf_is_high`: classify `("Bash", "rm -rf node_modules")`
+    → `High`.
+  - `bash_plain_ls_is_medium`: classify `("Bash", "ls -la")` →
+    `Medium`.
+  - `read_is_low`: classify `("Read", "/tmp/x")` → `Low`.
+  - `write_is_medium`: classify `("Write", "/tmp/x")` → `Medium`.
+  - `unknown_tool_falls_back_to_low`: classify `("CustomTool", "...")`
+    → `Low`.
+
+**Implement** (GREEN):
+- `pub fn classify(tool: &str, arg: &str) -> PermissionRisk` —
+  internally reuses the matcher from P.1.3 against a
+  `static [(Pattern, PermissionRisk)]` table. The fact that the table
+  is duplicated between this module and the user's denylist is
+  intentional (Q11): the user's denylist controls the *gate decision*,
+  the risk table controls the *risk pill displayed to the user*.
+  Document the duplication.
+
+**Refactor**: None.
+
+**Commit**: `feat(core): add v1 permission risk classifier`
+
+**Verification**: `cargo test -p agentic-core permissions::risk`
+
+---
+
+### Step P.2.1: `PermissionGate` trait + `ConfigGate` static implementation
+
+**Goal**: Define the gate trait that the orchestrator will call on
+every `Event::ToolUseStart` it consumes. Provide a static
+implementation that consults only `PermissionsConfig` (no async
+prompt yet — P.2.2 adds the channel).
+
+**Depends on**: P.1.2, P.1.3, P.1.4.
+
+**Test first** (RED):
+- New tests `crates/agentic-core/src/permissions/gate.rs`:
+  - `allowlist_hit_returns_allow_once`: gate built from a config with
+    `Read(*)` allowlisted; calling
+    `gate.evaluate("Read", "/tmp/x")` returns
+    `GateOutcome::AnnotateAllow { source: AllowlistConfig }`.
+  - `denylist_hit_returns_deny`: gate with `Bash(rm -rf *)` denylisted;
+    `gate.evaluate("Bash", "rm -rf node_modules")` returns
+    `GateOutcome::AnnotateDeny { source: DenylistConfig }`.
+  - `unknown_tool_returns_prompt`: gate with neither rule matching
+    `("CustomTool", "x")` returns
+    `GateOutcome::Prompt { risk: PermissionRisk::Low }` (risk via
+    P.1.4).
+  - `denylist_takes_precedence_over_allowlist`: pattern overlap (rare
+    but the contract must be explicit) → deny wins.
+
+**Implement** (GREEN):
+- Define
+  ```rust
+  pub trait PermissionGate {
+      fn evaluate(&self, tool: &str, arg: &str) -> GateOutcome;
+  }
+  pub struct ConfigGate { config: PermissionsConfig }
+  pub enum GateOutcome {
+      AnnotateAllow { source: PermissionSource },
+      AnnotateDeny { source: PermissionSource },
+      Prompt { risk: PermissionRisk },
+  }
+  ```
+- Implement `ConfigGate::new(config)` and `evaluate`.
+
+**Refactor**: None.
+
+**Commit**: `feat(core): add PermissionGate trait + ConfigGate`
+
+**Verification**: `cargo test -p agentic-core permissions::gate`
+
+---
+
+### Step P.2.2: Decision channel + async `evaluate_async`
+
+**Goal**: Add an async path that, when the gate decides to prompt,
+emits `Event::PermissionRequest` on the bus and waits for a matching
+`Event::PermissionResolved` on a per-request `oneshot::Receiver`.
+60-second timeout, configurable per-config (Q4): on timeout, emit a
+synthetic `PermissionResolved { decision: TimedOut, source: Timeout }`
+and resolve as `default_on_timeout`.
+
+**Depends on**: P.2.1, P.1.1.
+
+**Test first** (RED):
+- New tests `crates/agentic-core/src/permissions/gate_async.rs`:
+  - `prompt_emits_permission_request_envelope`: spawn a test bus,
+    call `gate.evaluate_async("CustomTool", "x", &bus, run_id,
+    step_id)`, await the request envelope on a subscriber, assert
+    payload fields (request_id is a fresh ULID, agent comes from a
+    constructor arg, scope is derived from tool family).
+  - `decision_resolves_pending_request`: while a call to
+    `evaluate_async` is awaiting, publish
+    `Event::PermissionResolved { request_id: <same as emitted>,
+    decision: AllowOnce, source: User }`. The future resolves to
+    `GateOutcome::AnnotateAllow { source: User }`.
+  - `mismatched_request_id_is_ignored`: publish a Resolved with a
+    different request_id; the future stays pending until the right
+    one arrives.
+  - `timeout_resolves_to_deny_by_default`: use a 50 ms test timeout
+    override, never publish a decision, await result;
+    `GateOutcome::AnnotateDeny { source: Timeout }`. Verify a
+    synthetic `PermissionResolved { decision: TimedOut, source:
+    Timeout }` was published on the bus (so persist + UI see it).
+  - `timeout_resolves_to_allow_when_configured`: same with
+    `default_on_timeout = Allow` →
+    `GateOutcome::AnnotateAllow { source: Timeout }`.
+  - `cancellation_drops_pending`: spawn a cancel token, abort it
+    before publishing a decision; the future returns
+    `GateOutcome::AnnotateDeny { source: Cancelled }` (a new
+    `PermissionSource::Cancelled` variant — add in P.1.1's variant
+    set if not already there; if not, file as a tiny RED follow-up
+    here).
+
+**Implement** (GREEN):
+- Maintain a `Arc<Mutex<HashMap<RequestId, oneshot::Sender<...>>>>`
+  inside the async gate.
+- On `evaluate_async`:
+  1. Run the sync `evaluate` from P.2.1.
+  2. If `Prompt`: mint request_id, register a oneshot, publish
+     `Event::PermissionRequest` to the bus, `tokio::select!` between
+     timeout / cancel / oneshot.
+- Subscribe to bus on construction (or per-call — pick the lighter
+  path; the test for `mismatched_request_id_is_ignored` is the
+  contract).
+- The constructor takes a `tokio::time::Duration` so tests can
+  inject a 50 ms timeout. Production callers pass
+  `Duration::from_secs(60)`.
+
+**Refactor**: Extract the timeout / cancel `select!` into a
+`wait_for_decision` helper.
+
+**Commit**: `feat(core): add async permission gate with prompt + timeout`
+
+**Verification**: `cargo test -p agentic-core permissions::gate_async`
+
+---
+
+### Step P.2.3: Per-run session allowlist
+
+**Goal**: Augment the async gate with a per-run in-memory allowlist
+of patterns added via `decision == AllowSession`. Cleared when the
+gate observes `Event::RunComplete` for the owning run. Does not
+persist to disk.
+
+**Depends on**: P.2.2.
+
+**Test first** (RED):
+- Extend `gate_async.rs` tests:
+  - `session_decision_caches_pattern_for_subsequent_calls`: first
+    call to `("Bash", "ls -la")` prompts; user resolves with
+    `AllowSession`. Second call to identical args returns
+    `AnnotateAllow { source: SessionAllowlist }` without prompting
+    (no new `PermissionRequest` envelope on the bus — assert the
+    subscriber sees only the original request, not a second).
+  - `session_pattern_canonicalizes_to_exact_match`: session entry
+    for `("Bash", "ls -la")` does NOT match `("Bash", "ls -la
+    /tmp")`. Document explicitly: session allowlist is exact-arg,
+    not glob (Q2 — keep the matcher minimal here).
+  - `run_complete_clears_session_allowlist`: publish
+    `Event::RunComplete` on the bus; subsequent identical call
+    prompts again.
+  - `cross_run_isolation`: two runs with different `run_id`s share
+    no session state.
+
+**Implement** (GREEN):
+- Add `Arc<Mutex<HashMap<RunId, HashSet<(String, String)>>>>` to the
+  gate.
+- On `Decision::AllowSession`, insert before publishing
+  `PermissionResolved`.
+- On `Event::RunComplete`, drop the entry for that run_id.
+- The sync `evaluate` path is unchanged — only `evaluate_async`
+  consults session state.
+
+**Refactor**: Pull the session-allowlist HashMap into a struct with
+`insert(run_id, tool, arg)` / `contains(run_id, tool, arg)` /
+`drop_run(run_id)` — easier to reason about than a raw Mutex.
+
+**Commit**: `feat(core): add per-run session allowlist to permission gate`
+
+**Verification**: `cargo test -p agentic-core permissions::gate_async`
+
+---
+
+### Step P.2.4: Wire gate into `PipelineOrchestrator`
+
+**Goal**: The orchestrator (which already consumes the bus) now also
+consults the permission gate on every `Event::ToolUseStart`. This is
+the producer side of `Event::PermissionRequest` and
+`Event::PermissionResolved` envelopes; downstream consumers
+(`EventPersister`, the Tauri forwarder, the TUI app) just see the
+envelopes flow through.
+
+**Depends on**: P.2.3.
+
+**Test first** (RED):
+- New integration tests
+  `crates/agentic-core/src/pipeline/orchestrator.rs` test module
+  (or `tests/orchestrator_permissions.rs` if test-bus plumbing is
+  already there):
+  - `tool_use_start_with_allowlist_hit_emits_permission_resolved`:
+    spawn an orchestrator with a config that allows `Read(*)`;
+    publish `Event::ToolUseStart { tool_name: "Read", input:
+    json!({"file_path": "/tmp/x"}), .. }`; assert exactly one
+    `Event::PermissionResolved { decision: AllowOnce, source:
+    AllowlistConfig }` is published with a fresh `request_id`. No
+    `PermissionRequest` envelope is published (allowlist short-circuits
+    the prompt path, per Q3.c — but emits a Resolved for audit-log
+    parity).
+  - `tool_use_start_with_denylist_hit_emits_permission_resolved_deny_plus_warn_log`:
+    same with denylist hit; assert
+    `Event::PermissionResolved { decision: Deny, source:
+    DenylistConfig }` and a
+    `tracing::warn!` entry in `tracing_subscriber::fmt::TestWriter`
+    capture (use the `tracing-test` crate).
+  - `tool_use_start_with_no_match_emits_permission_request`:
+    config has neither match; assert one
+    `Event::PermissionRequest` envelope is published (and stays
+    pending — no Resolved until P.2.2's user-decision channel
+    fires).
+  - `non_tool_use_events_pass_through`: publishing
+    `Event::TextDelta` to the bus does **not** invoke the gate (no
+    Permission* envelopes emitted).
+
+**Implement** (GREEN):
+- Extend `apply_event` in `orchestrator.rs` to short-circuit
+  `Event::ToolUseStart` into an async gate call — but the existing
+  `apply_event` is sync. Pick one of two paths and document in the
+  commit message:
+  - **(a)** Spawn a per-request `tokio::spawn` for each ToolUseStart
+    and let the gate call `await`. Keeps the orchestrator loop
+    non-blocking but breaks ordering relative to the next event on
+    the same step.
+  - **(b)** Make the orchestrator loop async-aware and call
+    `gate.evaluate_async(...).await` inline. Simpler but blocks
+    persistence of subsequent events behind the gate's 60 s
+    timeout.
+
+  Recommendation: **(a)** — preserves the existing event-stream
+  ordering invariants and matches the observational nature of the
+  gate.
+- The gate is constructed once at `PipelineOrchestrator::spawn` time
+  and shared via `Arc<dyn AsyncPermissionGate>`.
+
+**Refactor**: If `apply_event` grows, extract the
+`Event::ToolUseStart` arm into a `handle_tool_use_start` free
+function.
+
+**Commit**: `feat(core): wire permission gate into PipelineOrchestrator`
+
+**Verification**:
+- `cargo test -p agentic-core orchestrator::permissions`
+- `cargo clippy --workspace --all-features --all-targets -- -D warnings`
+
+---
+
+### Step P.3.1: Tauri IPC — `permission_decide` command
+
+**Goal**: Expose a Tauri `invoke`able command that the web UI calls
+when the user clicks Allow / Allow for session / Deny on a permission
+prompt. The command publishes `Event::PermissionResolved` onto the
+bus, which the gate then consumes.
+
+**Depends on**: P.2.4.
+
+**Test first** (RED):
+- New tests `crates/agentic-tauri/src/commands/permissions.rs` test
+  module:
+  - `permission_decide_publishes_resolved_envelope`: build an
+    `EventBusState`, subscribe a test consumer, call
+    `permission_decide(state, request_id: "req-x", decision: "once")`,
+    assert one `Event::PermissionResolved { request_id: "req-x",
+    decision: AllowOnce, source: User }` envelope received.
+  - `permission_decide_session_value`: same with `decision: "session"`
+    → `AllowSession`.
+  - `permission_decide_deny_value`: `decision: "deny"` → `Deny`.
+  - `permission_decide_invalid_value_returns_err`: `decision:
+    "fhqwhgads"` returns `Err("invalid decision")` and publishes no
+    envelope.
+  - `permission_decide_returns_quickly`: command resolves within
+    50 ms (no awaiting on the gate's outcome — fire-and-forget
+    publish). Use a `tokio::time::timeout` wrapper.
+
+**Implement** (GREEN):
+- Add `crates/agentic-tauri/src/commands/permissions.rs` with
+  `#[tauri::command] pub async fn permission_decide(state:
+  State<'_, EventBusState>, request_id: String, decision: String,
+  run_id: String, step_id: Option<String>) -> Result<(), String>`.
+- Map `"once" | "session" | "deny"` to enum variants; reject other
+  strings.
+- `state.bus.publish(EventEnvelope::now(run_id, step_id,
+  Event::PermissionResolved { ... }))`.
+- Register the command in `crates/agentic-tauri/src/commands/mod.rs`
+  and in the builder's `.invoke_handler(...)` list.
+
+**Refactor**: None.
+
+**Commit**: `feat(tauri): add permission_decide IPC command`
+
+**Verification**: `cargo test -p agentic-tauri commands::permissions`
+
+---
+
+### Step P.3.2: Bus forwarder transparently propagates Permission* envelopes
+
+**Goal**: Verify that the existing Tauri event-forwarder
+(`subscribe_events` in `crates/agentic-tauri/src/commands/events.rs`)
+routes the new envelopes to the webview without modification, and add
+a regression test so refactors of the forwarder don't accidentally
+filter them out.
+
+**Depends on**: P.3.1.
+
+**Test first** (RED):
+- Extend `crates/agentic-tauri/src/commands/events.rs` test module:
+  - `forwards_permission_request_envelope`: publish a
+    `PermissionRequest` envelope to the bus, capture the emitted
+    Tauri event, assert serialization round-trips
+    `request_id`/`tool`/`arg`/`risk`.
+  - `forwards_permission_resolved_envelope`: same with `Resolved`.
+- Both tests use the existing `MockApp` / mock-emitter infrastructure
+  (verify by searching `events.rs` for the existing pattern).
+
+**Implement** (GREEN):
+- Likely no production change required (the forwarder is
+  envelope-shape-agnostic). If a serialization test fails because of
+  enum representation, fix at the `serde` attribute level on the
+  variants in P.1.1.
+- Update `apps/web-ui/src/types/event.ts` to add the new event-type
+  literals and discriminated-union members. (TypeScript-side; verify
+  `EventEnvelope` is the discriminated-union root.)
+
+**Refactor**: None.
+
+**Commit**: `test(tauri): regression-test permission envelope forwarding`
+
+**Verification**: `cargo test -p agentic-tauri commands::events`
+
+---
+
+### Step P.4.1: `usePermissionRequests` hook with id-dedup
+
+**Goal**: New React hook that subscribes to the existing
+`useTauriEvents` envelope stream and yields the **current set of
+unresolved** `PermissionRequest` envelopes, keyed by `request_id`. A
+matching `PermissionResolved` envelope removes the request from the
+set. Per Q10, the event log is the single source of truth.
+
+**Depends on**: P.3.2.
+
+**Test first** (RED):
+- New test `apps/web-ui/src/__tests__/usePermissionRequests.test.ts`:
+  - `tracks_a_pending_request`: feed a fixture envelope stream
+    `[PermissionRequest{id:"r1"}]`; hook returns `[{id:"r1", ...}]`.
+  - `removes_request_on_resolved`: stream
+    `[PermissionRequest{id:"r1"}, PermissionResolved{id:"r1"}]`;
+    hook returns `[]`.
+  - `dedups_duplicate_request_envelopes`: stream
+    `[PermissionRequest{id:"r1"}, PermissionRequest{id:"r1"}]`
+    (e.g., HMR reattach + history fetch overlap); hook returns one
+    entry.
+  - `preserves_order_by_arrival`: two pending requests with `t1 <
+    t2`; hook returns them in arrival order.
+  - `clears_on_run_change`: when the upstream `useTauriEvents`
+    re-keys on a new `runId`, the hook also clears (matches the
+    existing behaviour — no special code, but assert it).
+
+**Implement** (GREEN):
+- `apps/web-ui/src/hooks/usePermissionRequests.ts`. Internally calls
+  `useTauriEvents()` and reduces the envelope list with a small
+  reducer keyed by `request_id`.
+- Export type `PermissionRequest` shape from
+  `apps/web-ui/src/types/permission.ts` (or extend the existing
+  `pipeline.ts` interface — but pipeline.ts already has a
+  `PermissionRequest` type at line 36; make sure the wire-shape from
+  the backend matches and rename if the field set differs).
+
+**Refactor**: If `pipeline.ts`'s `PermissionRequest` shape diverges
+from the backend's, decide here (RED forces the field-naming choice):
+keep the existing `t: number` (a UI-side hint) and add `requestId:
+string` as the dedup key. Document the difference in
+`apps/web-ui/src/types/permission.ts`.
+
+**Commit**: `feat(web): add usePermissionRequests hook`
+
+**Verification**: `pnpm -F @agentic/web-ui test usePermissionRequests`
+
+---
+
+### Step P.4.2: `ActivityColumn` consumes live `usePermissionRequests`
+
+**Goal**: Replace the hard-coded fixture in `ActivityColumn` (W.7.2)
+with the live hook. When a real `PermissionCard` is rendered and the
+user clicks a button, fire `invoke('permission_decide', { ... })`.
+
+**Depends on**: P.4.1, W.7.2.
+
+**Test first** (RED):
+- Extend `apps/web-ui/src/__tests__/ActivityColumn.test.tsx`:
+  - With the new hook mocked to return `[{ requestId: "r1", ... }]`,
+    a `PermissionCard` renders.
+  - Clicking "Allow once" fires `invoke('permission_decide', {
+    requestId: "r1", decision: "once", runId: ..., stepId: ... })`.
+    Use the existing mocked `invoke` from
+    `apps/web-ui/src/__tests__/devInvokeMock.test.ts` setup.
+  - Clicking "Deny" fires the same with `decision: "deny"`.
+  - The card stays visible (until the backend echoes a Resolved
+    envelope) — assert it does NOT immediately disappear from the
+    DOM after click.
+  - When the test rig then injects a `PermissionResolved` envelope,
+    the card unmounts.
+
+**Implement** (GREEN):
+- Edit `apps/web-ui/src/components/ActivityColumn.tsx` to call
+  `usePermissionRequests()` for the active run. Pass the array down
+  to the existing `PermissionCard` rendering path.
+- The `onDecision` callback wires through to
+  `invoke('permission_decide', ...)`. Surface backend errors via
+  `setHistoryError` (or a new `permissionError` slot on the parent
+  `App.tsx` — pick during impl; tech-debt the alternative).
+
+**Refactor**: If the prop signature on `ActivityColumn` grows past 5
+props, group permission props into a `permissions: { requests, onDecide
+}` object.
+
+**Commit**: `feat(web): wire ActivityColumn permissions to live backend`
+
+**Verification**: `pnpm -F @agentic/web-ui test ActivityColumn`
+
+---
+
+### Step P.4.3: `App.tsx` wires `runId` + `stepId` into the permission call
+
+**Goal**: The existing `App.tsx` already tracks `activeRunId`; thread
+it (and the most recent `stepId` from the event stream) into
+`ActivityColumn` so `permission_decide` calls carry the correct
+`run_id` / `step_id` pair. The backend gate uses these to look up the
+right oneshot.
+
+**Depends on**: P.4.2.
+
+**Test first** (RED):
+- Extend `apps/web-ui/src/__tests__/app.test.tsx`:
+  - Render `<App />` with a fixture event stream containing a
+    `StepStarted { step_id: "s1" }` followed by a
+    `PermissionRequest`. Click "Allow once". Assert
+    `invoke('permission_decide', ...)` was called with `runId =
+    <activeRunId>, stepId: "s1"`.
+
+**Implement** (GREEN):
+- In `App.tsx`, derive `latestStepId` from the events array. Pass
+  `runId={activeRunId}` and `stepId={latestStepId}` into
+  `ActivityColumn`. `ActivityColumn` passes them through to the
+  decide callback.
+
+**Refactor**: None.
+
+**Commit**: `feat(web): thread runId/stepId into permission_decide calls`
+
+**Verification**: `pnpm -F @agentic/web-ui test app`
+
+---
+
+### Step P.5.1: TUI envelope-routing for Permission* (deferred runner integration)
+
+**Goal**: Per Q9.c — wire `Event::PermissionRequest` into
+`AppState::pending_perms` and `Event::PermissionResolved` to remove
+the matching entry, but **do not** change T.13.2's local `y/s/n` keys
+yet. When the TUI eventually gets a runtime, `pending_perms` will be
+populated by the bus rather than fixtures, and the deferred runner
+integration (filed as a separate tech-debt issue) will close the loop
+by having `y/s/n` publish `PermissionResolved` back through the bus.
+
+**Depends on**: P.1.1, T.13.x (already landed; verify
+`AppState::apply_envelope` exists at
+`crates/agentic-tui/src/app.rs:248`).
+
+**Test first** (RED):
+- Extend `crates/agentic-tui/tests/perm_card.rs` (or add
+  `perm_envelope_apply.rs`):
+  - `apply_permission_request_envelope_appends_to_pending_perms`:
+    construct an envelope with the new variant; call
+    `state.apply_envelope(&env)`; assert
+    `state.pending_perms.len() == 1` and the fields map correctly
+    (`agent`, `command` (= arg), `reason`, `scope`, `risk`).
+  - `apply_permission_resolved_removes_matching_request`: with one
+    pending request whose `request_id == "r1"` (note: the existing
+    `PermissionRequest` struct doesn't carry `request_id` — see
+    Refactor below), apply a
+    `PermissionResolved { request_id: "r1", .. }`; assert
+    `state.pending_perms.is_empty()`.
+  - `unmatched_resolved_is_noop`: pending request `r1`, apply
+    Resolved for `r2`; pending stays.
+- Confirm existing `crates/agentic-tui/tests/perm_keys.rs` tests (the
+  `y/s/n` keys) still pass — they test local-state mutations which
+  don't change.
+
+**Implement** (GREEN):
+- Add `request_id: String` field to
+  `crates/agentic-tui/src/app.rs::PermissionRequest` (compatibility:
+  this is a TUI-internal struct, not the wire envelope; the
+  `PermissionRequest` envelope variant from P.1.1 is the source of
+  truth, and the TUI struct mirrors it). Update
+  `crates/agentic-tui/src/views/perm_card.rs` if it has fixture data
+  (currently has `command`, `agent`, `reason` — leave the renderer
+  alone; just thread `request_id` through `Default::default`).
+- Extend
+  `apply_envelope` in `app.rs` with two new arms:
+  ```rust
+  Event::PermissionRequest { request_id, agent, tool, arg, scope, risk, reason } => {
+      self.pending_perms.push(PermissionRequest { request_id, agent, command: arg, reason, scope, risk: map_risk(risk) });
+  }
+  Event::PermissionResolved { request_id, .. } => {
+      self.pending_perms.retain(|p| p.request_id != request_id);
+  }
+  ```
+  Where `map_risk` translates the wire-format
+  `events::PermissionRisk` to the TUI-local `app::PermissionRisk`
+  (both should be structurally identical — consider exposing the
+  events one and dropping the local one in a later refactor; tech-debt
+  if you don't).
+
+**Refactor**: Tech-debt note in
+`crates/agentic-tui/TODO.md` (or local todo): "TUI runner integration
+for permissions: `y/s/n` keys still mutate local state only;
+publishing back via the bus requires the same runtime-channel
+plumbing as T.13.x runner integration. Trigger: when the TUI gains
+its `agentic-core` runtime handle." File as a separate GH issue with
+`tech-debt` label per CLAUDE.md §4.
+
+**Commit**: `feat(tui): apply Permission envelopes to AppState`
+
+**Verification**: `cargo test -p agentic-tui perm_envelope`
+
+---
+
+### Step P.6.1: End-to-end pipeline test (web)
+
+**Goal**: One Vitest integration test that drives the complete
+loop: backend emits `PermissionRequest` → web UI renders card →
+user clicks Allow once → `permission_decide` invoke → backend echoes
+`PermissionResolved` → card unmounts. Mock the Tauri layer at
+`invoke` and `listen` boundaries; do not spawn a real backend.
+
+**Depends on**: P.4.3.
+
+**Test first** (RED):
+- New test
+  `apps/web-ui/src/__tests__/permissionFlow.integration.test.tsx`:
+  1. Mount `<App />` with a mocked event channel.
+  2. Push a `PermissionRequest{ requestId: "r1" }` onto the channel.
+  3. Wait for the `PermissionCard` to render.
+  4. `userEvent.click(getByText("Allow once"))`.
+  5. Assert the mocked `invoke` was called with
+     `("permission_decide", { requestId: "r1", decision: "once", ... })`.
+  6. Push a `PermissionResolved{ requestId: "r1" }` onto the
+     channel.
+  7. Wait for the card to unmount; assert no
+     `data-testid="permission-card"` in the DOM.
+- Also push a `PermissionResolved` for an unknown request and assert
+  the UI does not crash.
+
+**Implement** (GREEN):
+- Should pass once P.4.3 is complete; this step exists to lock the
+  integration in a single regression test rather than three
+  independent unit tests. If the test fails, fix the integration —
+  do not modify individual units' tests.
+
+**Refactor**: If the test setup (mocked `invoke`/`listen`) is large,
+extract a helper into `apps/web-ui/src/__tests__/setup.ts`.
+
+**Commit**: `test(web): add permission-flow E2E integration test`
+
+**Verification**: `pnpm -F @agentic/web-ui test permissionFlow`
+
+---
+
+### Step P.6.2: File follow-up tech-debt issues + close GH #88
+
+**Goal**: Per CLAUDE.md §4, file the deferred items as GH issues
+with the `tech-debt` label, link them back into todo.md, and close
+GH #88 with a comment pointing at this phase + the new follow-up.
+
+**Depends on**: P.6.1.
+
+**Test first** (RED): N/A — administrative step.
+
+**Implement** (GREEN):
+1. Create `gh issue create --label tech-debt --title "Real
+   blocking permission gate (MCP/proxy intercept)" --body "..."`.
+   Body mirrors the Phase P intro: observational gate ships in Phase
+   P; full blocking requires the child CLI to call out to an
+   MCP-compliant tool server (or a process proxy) that pauses the
+   tool call before execution. Trigger: when MCP integration lands or
+   when a user reports a destructive call landed before the prompt
+   was visible.
+2. Create `gh issue create --label tech-debt --title "TUI permission
+   y/s/n: publish PermissionResolved through the bus"`. Body: T.13.2
+   keys mutate local state only; need a runtime channel to publish
+   `Event::PermissionResolved` back to the bus when the TUI gains
+   its runtime handle. Trigger: T.13.x runner integration milestone.
+3. Update tech-debt entry 2 above: change "(GH #88 — in-progress,
+   see Phase P)" to "(GH #88 — closed by Phase P; follow-ups: GH
+   #<blocking-gate>, GH #<tui-perm-publish>)".
+4. Close GH #88 with a comment linking to the merged Phase P PR and
+   the two new issues.
+
+**Refactor**: None.
+
+**Commit**: `docs(redesign): close GH #88 + file permission follow-ups`
+
+**Verification**:
+- `gh issue view 88 --json state -q '.state' | grep -i closed`
+- `gh issue list --label tech-debt | rg -i "blocking permission|TUI permission"`
+- two issues visible.
+
+---
+
+
 
 Phase 0 — Tokens & foundation
 - [ ] W.0.1 Inter via Google Fonts CDN + tokens.css
@@ -2382,6 +3243,24 @@ Phase 14 — Tauri
 Phase 15 — Cleanup + tech debt
 - [ ] X.15.1 Full test pass + snapshots
 - [ ] X.15.2 File tech-debt issues
+
+Phase P — Permissions (GH #88)
+- [x] P.1.1 Add PermissionRequest + PermissionResolved event variants
+- [ ] P.1.2 permissions.toml config loader
+- [ ] P.1.3 Tool matcher (`<tool>(<arg-glob>)` and `<tool>:*`)
+- [ ] P.1.4 Risk classifier table
+- [ ] P.2.1 PermissionGate trait + ConfigGate static
+- [ ] P.2.2 Decision channel + async evaluate_async (60 s timeout)
+- [ ] P.2.3 Per-run session allowlist
+- [ ] P.2.4 Wire gate into PipelineOrchestrator
+- [ ] P.3.1 Tauri permission_decide command
+- [ ] P.3.2 Forwarder regression-test for Permission* envelopes
+- [ ] P.4.1 usePermissionRequests hook with id-dedup
+- [ ] P.4.2 ActivityColumn consumes live usePermissionRequests
+- [ ] P.4.3 App.tsx wires runId/stepId into permission_decide
+- [ ] P.5.1 TUI applies Permission envelopes to AppState (deferred runner integration)
+- [ ] P.6.1 End-to-end web permission-flow integration test
+- [ ] P.6.2 File follow-up tech-debt issues + close GH #88
 
 ---
 
