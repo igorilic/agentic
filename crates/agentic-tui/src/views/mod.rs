@@ -8,6 +8,7 @@ pub mod findings;
 pub mod issue_header;
 pub mod issue_pane;
 pub mod logs_pane;
+pub mod perm_card;
 pub mod pipeline_bar;
 pub mod tab_bar;
 pub mod title_bar;

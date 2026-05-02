@@ -76,6 +76,29 @@ pub struct LogEntry {
     pub message: String,
 }
 
+/// Risk level of a pending permission request (spec §4.7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PermissionRisk {
+    Low,
+    Medium,
+    High,
+}
+
+/// A single permission request pending user approval (spec §4.7).
+#[derive(Debug, Clone)]
+pub struct PermissionRequest {
+    /// Agent requesting the permission, e.g. `"developer"`.
+    pub agent: String,
+    /// Shell command or action requiring approval, e.g. `"rm -rf node_modules"`.
+    pub command: String,
+    /// Human-readable justification.
+    pub reason: String,
+    /// Permission scope key, e.g. `"shell.destructive"`.
+    pub scope: String,
+    /// Risk classification.
+    pub risk: PermissionRisk,
+}
+
 /// Which pane currently receives input. Pure state — the renderer reads
 /// it to decorate the focused pane's title; future steps (12.5 chat) will
 /// route key events to the focused pane.
@@ -150,6 +173,10 @@ pub struct AppState {
     /// Chat messages rendered in the chat pane (spec §4.6).
     /// Populated by the runner wiring in T.13.x; empty by default.
     pub chat: Vec<ChatMessage>,
+    /// Pending permission requests (spec §4.7). When non-empty and the logs
+    /// pane is focused, the first entry renders as an inline permission card
+    /// after the last log row. Keys y/s/n resolve it (T.13.2).
+    pub pending_perms: Vec<PermissionRequest>,
 }
 
 impl Default for AppState {
@@ -172,6 +199,7 @@ impl Default for AppState {
             pipeline: vec![],
             log: vec![],
             chat: vec![],
+            pending_perms: vec![],
         }
     }
 }

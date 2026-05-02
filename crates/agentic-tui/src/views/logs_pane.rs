@@ -25,9 +25,10 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
-use crate::app::{AppState, LogEntry, LogLevel};
+use crate::app::{AppState, LogEntry, LogLevel, Pane};
 use crate::theme;
 use crate::views::findings;
+use crate::views::perm_card;
 
 // Column layout constants (relative to the pane left edge).
 const TIME_COL: u16 = 0;
@@ -74,14 +75,47 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
 
     // Render findings below the log rows in the remaining area.
     let findings_y = area.y + log_rows.min(area.height);
-    if findings_y < area.y + area.height {
+    let findings_height = area.height - log_rows.min(area.height);
+
+    // Reserve space for the permission card (5 rows) if one is pending.
+    let perm = if state.focus == Pane::Logs {
+        state.pending_perms.first()
+    } else {
+        None
+    };
+
+    // Card takes 5 rows at the bottom of the remaining area.
+    const CARD_HEIGHT: u16 = 5;
+    let card_fits = perm.is_some() && findings_height >= CARD_HEIGHT;
+    let findings_used = if card_fits {
+        findings_height.saturating_sub(CARD_HEIGHT)
+    } else {
+        findings_height
+    };
+
+    if findings_y < area.y + area.height && findings_used > 0 {
         let findings_area = Rect {
             x: area.x,
             y: findings_y,
             width: area.width,
-            height: area.height - log_rows.min(area.height),
+            height: findings_used,
         };
         findings::render(findings_area, state, f);
+    }
+
+    // Render the permission card after findings (and after log rows).
+    if let Some(p) = perm {
+        let card_y = findings_y + findings_used;
+        let available = area.y + area.height - card_y.min(area.y + area.height);
+        if available > 0 && card_y < area.y + area.height {
+            let card_area = Rect {
+                x: area.x,
+                y: card_y,
+                width: area.width,
+                height: available.min(CARD_HEIGHT),
+            };
+            perm_card::render(card_area, f, p);
+        }
     }
 }
 
