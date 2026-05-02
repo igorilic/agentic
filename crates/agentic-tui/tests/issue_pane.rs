@@ -1,0 +1,400 @@
+//! Step T.12.3: Issue pane tests.
+//!
+//! Spec §4.6 Issue variant:
+//!   - Issue ID (`run_label`) in ACCENT bold.
+//!   - Title (`run_title`) bold FG.
+//!   - Label chips `▏<label>▕` with DIM borders and FG text.
+//!   - Description paragraphs each in FG.
+//!   - Acceptance checklist prefixed `[ ]` in DIM, item text in FG.
+//!
+//! Body restructure tests (single-pane visibility) also live here.
+
+use agentic_tui::app::{AppState, ChatMessage, LogEntry, LogLevel, Pane};
+use agentic_tui::draw_app;
+use agentic_tui::theme;
+use ratatui::Terminal;
+use ratatui::backend::TestBackend;
+use ratatui::style::Modifier;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Seed a full AppState for the issue pane, focused on Issue.
+fn issue_state() -> AppState {
+    let mut state = AppState::default();
+    state.run_label = Some("AGT-204".into());
+    state.run_title = Some("Add multi-tenant rate limiting".into());
+    state.run_labels = vec!["backend".into(), "api".into()];
+    state.run_body = vec!["First paragraph.".into(), "Second paragraph.".into()];
+    state.run_acceptance = vec![
+        "Limits applied per tenant".into(),
+        "Rate enforced via Redis".into(),
+    ];
+    state.focus = Pane::Issue;
+    state
+}
+
+/// Render draw_app at `width×height` and return a cloned buffer.
+fn render_at(state: &AppState, width: u16, height: u16) -> ratatui::buffer::Buffer {
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| draw_app(f, state)).unwrap();
+    terminal.backend().buffer().clone()
+}
+
+/// Render at 100×30 (plenty of space for all issue content).
+fn render(state: &AppState) -> ratatui::buffer::Buffer {
+    render_at(state, 100, 30)
+}
+
+/// Find the first occurrence of `needle` scanning cell-by-cell.
+/// Returns `(col, row)` of the first character of the match, or `None`.
+fn find_in_buffer(
+    buffer: &ratatui::buffer::Buffer,
+    needle: &str,
+    width: u16,
+    height: u16,
+) -> Option<(u16, u16)> {
+    let chars: Vec<char> = needle.chars().collect();
+    if chars.is_empty() {
+        return None;
+    }
+    for y in 0..height {
+        'outer: for x in 0..width {
+            for (i, ch) in chars.iter().enumerate() {
+                let col = x + i as u16;
+                if col >= width {
+                    continue 'outer;
+                }
+                if buffer.cell((col, y)).unwrap().symbol() != ch.to_string() {
+                    continue 'outer;
+                }
+            }
+            return Some((x, y));
+        }
+    }
+    None
+}
+
+// ── Test 1: id in ACCENT bold ─────────────────────────────────────────────────
+
+/// `run_label = "AGT-204"` — find any cell on "AGT-204".
+/// Assert `fg == ACCENT` AND `add_modifier.contains(BOLD)`.
+#[test]
+fn issue_pane_renders_id_in_accent_bold() {
+    let state = issue_state();
+    let buffer = render(&state);
+
+    let (col, row) =
+        find_in_buffer(&buffer, "AGT-204", 100, 30).expect("'AGT-204' not found in buffer");
+    let cell = buffer.cell((col, row)).unwrap();
+    assert_eq!(
+        cell.style().fg,
+        Some(theme::ACCENT),
+        "expected 'A' of 'AGT-204' at ({col},{row}) to have fg=ACCENT, got {:?}",
+        cell.style().fg
+    );
+    assert!(
+        cell.style().add_modifier.contains(Modifier::BOLD),
+        "expected 'A' of 'AGT-204' at ({col},{row}) to have BOLD modifier, got {:?}",
+        cell.style().add_modifier
+    );
+}
+
+// ── Test 2: title in bold FG ─────────────────────────────────────────────────
+
+/// `run_title = "Add multi-tenant rate limiting"` — find first cell.
+/// Assert `add_modifier.contains(BOLD)`.
+#[test]
+fn issue_pane_renders_title_in_bold_fg() {
+    let state = issue_state();
+    let buffer = render(&state);
+
+    let (col, row) = find_in_buffer(&buffer, "Add multi-tenant", 100, 30)
+        .expect("'Add multi-tenant' not found in buffer");
+    let cell = buffer.cell((col, row)).unwrap();
+    assert!(
+        cell.style().add_modifier.contains(Modifier::BOLD),
+        "expected title to have BOLD modifier at ({col},{row}), got {:?}",
+        cell.style().add_modifier
+    );
+}
+
+// ── Test 3: label chips with side borders ─────────────────────────────────────
+
+/// `run_labels = ["backend", "api"]` — render must contain both
+/// `▏backend▕` and `▏api▕` (spec §4.6: "label chips with 1 px border").
+#[test]
+fn issue_pane_renders_label_chips_with_side_borders() {
+    let state = issue_state();
+    let buffer = render(&state);
+
+    // Both chips must appear.
+    assert!(
+        find_in_buffer(&buffer, "▏backend▕", 100, 30).is_some()
+            || find_in_buffer(&buffer, "│backend│", 100, 30).is_some(),
+        "expected 'backend' chip with side borders in buffer"
+    );
+    assert!(
+        find_in_buffer(&buffer, "▏api▕", 100, 30).is_some()
+            || find_in_buffer(&buffer, "│api│", 100, 30).is_some(),
+        "expected 'api' chip with side borders in buffer"
+    );
+
+    // Chips appear in declared order: backend row <= api row (or same row).
+    let backend_pos = find_in_buffer(&buffer, "backend", 100, 30)
+        .expect("'backend' not found in buffer");
+    let api_pos = find_in_buffer(&buffer, "api", 100, 30).expect("'api' not found in buffer");
+    assert!(
+        backend_pos.1 <= api_pos.1,
+        "expected 'backend' chip (row {}) to appear before or on same row as 'api' (row {})",
+        backend_pos.1,
+        api_pos.1
+    );
+    // If same row, backend must be at lower column.
+    if backend_pos.1 == api_pos.1 {
+        assert!(
+            backend_pos.0 < api_pos.0,
+            "on same row, expected 'backend' col ({}) < 'api' col ({})",
+            backend_pos.0,
+            api_pos.0
+        );
+    }
+}
+
+// ── Test 4: description paragraphs in FG ─────────────────────────────────────
+
+/// Both `run_body` paragraphs must be visible and the first cell of
+/// "First paragraph." must have `fg == FG`.
+#[test]
+fn issue_pane_renders_description_paragraphs_in_fg() {
+    let state = issue_state();
+    let buffer = render(&state);
+
+    let (col, row) = find_in_buffer(&buffer, "First paragraph.", 100, 30)
+        .expect("'First paragraph.' not found in buffer");
+    let cell = buffer.cell((col, row)).unwrap();
+    assert_eq!(
+        cell.style().fg,
+        Some(theme::FG),
+        "expected 'F' of 'First paragraph.' at ({col},{row}) to have fg=FG, got {:?}",
+        cell.style().fg
+    );
+
+    // Second paragraph must also be present.
+    assert!(
+        find_in_buffer(&buffer, "Second paragraph.", 100, 30).is_some(),
+        "expected 'Second paragraph.' to be present in buffer"
+    );
+}
+
+// ── Test 5: acceptance items as unchecked boxes ───────────────────────────────
+
+/// `run_acceptance = ["Limits applied per tenant", …]`
+/// Each row must begin with `[ ]` (DIM) followed by item text (FG).
+#[test]
+fn issue_pane_renders_acceptance_as_unchecked_boxes() {
+    let state = issue_state();
+    let buffer = render(&state);
+
+    // Find "[ ]" prefix — there must be at least one.
+    let unchecked_pos =
+        find_in_buffer(&buffer, "[ ]", 100, 30).expect("'[ ]' prefix not found in buffer");
+    let (col, row) = unchecked_pos;
+
+    // The `[` cell must be DIM.
+    let bracket_cell = buffer.cell((col, row)).unwrap();
+    assert_eq!(
+        bracket_cell.style().fg,
+        Some(theme::DIM),
+        "expected '[' of '[ ]' at ({col},{row}) to have fg=DIM, got {:?}",
+        bracket_cell.style().fg
+    );
+
+    // The item text "Limits applied per tenant" must be present.
+    assert!(
+        find_in_buffer(&buffer, "Limits applied per tenant", 100, 30).is_some(),
+        "expected acceptance item text 'Limits applied per tenant' in buffer"
+    );
+
+    // Find the "L" of the item text and assert it has fg=FG.
+    let (item_col, item_row) = find_in_buffer(&buffer, "Limits applied per tenant", 100, 30)
+        .expect("'Limits applied per tenant' not found");
+    let item_cell = buffer.cell((item_col, item_row)).unwrap();
+    assert_eq!(
+        item_cell.style().fg,
+        Some(theme::FG),
+        "expected 'L' of acceptance item at ({item_col},{item_row}) to have fg=FG, got {:?}",
+        item_cell.style().fg
+    );
+}
+
+// ── Test 6: empty state does not panic ───────────────────────────────────────
+
+/// All `run_*` fields None / empty — render must not panic.
+#[test]
+fn issue_pane_handles_empty_state_gracefully() {
+    let state = AppState {
+        focus: Pane::Issue,
+        ..Default::default()
+    };
+    // Must not panic.
+    render(&state);
+}
+
+// ── Test 7: no panic on narrow terminal ──────────────────────────────────────
+
+/// Render at 30×10 — must not panic.
+#[test]
+fn issue_pane_does_not_panic_on_narrow_terminal() {
+    let state = issue_state();
+    // Must not panic.
+    render_at(&state, 30, 10);
+}
+
+// ── Test 8: HEADER_BG continuity ─────────────────────────────────────────────
+
+/// At least one cell in the issue pane area must have `bg == HEADER_BG`.
+#[test]
+fn issue_pane_uses_header_bg_continuity() {
+    let state = issue_state();
+    let buffer = render(&state);
+
+    let has_header_bg = (0..30_u16).any(|y| {
+        (0..100_u16).any(|x| {
+            buffer
+                .cell((x, y))
+                .map(|c| c.style().bg == Some(theme::HEADER_BG))
+                .unwrap_or(false)
+        })
+    });
+    assert!(
+        has_header_bg,
+        "expected at least one cell with bg=HEADER_BG for issue pane continuity"
+    );
+}
+
+// ── Test 9a: single-pane — only logs visible when focus=Logs ─────────────────
+
+/// When focus=Logs: log content must be visible, chat/issue markers must not.
+#[test]
+fn body_renders_only_logs_when_focus_is_logs() {
+    let mut state = AppState {
+        focus: Pane::Logs,
+        pipeline: vec![],
+        log: vec![LogEntry {
+            timestamp: "12:34:56".into(),
+            agent: "architect".into(),
+            level: LogLevel::Info,
+            message: "LOG_VISIBLE_MARKER".into(),
+        }],
+        chat: vec![
+            ChatMessage::System("CHAT_DIVIDER".into()),
+            ChatMessage::User("CHAT_USER_TEXT".into()),
+        ],
+        ..Default::default()
+    };
+    // Seed issue fields so if issue pane leaked, we'd see AGT-LOGTEST.
+    state.run_label = Some("AGT-LOGTEST".into());
+    state.focus = Pane::Logs;
+
+    let buffer = render_at(&state, 100, 30);
+
+    // Log content must be visible.
+    assert!(
+        find_in_buffer(&buffer, "LOG_VISIBLE_MARKER", 100, 30).is_some(),
+        "expected log content 'LOG_VISIBLE_MARKER' visible in Logs focus"
+    );
+
+    // Chat-specific markers must NOT be visible.
+    assert!(
+        find_in_buffer(&buffer, "CHAT_DIVIDER", 100, 30).is_none(),
+        "expected chat divider 'CHAT_DIVIDER' to be absent in Logs focus"
+    );
+
+    // Issue content must NOT be visible.
+    assert!(
+        find_in_buffer(&buffer, "AGT-LOGTEST", 100, 30).is_none(),
+        "expected issue id 'AGT-LOGTEST' to be absent in Logs focus"
+    );
+}
+
+// ── Test 9b: single-pane — only chat visible when focus=Chat ─────────────────
+
+/// When focus=Chat: chat content visible, log/issue content not.
+#[test]
+fn body_renders_only_chat_when_focus_is_chat() {
+    let mut state = AppState {
+        focus: Pane::Chat,
+        pipeline: vec![],
+        log: vec![LogEntry {
+            timestamp: "12:34:56".into(),
+            agent: "architect".into(),
+            level: LogLevel::Info,
+            message: "LOG_HIDDEN_MARKER".into(),
+        }],
+        chat: vec![ChatMessage::User("CHAT_USER_ONLY".into())],
+        ..Default::default()
+    };
+    state.run_label = Some("AGT-CHATTEST".into());
+
+    let buffer = render_at(&state, 100, 30);
+
+    // Chat content ("you" label) must be visible.
+    assert!(
+        find_in_buffer(&buffer, "you", 100, 30).is_some(),
+        "expected 'you' user label visible in Chat focus"
+    );
+
+    // Log content must NOT be visible.
+    assert!(
+        find_in_buffer(&buffer, "LOG_HIDDEN_MARKER", 100, 30).is_none(),
+        "expected log content 'LOG_HIDDEN_MARKER' to be absent in Chat focus"
+    );
+
+    // Issue content must NOT be visible.
+    assert!(
+        find_in_buffer(&buffer, "AGT-CHATTEST", 100, 30).is_none(),
+        "expected issue id 'AGT-CHATTEST' to be absent in Chat focus"
+    );
+}
+
+// ── Test 9c: single-pane — only issue visible when focus=Issue ───────────────
+
+/// When focus=Issue: issue content visible, log/chat content not.
+#[test]
+fn body_renders_only_issue_when_focus_is_issue() {
+    let mut state = AppState {
+        focus: Pane::Issue,
+        pipeline: vec![],
+        log: vec![LogEntry {
+            timestamp: "12:34:56".into(),
+            agent: "architect".into(),
+            level: LogLevel::Info,
+            message: "LOG_ISSUE_HIDDEN".into(),
+        }],
+        chat: vec![ChatMessage::User("CHAT_ISSUE_HIDDEN".into())],
+        ..Default::default()
+    };
+    state.run_label = Some("AGT-999".into());
+    state.run_title = Some("Issue pane title".into());
+
+    let buffer = render_at(&state, 100, 30);
+
+    // Issue content must be visible.
+    assert!(
+        find_in_buffer(&buffer, "AGT-999", 100, 30).is_some(),
+        "expected 'AGT-999' visible in Issue focus"
+    );
+
+    // Log content must NOT be visible.
+    assert!(
+        find_in_buffer(&buffer, "LOG_ISSUE_HIDDEN", 100, 30).is_none(),
+        "expected log content 'LOG_ISSUE_HIDDEN' to be absent in Issue focus"
+    );
+
+    // Chat content must NOT be visible.
+    assert!(
+        find_in_buffer(&buffer, "CHAT_ISSUE_HIDDEN", 100, 30).is_none(),
+        "expected chat content 'CHAT_ISSUE_HIDDEN' to be absent in Issue focus"
+    );
+}
