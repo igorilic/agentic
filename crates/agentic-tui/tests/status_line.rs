@@ -7,8 +7,15 @@
 //!          right = `COMMAND` in YELLOW.
 //! INSERT:  left = DIM hint (same as NORMAL for T.13.3; chat compose is T.13.6)
 //!          right = `INSERT` in GREEN.
+//!
+//! Step T.13.4 — Flash message lifecycle (spec §4.8).
+//! When state.flash is Some and within 1.6s lifetime, the left side renders
+//! the flash text in ACCENT, overriding the DIM hint. Mode label on the right
+//! is unaffected. `AppState::tick()` clears flash after lifetime expires.
 
-use agentic_tui::app::AppState;
+use std::time::{Duration, Instant};
+
+use agentic_tui::app::{AppState, Flash};
 use agentic_tui::draw_app;
 use agentic_tui::modes::Mode;
 use agentic_tui::theme;
@@ -417,6 +424,251 @@ fn status_line_renders_at_bottom_row() {
         "expected NORMAL label on the last row ({}), found on row {}",
         height - 1,
         label_row
+    );
+}
+
+// ── T.13.4 Tests ──────────────────────────────────────────────────────────────
+
+// ── Test T.13.4-1: Flash text rendered in ACCENT overriding hint ─────────────
+
+#[test]
+fn status_line_renders_flash_text_in_accent_when_set() {
+    let width = 100u16;
+    let height = 24u16;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        mode: Mode::Normal,
+        flash: Some(Flash {
+            text: "✓ once: shell \"rm -rf\"".into(),
+        }),
+        flash_set_at: Some(Instant::now()),
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // Flash text must appear on the bottom row.
+    let status_row = height - 1;
+    let row_str = row_string(&buffer, status_row, width);
+    assert!(
+        row_str.contains("✓ once:"),
+        "expected flash text '✓ once:' on the bottom row, got:\n{row_str}"
+    );
+
+    // Find the '✓' cell and assert fg == ACCENT and bg == HEADER_BG.
+    let (col, row) =
+        find_in_buffer(&buffer, "✓", width, height).expect("'✓' not found in buffer");
+    let checkmark_cell = buffer.cell((col, row)).unwrap();
+    assert_eq!(
+        checkmark_cell.style().fg,
+        Some(theme::ACCENT),
+        "expected '✓' of flash text to have fg=ACCENT, got {:?}",
+        checkmark_cell.style().fg
+    );
+    assert_eq!(
+        checkmark_cell.style().bg,
+        Some(theme::HEADER_BG),
+        "expected '✓' of flash text to have bg=HEADER_BG, got {:?}",
+        checkmark_cell.style().bg
+    );
+
+    // Hint text must NOT appear (flash overrides hint).
+    let full = buffer_string(&buffer, width, height);
+    assert!(
+        !full.contains("Press : for command"),
+        "expected hint 'Press : for command' to be absent when flash is set, but found it"
+    );
+}
+
+// ── Test T.13.4-2: No flash when flash is unset — hint visible ───────────────
+
+#[test]
+fn status_line_does_not_render_flash_when_unset() {
+    let width = 100u16;
+    let height = 24u16;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        mode: Mode::Normal,
+        flash: None,
+        flash_set_at: None,
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    let full = buffer_string(&buffer, width, height);
+    assert!(
+        full.contains("Press : for command"),
+        "expected hint 'Press : for command' when flash is None, got:\n{full}"
+    );
+}
+
+// ── Test T.13.4-3: Mode label still visible during flash ─────────────────────
+
+#[test]
+fn status_line_keeps_mode_label_visible_during_flash() {
+    let width = 100u16;
+    let height = 24u16;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        mode: Mode::Normal,
+        flash: Some(Flash {
+            text: "✓ once: shell \"rm -rf\"".into(),
+        }),
+        flash_set_at: Some(Instant::now()),
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    let full = buffer_string(&buffer, width, height);
+    assert!(
+        full.contains("NORMAL"),
+        "expected 'NORMAL' label to remain visible during flash, got:\n{full}"
+    );
+}
+
+// ── Test T.13.4-4: tick() clears flash after lifetime ───────────────────────
+
+#[test]
+fn tick_clears_flash_after_lifetime() {
+    let mut state = AppState {
+        flash: Some(Flash {
+            text: "test".into(),
+        }),
+        flash_set_at: Some(Instant::now()),
+        ..Default::default()
+    };
+
+    // Immediately after setting, tick should NOT clear it.
+    state.tick();
+    assert!(
+        state.flash.is_some(),
+        "expected flash to still be set after immediate tick (lifetime not elapsed)"
+    );
+    assert!(
+        state.flash_set_at.is_some(),
+        "expected flash_set_at to still be set after immediate tick"
+    );
+
+    // Backdate the timestamp to 2 seconds in the past (well past the 1.6s lifetime).
+    state.flash_set_at = Some(Instant::now() - Duration::from_millis(2000));
+    state.tick();
+
+    assert!(
+        state.flash.is_none(),
+        "expected flash to be cleared after tick with elapsed >= 1.6s, got {:?}",
+        state.flash
+    );
+    assert!(
+        state.flash_set_at.is_none(),
+        "expected flash_set_at to be cleared after tick with elapsed >= 1.6s, got {:?}",
+        state.flash_set_at
+    );
+}
+
+// ── Test T.13.4-5: tick() preserves flash within lifetime ────────────────────
+
+#[test]
+fn tick_preserves_flash_within_lifetime() {
+    let mut state = AppState {
+        flash: Some(Flash {
+            text: "test".into(),
+        }),
+        flash_set_at: Some(Instant::now()),
+        ..Default::default()
+    };
+
+    state.tick();
+
+    assert!(
+        state.flash.is_some(),
+        "expected flash to be preserved after tick within lifetime, got {:?}",
+        state.flash
+    );
+    assert!(
+        state.flash_set_at.is_some(),
+        "expected flash_set_at to be preserved after tick within lifetime, got {:?}",
+        state.flash_set_at
+    );
+}
+
+// ── Test T.13.4-6: tick() is no-op when no flash ────────────────────────────
+
+#[test]
+fn tick_is_no_op_when_no_flash() {
+    let mut state = AppState {
+        flash: None,
+        flash_set_at: None,
+        ..Default::default()
+    };
+
+    // Must not panic; state must remain unchanged.
+    state.tick();
+
+    assert!(
+        state.flash.is_none(),
+        "expected flash to remain None after tick with no flash, got {:?}",
+        state.flash
+    );
+    assert!(
+        state.flash_set_at.is_none(),
+        "expected flash_set_at to remain None after tick with no flash, got {:?}",
+        state.flash_set_at
+    );
+}
+
+// ── Test T.13.4-7: Flash overrides command buffer too ────────────────────────
+
+#[test]
+fn flash_overrides_command_buffer_too() {
+    // Spec is silent on flash + COMMAND mode overlap. Chosen behavior:
+    // flash overrides the LEFT side for its ~1.6s lifetime regardless of mode.
+    // The command buffer is NOT visible during flash; the mode label is still shown.
+    let width = 100u16;
+    let height = 24u16;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        mode: Mode::Command {
+            buffer: "plan hello".into(),
+        },
+        flash: Some(Flash {
+            text: "✓ once: shell \"rm\"".into(),
+        }),
+        flash_set_at: Some(Instant::now()),
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    let status_row = height - 1;
+    let row_str = row_string(&buffer, status_row, width);
+
+    // Flash text must be visible on the status row.
+    assert!(
+        row_str.contains("✓ once:"),
+        "expected flash text '✓ once:' visible in COMMAND mode, got:\n{row_str}"
+    );
+
+    // Command buffer must NOT be visible (flash takes priority).
+    assert!(
+        !row_str.contains("plan hello"),
+        "expected command buffer 'plan hello' to be hidden when flash is active, got:\n{row_str}"
+    );
+
+    // Mode label COMMAND must still be visible (right side unaffected).
+    let full = buffer_string(&buffer, width, height);
+    assert!(
+        full.contains("COMMAND"),
+        "expected 'COMMAND' mode label to remain visible during flash, got:\n{full}"
     );
 }
 
