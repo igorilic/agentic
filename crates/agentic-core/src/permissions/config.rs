@@ -121,7 +121,7 @@ impl std::error::Error for PermissionsConfigError {}
 // TOML wire shapes for `[allowlist]` / `[denylist]` sections
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct RawSection {
     #[serde(default)]
     patterns: Vec<String>,
@@ -250,9 +250,7 @@ impl PermissionsConfig {
     fn validate_patterns(&self) -> Result<(), PermissionsConfigError> {
         for rule in self.allowlist.iter().chain(self.denylist.iter()) {
             if pattern_has_regex_syntax(&rule.pattern) {
-                return Err(PermissionsConfigError::InvalidPattern(
-                    rule.pattern.clone(),
-                ));
+                return Err(PermissionsConfigError::InvalidPattern(rule.pattern.clone()));
             }
         }
         Ok(())
