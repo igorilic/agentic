@@ -375,6 +375,8 @@ fn event_type_str(event: &Event) -> &'static str {
         Event::RetryStarted { .. } => "RetryStarted",
         Event::Error { .. } => "Error",
         Event::UserActionNeeded { .. } => "UserActionNeeded",
+        Event::PermissionRequest { .. } => "PermissionRequest",
+        Event::PermissionResolved { .. } => "PermissionResolved",
     }
 }
 

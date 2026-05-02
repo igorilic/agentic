@@ -1,4 +1,7 @@
-use agentic_core::{Db, Event, EventBus, EventEnvelope, EventPersister, Paths, Severity};
+use agentic_core::{
+    Db, Event, EventBus, EventEnvelope, EventPersister, Paths, PermissionDecision, PermissionRisk,
+    PermissionSource, Severity,
+};
 use rusqlite::params;
 
 fn setup() -> (tempfile::TempDir, Db, EventBus) {
@@ -142,4 +145,66 @@ async fn persisted_payload_roundtrips_through_rmp_serde() {
 
     let decoded: Event = rmp_serde::from_slice(&payload).expect("rmp-serde decodes payload");
     assert_eq!(decoded, original, "roundtripped event must equal original");
+}
+
+// --- P.1.1: event_type_tag coverage for new permission variants ---
+
+#[tokio::test]
+async fn permission_request_event_type_tag_is_correct() {
+    let (_tmp, db, bus) = setup();
+    let subscriber = bus.subscribe();
+    let handle = EventPersister::spawn(subscriber, db.clone());
+
+    let event = Event::PermissionRequest {
+        request_id: "req-01JZZZZZZZZZZZZZZZZZZZZZZZ".to_string(),
+        agent: "developer".to_string(),
+        tool: "Bash".to_string(),
+        arg: "rm -rf node_modules".to_string(),
+        scope: "shell.destructive".to_string(),
+        risk: PermissionRisk::High,
+        reason: "destructive shell".to_string(),
+    };
+    let envelope = EventEnvelope::now("run-perm-req".to_string(), None, event);
+    bus.publish(envelope);
+
+    drop(bus);
+    handle.await.expect("persister task joins");
+
+    let conn = db.conn().unwrap();
+    let event_type: String = conn
+        .query_row(
+            "SELECT event_type FROM stream_events WHERE run_id = 'run-perm-req'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(event_type, "PermissionRequest");
+}
+
+#[tokio::test]
+async fn permission_resolved_event_type_tag_is_correct() {
+    let (_tmp, db, bus) = setup();
+    let subscriber = bus.subscribe();
+    let handle = EventPersister::spawn(subscriber, db.clone());
+
+    let event = Event::PermissionResolved {
+        request_id: "req-01JZZZZZZZZZZZZZZZZZZZZZZZ".to_string(),
+        decision: PermissionDecision::AllowOnce,
+        source: PermissionSource::User,
+    };
+    let envelope = EventEnvelope::now("run-perm-res".to_string(), None, event);
+    bus.publish(envelope);
+
+    drop(bus);
+    handle.await.expect("persister task joins");
+
+    let conn = db.conn().unwrap();
+    let event_type: String = conn
+        .query_row(
+            "SELECT event_type FROM stream_events WHERE run_id = 'run-perm-res'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(event_type, "PermissionResolved");
 }

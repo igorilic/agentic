@@ -88,6 +88,36 @@ pub enum ActionRequired {
     QaRetryDecision,
 }
 
+/// Risk level for a permission gate request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionRisk {
+    Low,
+    Medium,
+    High,
+}
+
+/// Decision recorded by the permission gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionDecision {
+    AllowOnce,
+    AllowSession,
+    Deny,
+    TimedOut,
+}
+
+/// Who or what resolved the permission request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionSource {
+    User,
+    AllowlistConfig,
+    DenylistConfig,
+    SessionAllowlist,
+    Timeout,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "PascalCase")]
 pub enum Event {
@@ -164,6 +194,22 @@ pub enum Event {
     },
     UserActionNeeded {
         action: ActionRequired,
+    },
+    // schema: additive — no CURRENT_SCHEMA_VERSION bump required
+    PermissionRequest {
+        request_id: String,
+        agent: String,
+        tool: String,
+        arg: String,
+        scope: String,
+        risk: PermissionRisk,
+        reason: String,
+    },
+    // schema: additive — no CURRENT_SCHEMA_VERSION bump required
+    PermissionResolved {
+        request_id: String,
+        decision: PermissionDecision,
+        source: PermissionSource,
     },
 }
 

@@ -1,6 +1,7 @@
 use agentic_core::{
-    ActionRequired, BackendId, CURRENT_SCHEMA_VERSION, Event, EventEnvelope, ModelId, ProfileId,
-    RunStatus, Severity, StepStatus, TicketKind, TicketRef, TokenUsage, ToolStream,
+    ActionRequired, BackendId, CURRENT_SCHEMA_VERSION, Event, EventEnvelope, ModelId,
+    PermissionDecision, PermissionRisk, PermissionSource, ProfileId, RunStatus, Severity,
+    StepStatus, TicketKind, TicketRef, TokenUsage, ToolStream,
 };
 
 fn sample_events() -> Vec<Event> {
@@ -260,5 +261,90 @@ fn user_action_needed_envelope_serializes_to_exact_wire_format() {
     assert_eq!(
         json,
         r#"{"schema_version":1,"event_id":"01J8RZYX1K3PQXGT1WJYR8AZ7Q","run_id":"run1","step_id":null,"timestamp_ms":1234567890,"event":{"type":"UserActionNeeded","data":{"action":{"type":"triage_findings","data":{"finding_ids":["f1","f2"]}}}}}"#
+    );
+}
+
+// --- P.1.1: PermissionRequest + PermissionResolved ---
+
+#[test]
+fn permission_request_round_trips_msgpack() {
+    let event = Event::PermissionRequest {
+        request_id: "req-01JZZZZZZZZZZZZZZZZZZZZZZZ".to_string(),
+        agent: "developer".to_string(),
+        tool: "Bash".to_string(),
+        arg: "rm -rf node_modules".to_string(),
+        scope: "shell.destructive".to_string(),
+        risk: PermissionRisk::High,
+        reason: "destructive shell".to_string(),
+    };
+    let envelope = EventEnvelope {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        event_id: "01J8RZYX1K3PQXGT1WJYR8AZ7Q".to_string(),
+        run_id: "run1".to_string(),
+        step_id: None,
+        timestamp_ms: 1234567890,
+        event: event.clone(),
+    };
+    let bytes = rmp_serde::to_vec_named(&envelope).expect("msgpack encode");
+    let decoded: EventEnvelope = rmp_serde::from_slice(&bytes).expect("msgpack decode");
+    assert_eq!(
+        decoded, envelope,
+        "PermissionRequest must round-trip through MessagePack"
+    );
+}
+
+#[test]
+fn permission_resolved_round_trips_msgpack() {
+    let event = Event::PermissionResolved {
+        request_id: "req-01JZZZZZZZZZZZZZZZZZZZZZZZ".to_string(),
+        decision: PermissionDecision::AllowOnce,
+        source: PermissionSource::User,
+    };
+    let envelope = EventEnvelope {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        event_id: "01J8RZYX1K3PQXGT1WJYR8AZ7Q".to_string(),
+        run_id: "run1".to_string(),
+        step_id: None,
+        timestamp_ms: 1234567890,
+        event: event.clone(),
+    };
+    let bytes = rmp_serde::to_vec_named(&envelope).expect("msgpack encode");
+    let decoded: EventEnvelope = rmp_serde::from_slice(&bytes).expect("msgpack decode");
+    assert_eq!(
+        decoded, envelope,
+        "PermissionResolved must round-trip through MessagePack"
+    );
+}
+
+#[test]
+fn permission_request_serializes_to_json_snake_case() {
+    // Verifies: "type" tag is "PermissionRequest" (PascalCase per rename_all = "PascalCase"),
+    // and nested enum fields use snake_case discriminants per serde(rename_all = "snake_case").
+    let envelope = EventEnvelope {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        event_id: "01J8RZYX1K3PQXGT1WJYR8AZ7Q".to_string(),
+        run_id: "run1".to_string(),
+        step_id: None,
+        timestamp_ms: 1234567890,
+        event: Event::PermissionRequest {
+            request_id: "req-01JZZZZZZZZZZZZZZZZZZZZZZZ".to_string(),
+            agent: "developer".to_string(),
+            tool: "Bash".to_string(),
+            arg: "rm -rf node_modules".to_string(),
+            scope: "shell.destructive".to_string(),
+            risk: PermissionRisk::High,
+            reason: "destructive shell".to_string(),
+        },
+    };
+    let value = serde_json::to_value(&envelope).expect("json serialize");
+    assert_eq!(
+        value["event"]["type"],
+        serde_json::Value::String("PermissionRequest".to_string()),
+        "event type tag must be PermissionRequest"
+    );
+    assert_eq!(
+        value["event"]["data"]["risk"],
+        serde_json::Value::String("high".to_string()),
+        "risk enum must serialize as snake_case 'high'"
     );
 }
