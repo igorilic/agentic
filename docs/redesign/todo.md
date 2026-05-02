@@ -2371,8 +2371,8 @@ Phase 13 — TUI permission + status line
 - [ ] T.13.4 Flash lifecycle
 - [x] T.13.5 Help overlay
 - [x] T.13.6 Insert mode
-- [ ] T.13.7 draw_app composition
-- [ ] T.13.8 Delete dead views
+- [x] T.13.7 draw_app composition
+- [x] T.13.8 Delete dead views
 - [ ] CP-T
 
 Phase 14 — Tauri
