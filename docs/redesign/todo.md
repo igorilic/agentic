@@ -1951,7 +1951,7 @@ opens `SpecDialog` from the chat column.
 
 ---
 
-### Step T.13.4: Flash messages on the status line
+### Step T.13.4: Flash messages on the status line ✓ DONE
 
 **Goal**: When `state.flash` is set, the status line shows it in ACCENT for ~1.6 s, then reverts. Driven by `flash_set_at: Option<Instant>`.
 
