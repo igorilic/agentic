@@ -62,6 +62,10 @@ pub use auth::{GhDelegate, GhDelegateError};
 pub use auth::{GitlabOauthClient, GitlabOauthError};
 pub use auth::{PkceChallenge, generate_state};
 mod time;
+pub mod permissions;
+pub use permissions::{
+    OnTimeout, PermissionRule, PermissionsConfig, PermissionsConfigError, PermissionsSettings,
+};
 
 /// The semver version string of the `agentic-core` crate.
 ///
