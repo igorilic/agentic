@@ -1,9 +1,11 @@
 //! Step T.13.2: Wire `y` / `s` / `n` keys to resolve a pending permission.
 //!
 //! When `state.pending_perms` is non-empty AND in Normal mode:
-//! - `'y'` → pop the first pending perm, set `flash` to `"✓ once: <command>"`.
-//! - `'s'` → pop, set `flash` to `"✓ session: <command>"`.
-//! - `'n'` → pop, set `flash` to `"✗ denied: <command>"`.
+//! - `'y'` → pop the first pending perm, set `flash` to `Flash { text: "✓ once: <prefix> \"<command>\"" }`.
+//! - `'s'` → pop, set `flash` to `Flash { text: "✓ session: <prefix> \"<command>\"" }`.
+//! - `'n'` → pop, set `flash` to `Flash { text: "✗ denied: <prefix> \"<command>\"" }`.
+//!
+//! The prefix is derived from the scope field: `scope.split('.').next()` (e.g. `"shell.test"` → `"shell"`).
 //!
 //! When `pending_perms` is empty: the keys are no-ops (no flash, no panic).
 //! In Command mode: y/s/n fall through to the command buffer.
@@ -40,19 +42,15 @@ fn key_y_pops_pending_perm_and_flashes_once() {
         state.pending_perms.len()
     );
 
-    let flash = state
+    let flash_text = state
         .flash
-        .as_deref()
+        .as_ref()
+        .map(|f| f.text.as_str())
         .expect("expected flash to be Some after 'y'");
-    assert!(
-        flash.starts_with("✓ once:"),
-        "expected flash to start with '✓ once:', got {:?}",
-        flash
-    );
-    assert!(
-        flash.contains("rm -rf node_modules"),
-        "expected flash to contain the command 'rm -rf node_modules', got {:?}",
-        flash
+    assert_eq!(
+        flash_text, "✓ once: shell \"rm -rf node_modules\"",
+        "expected full flash text with scope prefix and quoted command, got {:?}",
+        flash_text
     );
 }
 
@@ -72,19 +70,15 @@ fn key_s_pops_pending_perm_and_flashes_session() {
         state.pending_perms.len()
     );
 
-    let flash = state
+    let flash_text = state
         .flash
-        .as_deref()
+        .as_ref()
+        .map(|f| f.text.as_str())
         .expect("expected flash to be Some after 's'");
-    assert!(
-        flash.starts_with("✓ session:"),
-        "expected flash to start with '✓ session:', got {:?}",
-        flash
-    );
-    assert!(
-        flash.contains("rm -rf node_modules"),
-        "expected flash to contain the command 'rm -rf node_modules', got {:?}",
-        flash
+    assert_eq!(
+        flash_text, "✓ session: shell \"rm -rf node_modules\"",
+        "expected full flash text with scope prefix and quoted command, got {:?}",
+        flash_text
     );
 }
 
@@ -104,19 +98,15 @@ fn key_n_pops_pending_perm_and_flashes_denied() {
         state.pending_perms.len()
     );
 
-    let flash = state
+    let flash_text = state
         .flash
-        .as_deref()
+        .as_ref()
+        .map(|f| f.text.as_str())
         .expect("expected flash to be Some after 'n'");
-    assert!(
-        flash.starts_with("✗ denied:"),
-        "expected flash to start with '✗ denied:', got {:?}",
-        flash
-    );
-    assert!(
-        flash.contains("rm -rf node_modules"),
-        "expected flash to contain the command 'rm -rf node_modules', got {:?}",
-        flash
+    assert_eq!(
+        flash_text, "✗ denied: shell \"rm -rf node_modules\"",
+        "expected full flash text with scope prefix and quoted command, got {:?}",
+        flash_text
     );
 }
 
@@ -168,16 +158,21 @@ fn perm_keys_pop_only_first_when_multiple_pending() {
         state.pending_perms[0].command
     );
 
-    let flash = state.flash.as_deref().expect("expected flash to be Some");
-    assert!(
-        flash.contains("cmd1"),
-        "expected flash to contain 'cmd1' (the popped command), got {:?}",
-        flash
+    let flash_text = state
+        .flash
+        .as_ref()
+        .map(|f| f.text.as_str())
+        .expect("expected flash to be Some");
+    // The flash text should include "cmd1" (the popped command) with scope prefix "shell".
+    assert_eq!(
+        flash_text, "✓ once: shell \"cmd1\"",
+        "expected full flash text for popped command, got {:?}",
+        flash_text
     );
     assert!(
-        !flash.contains("cmd2"),
+        !flash_text.contains("cmd2"),
         "expected flash NOT to contain 'cmd2' (the remaining command), got {:?}",
-        flash
+        flash_text
     );
 }
 

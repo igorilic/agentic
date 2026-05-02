@@ -76,6 +76,14 @@ pub struct LogEntry {
     pub message: String,
 }
 
+/// One-line flash message shown in the status line (spec §4.8 / §4.10).
+///
+/// T.13.4 will add `expires_at: Instant` additively.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Flash {
+    pub text: String,
+}
+
 /// Risk level of a pending permission request (spec §4.7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PermissionRisk {
@@ -179,8 +187,8 @@ pub struct AppState {
     pub pending_perms: Vec<PermissionRequest>,
     /// One-line flash message shown in the status line in place of the hint
     /// for ~1.6 s (spec §4.8). Set by perm resolution keys (T.13.2);
-    /// the clear timer is a later-phase concern.
-    pub flash: Option<String>,
+    /// the clear timer is a later-phase concern (T.13.4).
+    pub flash: Option<Flash>,
 }
 
 impl Default for AppState {
@@ -280,15 +288,24 @@ impl AppState {
                     KeyCode::Char('3') => self.focus = Pane::Issue,
                     KeyCode::Char('y') if !self.pending_perms.is_empty() => {
                         let perm = self.pending_perms.remove(0);
-                        self.flash = Some(format!("✓ once: {}", perm.command));
+                        let prefix = perm.scope.split('.').next().unwrap_or("shell");
+                        self.flash = Some(Flash {
+                            text: format!("✓ once: {} \"{}\"", prefix, perm.command),
+                        });
                     }
                     KeyCode::Char('s') if !self.pending_perms.is_empty() => {
                         let perm = self.pending_perms.remove(0);
-                        self.flash = Some(format!("✓ session: {}", perm.command));
+                        let prefix = perm.scope.split('.').next().unwrap_or("shell");
+                        self.flash = Some(Flash {
+                            text: format!("✓ session: {} \"{}\"", prefix, perm.command),
+                        });
                     }
                     KeyCode::Char('n') if !self.pending_perms.is_empty() => {
                         let perm = self.pending_perms.remove(0);
-                        self.flash = Some(format!("✗ denied: {}", perm.command));
+                        let prefix = perm.scope.split('.').next().unwrap_or("shell");
+                        self.flash = Some(Flash {
+                            text: format!("✗ denied: {} \"{}\"", prefix, perm.command),
+                        });
                     }
                     _ => {}
                 }
