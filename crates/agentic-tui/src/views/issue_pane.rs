@@ -127,9 +127,15 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
         row += 1;
     }
 
-    // ── Blank line before body ───────────────────────────────────────────────
+    // ── Blank line + DESCRIPTION header (only when body has content) ────────
+    let dim_header_style = Style::default().fg(theme::DIM).bg(theme::HEADER_BG);
     if !state.run_body.is_empty() {
-        row += 1;
+        row += 1; // blank line above header
+        if row < area.height {
+            let y = area.y + row;
+            write_styled(buf, area.x, y, "DESCRIPTION", max_x, dim_header_style);
+            row += 1;
+        }
     }
 
     // ── Description paragraphs ───────────────────────────────────────────────
@@ -147,9 +153,14 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
         row += 1;
     }
 
-    // ── Blank line before acceptance ─────────────────────────────────────────
+    // ── Blank line + ACCEPTANCE header (only when acceptance has content) ────
     if !state.run_acceptance.is_empty() {
-        row += 1;
+        row += 1; // blank line above header
+        if row < area.height {
+            let y = area.y + row;
+            write_styled(buf, area.x, y, "ACCEPTANCE", max_x, dim_header_style);
+            row += 1;
+        }
     }
 
     // ── Acceptance checklist ─────────────────────────────────────────────────

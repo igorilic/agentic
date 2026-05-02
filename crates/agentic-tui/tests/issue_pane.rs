@@ -159,15 +159,14 @@ fn issue_pane_renders_label_chips_with_side_borders() {
     let buffer = render(&state);
 
     // Both chips must appear in body rows (4+).
+    // Only ▏…▕ (U+258F/U+2595) is spec-compliant; │…│ (U+2502) is rejected.
     assert!(
-        find_in_body(&buffer, "▏backend▕", 100, 30).is_some()
-            || find_in_body(&buffer, "│backend│", 100, 30).is_some(),
-        "expected 'backend' chip with side borders in body area"
+        find_in_body(&buffer, "▏backend▕", 100, 30).is_some(),
+        "expected 'backend' chip with ▏…▕ side borders in body area"
     );
     assert!(
-        find_in_body(&buffer, "▏api▕", 100, 30).is_some()
-            || find_in_body(&buffer, "│api│", 100, 30).is_some(),
-        "expected 'api' chip with side borders in body area"
+        find_in_body(&buffer, "▏api▕", 100, 30).is_some(),
+        "expected 'api' chip with ▏…▕ side borders in body area"
     );
 
     // Chips appear in declared order: backend row <= api row (or same row).
@@ -210,10 +209,16 @@ fn issue_pane_renders_description_paragraphs_in_fg() {
         cell.style().fg
     );
 
-    // Second paragraph must also be present.
-    assert!(
-        find_in_body(&buffer, "Second paragraph.", 100, 30).is_some(),
-        "expected 'Second paragraph.' to be present in body area"
+    // Second paragraph must also be present and have a blank line between them.
+    let (_, second_row) = find_in_body(&buffer, "Second paragraph.", 100, 30)
+        .expect("'Second paragraph.' not found in body area");
+    assert_eq!(
+        second_row,
+        row + 2,
+        "expected 'Second paragraph.' at row {} (first_row {} + 2 for blank-line gap), got {}",
+        row + 2,
+        row,
+        second_row
     );
 }
 
@@ -427,5 +432,104 @@ fn body_renders_only_issue_when_focus_is_issue() {
     assert!(
         find_in_buffer(&buffer, "CHAT_ISSUE_HIDDEN", 100, 30).is_none(),
         "expected chat content 'CHAT_ISSUE_HIDDEN' to be absent in Issue focus"
+    );
+}
+
+// ── Test 10: DESCRIPTION section header in DIM ───────────────────────────────
+
+/// The "DESCRIPTION" header must appear in DIM fg, on the row immediately
+/// above the first paragraph (with one blank-line separator row between
+/// the previous block and the header, and the header on the row right before
+/// the paragraph).
+#[test]
+fn issue_pane_renders_description_section_header_in_dim() {
+    let state = issue_state();
+    let buffer = render(&state);
+
+    // Find the "D" of "DESCRIPTION".
+    let (col, header_row) = find_in_body(&buffer, "DESCRIPTION", 100, 30)
+        .expect("'DESCRIPTION' header not found in body area");
+    let cell = buffer.cell((col, header_row)).unwrap();
+    assert_eq!(
+        cell.style().fg,
+        Some(theme::DIM),
+        "expected 'D' of 'DESCRIPTION' at ({col},{header_row}) to have fg=DIM, got {:?}",
+        cell.style().fg
+    );
+
+    // The first paragraph must appear immediately after the header (no blank row
+    // between the header and its content).
+    let (_, para_row) = find_in_body(&buffer, "First paragraph.", 100, 30)
+        .expect("'First paragraph.' not found in body area");
+    assert_eq!(
+        para_row,
+        header_row + 1,
+        "expected 'First paragraph.' at header_row+1 ({}), got {}",
+        header_row + 1,
+        para_row
+    );
+}
+
+// ── Test 11: ACCEPTANCE section header in DIM ────────────────────────────────
+
+/// The "ACCEPTANCE" header must appear in DIM fg, on the row immediately
+/// above the first acceptance item.
+#[test]
+fn issue_pane_renders_acceptance_section_header_in_dim() {
+    let state = issue_state();
+    let buffer = render(&state);
+
+    let (col, header_row) = find_in_body(&buffer, "ACCEPTANCE", 100, 30)
+        .expect("'ACCEPTANCE' header not found in body area");
+    let cell = buffer.cell((col, header_row)).unwrap();
+    assert_eq!(
+        cell.style().fg,
+        Some(theme::DIM),
+        "expected 'A' of 'ACCEPTANCE' at ({col},{header_row}) to have fg=DIM, got {:?}",
+        cell.style().fg
+    );
+}
+
+// ── Test 12: skips DESCRIPTION header when body is empty ─────────────────────
+
+/// When `run_body` is empty, "DESCRIPTION" must NOT appear in the buffer.
+#[test]
+fn issue_pane_skips_description_header_when_body_empty() {
+    let state = AppState {
+        focus: Pane::Issue,
+        run_label: Some("AGT-100".into()),
+        run_title: Some("Some title".into()),
+        run_labels: vec!["backend".into()],
+        run_body: vec![],
+        run_acceptance: vec!["An acceptance item".into()],
+        ..Default::default()
+    };
+    let buffer = render(&state);
+
+    assert!(
+        find_in_body(&buffer, "DESCRIPTION", 100, 30).is_none(),
+        "expected 'DESCRIPTION' header to be absent when run_body is empty"
+    );
+}
+
+// ── Test 13: skips ACCEPTANCE header when acceptance is empty ────────────────
+
+/// When `run_acceptance` is empty, "ACCEPTANCE" must NOT appear in the buffer.
+#[test]
+fn issue_pane_skips_acceptance_header_when_acceptance_empty() {
+    let state = AppState {
+        focus: Pane::Issue,
+        run_label: Some("AGT-100".into()),
+        run_title: Some("Some title".into()),
+        run_labels: vec!["backend".into()],
+        run_body: vec!["A paragraph.".into()],
+        run_acceptance: vec![],
+        ..Default::default()
+    };
+    let buffer = render(&state);
+
+    assert!(
+        find_in_body(&buffer, "ACCEPTANCE", 100, 30).is_none(),
+        "expected 'ACCEPTANCE' header to be absent when run_acceptance is empty"
     );
 }

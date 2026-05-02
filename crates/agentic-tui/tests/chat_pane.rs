@@ -193,8 +193,8 @@ fn chat_pane_centers_system_with_em_dash_dividers() {
     // to (100 - "── session started ──".len()) / 2 ≈ 39.  Allow ±2 for
     // rounding differences in divider construction.
     assert!(
-        first_dash >= 10,
-        "first ─ at col {first_dash}; expected centered position >= 10 for 100-col full-width pane"
+        first_dash >= 30,
+        "first ─ at col {first_dash}; expected centered position >= 30 for 100-col full-width pane (centering \"── session started ──\" at ~col 39)"
     );
 }
 
