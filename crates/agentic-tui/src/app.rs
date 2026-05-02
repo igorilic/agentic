@@ -341,6 +341,10 @@ impl AppState {
                 }
                 _ => None,
             },
+            // T.13.3: Insert variant added for the mode indicator; key routing
+            // (including Esc → Normal) is wired in T.13.6 when the compose
+            // widget lands. For now all keys are no-ops in Insert mode.
+            Mode::Insert => None,
         }
     }
 }

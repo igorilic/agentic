@@ -10,5 +10,6 @@ pub mod issue_pane;
 pub mod logs_pane;
 pub mod perm_card;
 pub mod pipeline_bar;
+pub mod status_line;
 pub mod tab_bar;
 pub mod title_bar;

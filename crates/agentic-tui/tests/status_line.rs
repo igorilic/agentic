@@ -186,9 +186,9 @@ fn status_line_command_mode_shows_accent_colon_left() {
     // Find ':' on that row.
     let colon_col = (0..width)
         .find(|&x| buffer.cell((x, status_row)).unwrap().symbol() == ":")
-        .expect(&format!(
-            "':' not found on status row {status_row}; row='{status_row_str}'"
-        ));
+        .unwrap_or_else(|| {
+            panic!("':' not found on status row {status_row}; row='{status_row_str}'")
+        });
 
     let colon_cell = buffer.cell((colon_col, status_row)).unwrap();
     assert_eq!(
@@ -198,10 +198,7 @@ fn status_line_command_mode_shows_accent_colon_left() {
         colon_cell.style().fg
     );
     assert!(
-        colon_cell
-            .style()
-            .add_modifier
-            .contains(Modifier::BOLD),
+        colon_cell.style().add_modifier.contains(Modifier::BOLD),
         "expected ':' to be BOLD in Command mode, modifiers={:?}",
         colon_cell.style().add_modifier
     );

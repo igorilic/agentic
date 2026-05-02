@@ -49,7 +49,13 @@ pub enum ParseResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mode {
     Normal,
-    Command { buffer: String },
+    Command {
+        buffer: String,
+    },
+    /// Chat-compose mode (spec §4.8). Entered when the user presses `i`
+    /// in the chat pane (T.13.6 wires the key). For T.13.3 only the mode
+    /// indicator is rendered; the compose widget lands with T.13.6.
+    Insert,
 }
 
 /// Commands the user has issued — the binary's main loop turns these
