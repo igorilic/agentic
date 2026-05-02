@@ -129,6 +129,21 @@ fn pressing_esc_in_command_mode_with_help_closed_still_exits_command() {
         Mode::Normal,
         "Esc with help closed must exit command mode"
     );
+    assert!(!state.help_open, "help should remain closed when Esc exits command mode");
+}
+
+#[test]
+fn pressing_question_mark_while_open_closes_help() {
+    let mut state = AppState {
+        help_open: true,
+        mode: Mode::Normal,
+        ..AppState::default()
+    };
+    state.handle_key(KeyCode::Char('?'));
+    assert!(
+        !state.help_open,
+        "help_open should be false after pressing '?' while help is already open (toggle)"
+    );
 }
 
 // ── Render tests ─────────────────────────────────────────────────────────────
@@ -210,7 +225,7 @@ fn help_overlay_lists_canonical_keybindings() {
     };
     let buf = render(&state);
 
-    for key_label in &["Tab", "1", ":", "?"] {
+    for key_label in &["Tab", "1", ":", "?", "y", "Esc"] {
         assert!(
             buf_contains(&buf, key_label, WIDTH, HEIGHT),
             "Buffer must contain canonical keybinding '{}' in help overlay",
@@ -265,4 +280,31 @@ fn help_overlay_does_not_panic_on_narrow_terminal() {
     };
     // Should not panic — just clip or skip.
     render_sized(&state, 30, 10);
+}
+
+#[test]
+fn help_overlay_centered_vertically() {
+    // MODAL_HEIGHT from views/help_overlay.rs: 2 + 6 + 2 = 10
+    // If private, we read it from source; hardcode expected here and document.
+    const MODAL_HEIGHT: u16 = 10; // 1 top border + 1 blank + 6 binding rows + 1 blank + 1 bottom border
+    const RENDER_HEIGHT: u16 = 40;
+    const RENDER_WIDTH: u16 = 100;
+
+    let state = AppState {
+        help_open: true,
+        ..AppState::default()
+    };
+    let buf = render_sized(&state, RENDER_WIDTH, RENDER_HEIGHT);
+
+    // Find the '┌' corner — that is the modal's top row.
+    let modal_top_row = find_str(&buf, "┌", RENDER_WIDTH, RENDER_HEIGHT)
+        .expect("Must find '┌' corner when help is open")
+        .1;
+
+    let expected_top = (RENDER_HEIGHT - MODAL_HEIGHT) / 2;
+    let diff = (modal_top_row as i32 - expected_top as i32).unsigned_abs();
+    assert!(
+        diff <= 1,
+        "Modal top row {modal_top_row} should be within ±1 of vertically centered row {expected_top}"
+    );
 }
