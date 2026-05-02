@@ -235,8 +235,8 @@ fn perm_card_renders_reason_row() {
     );
 
     // F2: The 's' of "shell.destructive" (scope value) must be in YELLOW.
-    let (scope_col, scope_row) =
-        find_str(&buf, "shell.destructive", WIDTH, HEIGHT).expect("'shell.destructive' not found in buffer");
+    let (scope_col, scope_row) = find_str(&buf, "shell.destructive", WIDTH, HEIGHT)
+        .expect("'shell.destructive' not found in buffer");
     let scope_cell = buf.cell((scope_col, scope_row)).unwrap();
     assert_eq!(
         scope_cell.style().fg,
@@ -332,9 +332,9 @@ fn perm_card_has_red_left_accent_column() {
     // The card is 5 rows tall; assert accent at each of the 5 rows.
     for offset in 0u16..5 {
         let row = top_row + offset;
-        let cell = buf
-            .cell((accent_col, row))
-            .unwrap_or_else(|| panic!("no cell at ({accent_col}, {row}) for accent row offset={offset}"));
+        let cell = buf.cell((accent_col, row)).unwrap_or_else(|| {
+            panic!("no cell at ({accent_col}, {row}) for accent row offset={offset}")
+        });
         assert_eq!(
             cell.symbol(),
             "┃",
@@ -509,17 +509,16 @@ fn perm_card_renders_above_findings_when_both_present() {
         focus: Pane::Logs,
         pipeline: vec![],
         pending_perms: vec![perm_request()],
-        findings: {
-            let mut fs = agentic_tui::findings::FindingsState::default();
-            fs.items = vec![Finding {
+        findings: agentic_tui::findings::FindingsState {
+            items: vec![Finding {
                 id: "f1".to_string(),
                 severity: Severity::Warning,
                 file: Some("src/main.rs".to_string()),
                 line: Some(42),
                 message: "UniqueFindingMessage42".to_string(),
                 triage: None,
-            }];
-            fs
+            }],
+            ..Default::default()
         },
         ..Default::default()
     };
@@ -530,9 +529,8 @@ fn perm_card_renders_above_findings_when_both_present() {
         find_str(&buf, "⚠ PERM", WIDTH, HEIGHT).expect("'⚠ PERM' not found in buffer");
 
     // The finding message must be in the buffer.
-    let (_find_col, find_row) =
-        find_str(&buf, "UniqueFindingMessage42", WIDTH, HEIGHT)
-            .expect("'UniqueFindingMessage42' not found in buffer");
+    let (_find_col, find_row) = find_str(&buf, "UniqueFindingMessage42", WIDTH, HEIGHT)
+        .expect("'UniqueFindingMessage42' not found in buffer");
 
     assert!(
         perm_row < find_row,

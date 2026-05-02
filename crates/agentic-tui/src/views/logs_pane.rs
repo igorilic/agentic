@@ -73,9 +73,9 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
         rows_used
     };
 
-    // Render findings below the log rows in the remaining area.
-    let findings_y = area.y + log_rows.min(area.height);
-    let findings_height = area.height - log_rows.min(area.height);
+    // Remaining area after log rows.
+    let after_logs_y = area.y + log_rows.min(area.height);
+    let after_logs_height = area.height - log_rows.min(area.height);
 
     // Reserve space for the permission card (5 rows) if one is pending.
     let perm = if state.focus == Pane::Logs {
@@ -84,38 +84,37 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
         None
     };
 
-    // Card takes 5 rows at the bottom of the remaining area.
+    // S1: render perm card BEFORE findings.
+    // Card takes up to 5 rows immediately after the log rows.
     const CARD_HEIGHT: u16 = 5;
-    let card_fits = perm.is_some() && findings_height >= CARD_HEIGHT;
-    let findings_used = if card_fits {
-        findings_height.saturating_sub(CARD_HEIGHT)
-    } else {
-        findings_height
-    };
-
-    if findings_y < area.y + area.height && findings_used > 0 {
-        let findings_area = Rect {
-            x: area.x,
-            y: findings_y,
-            width: area.width,
-            height: findings_used,
-        };
-        findings::render(findings_area, state, f);
-    }
-
-    // Render the permission card after findings (and after log rows).
-    if let Some(p) = perm {
-        let card_y = findings_y + findings_used;
-        let available = area.y + area.height - card_y.min(area.y + area.height);
-        if available > 0 && card_y < area.y + area.height {
+    let card_used = if let Some(p) = perm {
+        let available = after_logs_height;
+        if available > 0 {
             let card_area = Rect {
                 x: area.x,
-                y: card_y,
+                y: after_logs_y,
                 width: area.width,
                 height: available.min(CARD_HEIGHT),
             };
             perm_card::render(card_area, f, p);
         }
+        after_logs_height.min(CARD_HEIGHT)
+    } else {
+        0
+    };
+
+    // Findings start after the perm card.
+    let findings_y = after_logs_y + card_used;
+    let findings_height = after_logs_height.saturating_sub(card_used);
+
+    if findings_y < area.y + area.height && findings_height > 0 {
+        let findings_area = Rect {
+            x: area.x,
+            y: findings_y,
+            width: area.width,
+            height: findings_height,
+        };
+        findings::render(findings_area, state, f);
     }
 }
 

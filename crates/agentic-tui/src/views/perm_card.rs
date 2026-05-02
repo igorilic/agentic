@@ -51,11 +51,13 @@ pub fn render(area: Rect, f: &mut Frame<'_>, perm: &PermissionRequest) {
 
     // Row 3 — hotkey row.
     if area.height >= 4 {
+        put_accent(buf, area.y + 3, accent_x, red_style);
         render_hotkey_row(buf, area.y + 3, box_x, box_width, max_x, red_style);
     }
 
     // Row 4 — bottom border.
     if area.height >= 5 {
+        put_accent(buf, area.y + 4, accent_x, red_style);
         render_bottom_border(buf, area.y + 4, box_x, box_width, max_x, red_style);
     }
 }
@@ -191,6 +193,12 @@ fn render_command_row(
 }
 
 /// Reason row: `│ <reason> (scope: <scope>)          │`
+///
+/// Per F2 / hand-off (tui-view.jsx):
+///   - `<reason>` in DIM
+///   - `" (scope: "` in DIM
+///   - `<scope>` in YELLOW
+///   - `")"` in DIM
 fn render_reason_row(
     buf: &mut Buffer,
     y: u16,
@@ -210,17 +218,45 @@ fn render_reason_row(
     let inner_end = (box_x + box_width).saturating_sub(1).min(max_x);
     let mut col = inner_start;
 
-    let fg_style = Style::default().fg(theme::FG).bg(theme::HEADER_BG);
+    let dim_style = Style::default().fg(theme::DIM).bg(theme::HEADER_BG);
+    let yellow_style = Style::default().fg(theme::YELLOW).bg(theme::HEADER_BG);
     let bg_style = Style::default().bg(theme::HEADER_BG);
 
-    let text = format!(" {} (scope: {})", perm.reason, perm.scope);
-    for ch in text.chars() {
+    // Leading space + reason in DIM.
+    let reason_prefix = format!(" {}", perm.reason);
+    for ch in reason_prefix.chars() {
         if col >= inner_end {
             break;
         }
-        put_char(buf, col, y, &ch.to_string(), fg_style);
+        put_char(buf, col, y, &ch.to_string(), dim_style);
         col += 1;
     }
+
+    // " (scope: " in DIM.
+    for ch in " (scope: ".chars() {
+        if col >= inner_end {
+            break;
+        }
+        put_char(buf, col, y, &ch.to_string(), dim_style);
+        col += 1;
+    }
+
+    // Scope value in YELLOW.
+    for ch in perm.scope.chars() {
+        if col >= inner_end {
+            break;
+        }
+        put_char(buf, col, y, &ch.to_string(), yellow_style);
+        col += 1;
+    }
+
+    // Closing ")" in DIM.
+    if col < inner_end {
+        put_char(buf, col, y, ")", dim_style);
+        col += 1;
+    }
+
+    // Padding.
     while col < inner_end {
         put_char(buf, col, y, " ", bg_style);
         col += 1;
