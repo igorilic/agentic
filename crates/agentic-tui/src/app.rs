@@ -94,25 +94,11 @@ pub enum Pane {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppEvent {
     ToggleFocus,
-    /// `]` — give the cockpit one resize-step more.
-    WidenCockpit,
-    /// `[` — give the cockpit one resize-step less.
-    NarrowCockpit,
 }
-
-/// Step size when resizing — 0.10 means each `]` / `[` shifts 10% of the
-/// horizontal width. Spec §7.2 calls for a "noticeable but not jarring"
-/// shift; 10% feels right at 80-column terminals.
-const RESIZE_STEP: f32 = 0.10;
-const RATIO_MIN: f32 = 0.20;
-const RATIO_MAX: f32 = 0.80;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub focus: Pane,
-    /// Fraction of the horizontal width occupied by the cockpit pane.
-    /// Clamped to [RATIO_MIN, RATIO_MAX] on every mutation.
-    pub cockpit_ratio: f32,
     /// Pipeline run state — renders as the cockpit stepper.
     pub run: RunState,
     /// Normal vs. Command — see `modes.rs`.
@@ -139,6 +125,15 @@ pub struct AppState {
     /// Human-readable issue title for the active run.
     /// `None` when no run is active.
     pub run_title: Option<String>,
+    /// Label chips to render in the issue pane (spec §4.6).
+    /// Each string is one chip; rendered as `▏<label>▕`.
+    pub run_labels: Vec<String>,
+    /// Description paragraphs for the issue pane (spec §4.6).
+    /// Each entry is one paragraph; rendered with a blank line between.
+    pub run_body: Vec<String>,
+    /// Acceptance checklist items for the issue pane (spec §4.6).
+    /// Each entry is one item; rendered as `[ ] <item>`.
+    pub run_acceptance: Vec<String>,
     /// Elapsed wall-clock seconds since the current run started.
     /// Formatted as `MM:SS` in the issue header pill.
     pub run_elapsed_secs: u64,
@@ -161,7 +156,6 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             focus: Pane::Logs,
-            cockpit_ratio: 0.50,
             run: RunState::default(),
             mode: Mode::Normal,
             findings: FindingsState::default(),
@@ -170,6 +164,9 @@ impl Default for AppState {
             diff_scroll_offset: 0,
             run_label: None,
             run_title: None,
+            run_labels: vec![],
+            run_body: vec![],
+            run_acceptance: vec![],
             run_elapsed_secs: 0,
             frame_parity: false,
             pipeline: vec![],
@@ -188,12 +185,6 @@ impl AppState {
                     Pane::Chat => Pane::Issue,
                     Pane::Issue => Pane::Logs,
                 };
-            }
-            AppEvent::WidenCockpit => {
-                self.cockpit_ratio = (self.cockpit_ratio + RESIZE_STEP).clamp(RATIO_MIN, RATIO_MAX);
-            }
-            AppEvent::NarrowCockpit => {
-                self.cockpit_ratio = (self.cockpit_ratio - RESIZE_STEP).clamp(RATIO_MIN, RATIO_MAX);
             }
         }
     }
@@ -218,7 +209,7 @@ impl AppState {
     /// Process a key event. The interpretation depends on `self.mode`:
     ///
     /// - `Normal`: `:` enters command mode; `Tab` cycles focus; `1`/`2`/`3`
-    ///   jump to logs/chat/issue; `[`/`]` resize. Unmapped keys are no-ops.
+    ///   jump to logs/chat/issue. Unmapped keys are no-ops.
     /// - `Command`: characters append to the buffer; Enter parses and
     ///   may return an `AppCommand`; Esc cancels back to Normal.
     ///
@@ -233,8 +224,6 @@ impl AppState {
                         };
                     }
                     KeyCode::Tab => self.handle(AppEvent::ToggleFocus),
-                    KeyCode::Char(']') => self.handle(AppEvent::WidenCockpit),
-                    KeyCode::Char('[') => self.handle(AppEvent::NarrowCockpit),
                     KeyCode::Char('j') => {
                         if self.focus == Pane::Chat && self.current_diff.is_some() {
                             self.diff_scroll_offset = self.diff_scroll_offset.saturating_add(1);

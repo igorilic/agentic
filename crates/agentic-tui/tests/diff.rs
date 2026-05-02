@@ -159,7 +159,10 @@ fn is_red(c: Color) -> bool {
 fn render_colours_add_lines_green_and_remove_lines_red_when_current_diff_set() {
     let backend = TestBackend::new(120, 30);
     let mut terminal = Terminal::new(backend).unwrap();
+    // T.12.3: single-pane body — diff renders inside the Chat pane.
+    // Must use focus=Chat so draw_app routes to chat_pane::render.
     let s = AppState {
+        focus: Pane::Chat,
         current_diff: Some(SAMPLE.to_string()),
         ..Default::default()
     };
@@ -185,7 +188,10 @@ fn render_colours_add_lines_green_and_remove_lines_red_when_current_diff_set() {
 fn current_diff_replaces_the_chat_pane_interior() {
     let backend = TestBackend::new(120, 30);
     let mut terminal = Terminal::new(backend).unwrap();
+    // T.12.3: single-pane body — diff renders inside the Chat pane.
+    // Must use focus=Chat so draw_app routes to chat_pane::render.
     let s = AppState {
+        focus: Pane::Chat,
         current_diff: Some(SAMPLE.to_string()),
         ..Default::default()
     };

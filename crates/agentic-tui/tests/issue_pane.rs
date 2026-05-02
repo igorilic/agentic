@@ -20,17 +20,18 @@ use ratatui::style::Modifier;
 
 /// Seed a full AppState for the issue pane, focused on Issue.
 fn issue_state() -> AppState {
-    let mut state = AppState::default();
-    state.run_label = Some("AGT-204".into());
-    state.run_title = Some("Add multi-tenant rate limiting".into());
-    state.run_labels = vec!["backend".into(), "api".into()];
-    state.run_body = vec!["First paragraph.".into(), "Second paragraph.".into()];
-    state.run_acceptance = vec![
-        "Limits applied per tenant".into(),
-        "Rate enforced via Redis".into(),
-    ];
-    state.focus = Pane::Issue;
-    state
+    AppState {
+        focus: Pane::Issue,
+        run_label: Some("AGT-204".into()),
+        run_title: Some("Add multi-tenant rate limiting".into()),
+        run_labels: vec!["backend".into(), "api".into()],
+        run_body: vec!["First paragraph.".into(), "Second paragraph.".into()],
+        run_acceptance: vec![
+            "Limits applied per tenant".into(),
+            "Rate enforced via Redis".into(),
+        ],
+        ..Default::default()
+    }
 }
 
 /// Render draw_app at `width×height` and return a cloned buffer.
@@ -46,19 +47,20 @@ fn render(state: &AppState) -> ratatui::buffer::Buffer {
     render_at(state, 100, 30)
 }
 
-/// Find the first occurrence of `needle` scanning cell-by-cell.
+/// Find the first occurrence of `needle` scanning cell-by-cell in a row range.
 /// Returns `(col, row)` of the first character of the match, or `None`.
-fn find_in_buffer(
+fn find_in_rows(
     buffer: &ratatui::buffer::Buffer,
     needle: &str,
     width: u16,
-    height: u16,
+    row_start: u16,
+    row_end: u16,
 ) -> Option<(u16, u16)> {
     let chars: Vec<char> = needle.chars().collect();
     if chars.is_empty() {
         return None;
     }
-    for y in 0..height {
+    for y in row_start..row_end {
         'outer: for x in 0..width {
             for (i, ch) in chars.iter().enumerate() {
                 let col = x + i as u16;
@@ -75,17 +77,42 @@ fn find_in_buffer(
     None
 }
 
+/// Find the first occurrence of `needle` in the full buffer.
+fn find_in_buffer(
+    buffer: &ratatui::buffer::Buffer,
+    needle: &str,
+    width: u16,
+    height: u16,
+) -> Option<(u16, u16)> {
+    find_in_rows(buffer, needle, width, 0, height)
+}
+
+/// Find the first occurrence of `needle` in the body area (rows 4+).
+/// Row 0=title, 1=issue header, 2-3=tab bar; row 4 is body start
+/// (pipeline bar is 0 because pipeline is empty).
+fn find_in_body(
+    buffer: &ratatui::buffer::Buffer,
+    needle: &str,
+    width: u16,
+    height: u16,
+) -> Option<(u16, u16)> {
+    find_in_rows(buffer, needle, width, 4, height)
+}
+
 // ── Test 1: id in ACCENT bold ─────────────────────────────────────────────────
 
-/// `run_label = "AGT-204"` — find any cell on "AGT-204".
+/// `run_label = "AGT-204"` — find the cell in the body area (row 4+).
 /// Assert `fg == ACCENT` AND `add_modifier.contains(BOLD)`.
+///
+/// We search in body rows (4+) to avoid the issue header at row 1,
+/// which renders the same label in FG (not ACCENT).
 #[test]
 fn issue_pane_renders_id_in_accent_bold() {
     let state = issue_state();
     let buffer = render(&state);
 
     let (col, row) =
-        find_in_buffer(&buffer, "AGT-204", 100, 30).expect("'AGT-204' not found in buffer");
+        find_in_body(&buffer, "AGT-204", 100, 30).expect("'AGT-204' not found in body area");
     let cell = buffer.cell((col, row)).unwrap();
     assert_eq!(
         cell.style().fg,
@@ -102,15 +129,18 @@ fn issue_pane_renders_id_in_accent_bold() {
 
 // ── Test 2: title in bold FG ─────────────────────────────────────────────────
 
-/// `run_title = "Add multi-tenant rate limiting"` — find first cell.
+/// `run_title = "Add multi-tenant rate limiting"` — find in body area (row 4+).
 /// Assert `add_modifier.contains(BOLD)`.
+///
+/// We search in body rows (4+) to avoid the issue header at row 1,
+/// which renders the same title in DIM (not BOLD FG).
 #[test]
 fn issue_pane_renders_title_in_bold_fg() {
     let state = issue_state();
     let buffer = render(&state);
 
-    let (col, row) = find_in_buffer(&buffer, "Add multi-tenant", 100, 30)
-        .expect("'Add multi-tenant' not found in buffer");
+    let (col, row) = find_in_body(&buffer, "Add multi-tenant", 100, 30)
+        .expect("'Add multi-tenant' not found in body area");
     let cell = buffer.cell((col, row)).unwrap();
     assert!(
         cell.style().add_modifier.contains(Modifier::BOLD),
@@ -128,22 +158,22 @@ fn issue_pane_renders_label_chips_with_side_borders() {
     let state = issue_state();
     let buffer = render(&state);
 
-    // Both chips must appear.
+    // Both chips must appear in body rows (4+).
     assert!(
-        find_in_buffer(&buffer, "▏backend▕", 100, 30).is_some()
-            || find_in_buffer(&buffer, "│backend│", 100, 30).is_some(),
-        "expected 'backend' chip with side borders in buffer"
+        find_in_body(&buffer, "▏backend▕", 100, 30).is_some()
+            || find_in_body(&buffer, "│backend│", 100, 30).is_some(),
+        "expected 'backend' chip with side borders in body area"
     );
     assert!(
-        find_in_buffer(&buffer, "▏api▕", 100, 30).is_some()
-            || find_in_buffer(&buffer, "│api│", 100, 30).is_some(),
-        "expected 'api' chip with side borders in buffer"
+        find_in_body(&buffer, "▏api▕", 100, 30).is_some()
+            || find_in_body(&buffer, "│api│", 100, 30).is_some(),
+        "expected 'api' chip with side borders in body area"
     );
 
     // Chips appear in declared order: backend row <= api row (or same row).
-    let backend_pos = find_in_buffer(&buffer, "backend", 100, 30)
-        .expect("'backend' not found in buffer");
-    let api_pos = find_in_buffer(&buffer, "api", 100, 30).expect("'api' not found in buffer");
+    let backend_pos =
+        find_in_body(&buffer, "backend", 100, 30).expect("'backend' not found in body area");
+    let api_pos = find_in_body(&buffer, "api", 100, 30).expect("'api' not found in body area");
     assert!(
         backend_pos.1 <= api_pos.1,
         "expected 'backend' chip (row {}) to appear before or on same row as 'api' (row {})",
@@ -170,8 +200,8 @@ fn issue_pane_renders_description_paragraphs_in_fg() {
     let state = issue_state();
     let buffer = render(&state);
 
-    let (col, row) = find_in_buffer(&buffer, "First paragraph.", 100, 30)
-        .expect("'First paragraph.' not found in buffer");
+    let (col, row) = find_in_body(&buffer, "First paragraph.", 100, 30)
+        .expect("'First paragraph.' not found in body area");
     let cell = buffer.cell((col, row)).unwrap();
     assert_eq!(
         cell.style().fg,
@@ -182,8 +212,8 @@ fn issue_pane_renders_description_paragraphs_in_fg() {
 
     // Second paragraph must also be present.
     assert!(
-        find_in_buffer(&buffer, "Second paragraph.", 100, 30).is_some(),
-        "expected 'Second paragraph.' to be present in buffer"
+        find_in_body(&buffer, "Second paragraph.", 100, 30).is_some(),
+        "expected 'Second paragraph.' to be present in body area"
     );
 }
 
@@ -196,9 +226,9 @@ fn issue_pane_renders_acceptance_as_unchecked_boxes() {
     let state = issue_state();
     let buffer = render(&state);
 
-    // Find "[ ]" prefix — there must be at least one.
+    // Find "[ ]" prefix in body area (row 4+).
     let unchecked_pos =
-        find_in_buffer(&buffer, "[ ]", 100, 30).expect("'[ ]' prefix not found in buffer");
+        find_in_body(&buffer, "[ ]", 100, 30).expect("'[ ]' prefix not found in body area");
     let (col, row) = unchecked_pos;
 
     // The `[` cell must be DIM.
@@ -212,13 +242,13 @@ fn issue_pane_renders_acceptance_as_unchecked_boxes() {
 
     // The item text "Limits applied per tenant" must be present.
     assert!(
-        find_in_buffer(&buffer, "Limits applied per tenant", 100, 30).is_some(),
-        "expected acceptance item text 'Limits applied per tenant' in buffer"
+        find_in_body(&buffer, "Limits applied per tenant", 100, 30).is_some(),
+        "expected acceptance item text 'Limits applied per tenant' in body area"
     );
 
     // Find the "L" of the item text and assert it has fg=FG.
-    let (item_col, item_row) = find_in_buffer(&buffer, "Limits applied per tenant", 100, 30)
-        .expect("'Limits applied per tenant' not found");
+    let (item_col, item_row) = find_in_body(&buffer, "Limits applied per tenant", 100, 30)
+        .expect("'Limits applied per tenant' not found in body area");
     let item_cell = buffer.cell((item_col, item_row)).unwrap();
     assert_eq!(
         item_cell.style().fg,
@@ -278,7 +308,7 @@ fn issue_pane_uses_header_bg_continuity() {
 /// When focus=Logs: log content must be visible, chat/issue markers must not.
 #[test]
 fn body_renders_only_logs_when_focus_is_logs() {
-    let mut state = AppState {
+    let state = AppState {
         focus: Pane::Logs,
         pipeline: vec![],
         log: vec![LogEntry {
@@ -291,11 +321,10 @@ fn body_renders_only_logs_when_focus_is_logs() {
             ChatMessage::System("CHAT_DIVIDER".into()),
             ChatMessage::User("CHAT_USER_TEXT".into()),
         ],
+        // Seed issue fields so if issue pane leaked, we'd see AGT-LOGTEST.
+        run_label: Some("AGT-LOGTEST".into()),
         ..Default::default()
     };
-    // Seed issue fields so if issue pane leaked, we'd see AGT-LOGTEST.
-    state.run_label = Some("AGT-LOGTEST".into());
-    state.focus = Pane::Logs;
 
     let buffer = render_at(&state, 100, 30);
 
@@ -323,7 +352,7 @@ fn body_renders_only_logs_when_focus_is_logs() {
 /// When focus=Chat: chat content visible, log/issue content not.
 #[test]
 fn body_renders_only_chat_when_focus_is_chat() {
-    let mut state = AppState {
+    let state = AppState {
         focus: Pane::Chat,
         pipeline: vec![],
         log: vec![LogEntry {
@@ -333,9 +362,9 @@ fn body_renders_only_chat_when_focus_is_chat() {
             message: "LOG_HIDDEN_MARKER".into(),
         }],
         chat: vec![ChatMessage::User("CHAT_USER_ONLY".into())],
+        run_label: Some("AGT-CHATTEST".into()),
         ..Default::default()
     };
-    state.run_label = Some("AGT-CHATTEST".into());
 
     let buffer = render_at(&state, 100, 30);
 
@@ -360,10 +389,10 @@ fn body_renders_only_chat_when_focus_is_chat() {
 
 // ── Test 9c: single-pane — only issue visible when focus=Issue ───────────────
 
-/// When focus=Issue: issue content visible, log/chat content not.
+/// When focus=Issue: issue content visible in body area, log/chat content not.
 #[test]
 fn body_renders_only_issue_when_focus_is_issue() {
-    let mut state = AppState {
+    let state = AppState {
         focus: Pane::Issue,
         pipeline: vec![],
         log: vec![LogEntry {
@@ -373,26 +402,28 @@ fn body_renders_only_issue_when_focus_is_issue() {
             message: "LOG_ISSUE_HIDDEN".into(),
         }],
         chat: vec![ChatMessage::User("CHAT_ISSUE_HIDDEN".into())],
+        run_label: Some("AGT-999".into()),
+        run_title: Some("Issue pane title".into()),
         ..Default::default()
     };
-    state.run_label = Some("AGT-999".into());
-    state.run_title = Some("Issue pane title".into());
 
     let buffer = render_at(&state, 100, 30);
 
-    // Issue content must be visible.
+    // Issue content must be visible in body area (row 4+).
+    // Note: run_label also appears in issue_header (row 1) with FG styling —
+    // we search body area to confirm the issue_pane itself renders it.
     assert!(
-        find_in_buffer(&buffer, "AGT-999", 100, 30).is_some(),
-        "expected 'AGT-999' visible in Issue focus"
+        find_in_body(&buffer, "AGT-999", 100, 30).is_some(),
+        "expected 'AGT-999' visible in Issue pane body"
     );
 
-    // Log content must NOT be visible.
+    // Log content must NOT be visible anywhere.
     assert!(
         find_in_buffer(&buffer, "LOG_ISSUE_HIDDEN", 100, 30).is_none(),
         "expected log content 'LOG_ISSUE_HIDDEN' to be absent in Issue focus"
     );
 
-    // Chat content must NOT be visible.
+    // Chat content must NOT be visible anywhere.
     assert!(
         find_in_buffer(&buffer, "CHAT_ISSUE_HIDDEN", 100, 30).is_none(),
         "expected chat content 'CHAT_ISSUE_HIDDEN' to be absent in Issue focus"

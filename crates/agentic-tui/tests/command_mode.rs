@@ -183,17 +183,20 @@ fn tab_in_normal_mode_toggles_focus() {
 }
 
 #[test]
-fn brackets_in_normal_mode_resize_cockpit() {
+fn brackets_in_normal_mode_are_no_ops() {
+    // T.12.3: [/] resize keys removed with single-pane body restructure.
+    // In Normal mode, `[` and `]` are unmapped — must not panic or mutate focus.
     let mut s = AppState::default();
+    use agentic_tui::app::Pane;
     s.handle_key(KeyCode::Char(']'));
-    assert!((s.cockpit_ratio - 0.60).abs() < f32::EPSILON);
+    assert_eq!(s.focus, Pane::Logs, "']' must not change focus");
     s.handle_key(KeyCode::Char('['));
-    assert!((s.cockpit_ratio - 0.50).abs() < f32::EPSILON);
+    assert_eq!(s.focus, Pane::Logs, "'[' must not change focus");
 }
 
 #[test]
 fn brackets_in_command_mode_are_appended_to_buffer() {
-    // In command mode, `[` and `]` are just text — not resize keys.
+    // In command mode, `[` and `]` are just text.
     let mut s = AppState::default();
     s.handle_key(KeyCode::Char(':'));
     type_str(&mut s, "plan [a]b");
@@ -203,8 +206,6 @@ fn brackets_in_command_mode_are_appended_to_buffer() {
             buffer: "plan [a]b".to_string()
         }
     );
-    // Critically, ratio must NOT have changed.
-    assert!((s.cockpit_ratio - 0.50).abs() < f32::EPSILON);
 }
 
 #[test]

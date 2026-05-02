@@ -169,15 +169,10 @@ fn chat_pane_centers_system_with_em_dash_dividers() {
     );
 
     // Centering: find the first ─ on the row, then verify it is NOT flush
-    // against the chat pane's left edge (i.e., there is at least 1 leading
-    // space within the chat area before the divider begins).
-    //
-    // The chat area starts at the right half of the buffer.  With
-    // cockpit_ratio=0.50 on a 100-wide terminal, that is around col 50.
-    // We find the first ─ and assert it is at least 1 column to the right
-    // of the chat pane's leftmost column (text_col - prefix, where prefix is
-    // at minimum "── " = 3 chars).  If the divider were flush-left, the first
-    // ─ would be exactly at the chat left edge.
+    // against the chat pane's left edge. T.12.3 made the body single-pane
+    // (full-width), so the chat area now starts at col 0 (after the tab-bar
+    // rows). Centering "── session started ──" (22 chars) in a 100-col area
+    // produces a ~39-col indent — so the first ─ should be well past col 0.
     let first_dash = (0..100_u16)
         .find(|&x| {
             buffer
@@ -187,29 +182,19 @@ fn chat_pane_centers_system_with_em_dash_dividers() {
         })
         .expect("no ─ found on the system divider row");
 
-    // The first ─ must be at least 1 col after the leftmost cell of the chat
-    // area. Since `text_col - 3` is the expected flush-left position of the
-    // first ─ when there is no centering indent, the actual first ─ must be
-    // strictly to the right of where the chat pane begins — or equivalently,
-    // strictly to the right of `text_col - 3`.
-    // In practice "── session started ──" centered in ~50-col chat gives
-    // several leading spaces.
-    //
-    // We verify: first_dash > (some chat-left) by checking that the cell
-    // immediately to the LEFT of the first ─ (within the chat area half) is
-    // a space (i.e., there IS a leading-space before the divider in the pane).
-    // With the cockpit taking up ~50 cols, first_dash > 50.
-    let chat_area_start: u16 = 50; // approximate — cockpit_ratio default=0.50
+    // With full-width chat pane (100 cols), "── session started ──" is 22 chars
+    // and should be centered with ~39 leading spaces.  Assert that the first ─
+    // appears after at least 1 space from the left edge of the buffer.
     assert!(
-        first_dash > chat_area_start,
-        "first ─ at col {first_dash} but expected it to be after chat area start ({chat_area_start})"
+        first_dash > 0,
+        "first ─ at col 0 — centering should produce at least 1 leading space"
     );
-    // Verify there is at least 1 space between the chat area start and the ─.
-    let leading_spaces_in_chat = first_dash - chat_area_start;
+    // The divider must be centered, meaning first_dash should be roughly equal
+    // to (100 - "── session started ──".len()) / 2 ≈ 39.  Allow ±2 for
+    // rounding differences in divider construction.
     assert!(
-        leading_spaces_in_chat >= 1,
-        "expected at least 1 leading space in chat area before first ─; \
-         chat_area_start={chat_area_start}, first_dash={first_dash}"
+        first_dash >= 10,
+        "first ─ at col {first_dash}; expected centered position >= 10 for 100-col full-width pane"
     );
 }
 

@@ -10,7 +10,6 @@
 
 pub mod app;
 pub mod findings;
-pub mod layout;
 pub mod modes;
 pub mod run;
 pub mod theme;
@@ -19,8 +18,7 @@ pub mod views;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout};
 
-use crate::app::AppState;
-use crate::layout::compute_panes;
+use crate::app::{AppState, Pane};
 
 /// Render one frame of the application — title bar at top, issue header
 /// (full-width) next, optional pipeline bar, then the tab bar, then the body.
@@ -51,7 +49,10 @@ pub fn draw_app(f: &mut Frame<'_>, state: &AppState) {
     views::pipeline_bar::render(rows[2], f, state);
     views::tab_bar::render(rows[3], f, state);
 
-    let (cockpit_area, chat_area) = compute_panes(rows[4], state);
-    views::logs_pane::render(cockpit_area, f, state);
-    views::chat_pane::render(chat_area, f, state);
+    let body_area = rows[4];
+    match state.focus {
+        Pane::Logs => views::logs_pane::render(body_area, f, state),
+        Pane::Chat => views::chat_pane::render(body_area, f, state),
+        Pane::Issue => views::issue_pane::render(body_area, f, state),
+    }
 }
