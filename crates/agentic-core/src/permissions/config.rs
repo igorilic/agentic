@@ -366,12 +366,45 @@ default_on_timeout = "deny"
         let has_view = cfg.allowlist.iter().any(|r| r.pattern == "view(*)");
         assert!(has_view, "allowlist should contain view(*)");
 
-        // Spot-check denylist
+        // Spot-check denylist — absolute-path variant
         let has_rm = cfg.denylist.iter().any(|r| r.pattern == "Bash(rm -rf /*)");
         assert!(has_rm, "denylist should contain Bash(rm -rf /*)");
 
+        // F-2: home-dir variant must also be present
+        let has_rm_home = cfg
+            .denylist
+            .iter()
+            .any(|r| r.pattern == "Bash(rm -rf ~*)");
+        assert!(
+            has_rm_home,
+            "denylist should contain Bash(rm -rf ~*) per P.1.2 plan"
+        );
+        let has_rm_home_lower = cfg
+            .denylist
+            .iter()
+            .any(|r| r.pattern == "bash(rm -rf ~*)");
+        assert!(
+            has_rm_home_lower,
+            "denylist should contain bash(rm -rf ~*) per P.1.2 plan"
+        );
+
         // Default timeout policy
         assert_eq!(cfg.settings.default_on_timeout, OnTimeout::Deny);
+    }
+
+    // -----------------------------------------------------------------------
+    // S-4. rejects_invalid_toml_syntax
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn rejects_invalid_toml_syntax() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = write_toml(&dir, "not valid toml ===");
+        let err = PermissionsConfig::load(&path).expect_err("malformed toml should error");
+        assert!(
+            matches!(err, PermissionsConfigError::Parse(_)),
+            "expected Parse error for malformed TOML, got: {err}"
+        );
     }
 
     // -----------------------------------------------------------------------
