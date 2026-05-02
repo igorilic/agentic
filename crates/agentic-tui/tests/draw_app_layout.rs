@@ -85,9 +85,7 @@ fn full_state() -> AppState {
 fn draw_app_title_bar_at_row_zero() {
     let backend = TestBackend::new(W, H);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal
-        .draw(|f| draw_app(f, &full_state()))
-        .unwrap();
+    terminal.draw(|f| draw_app(f, &full_state())).unwrap();
     let buffer = terminal.backend().buffer().clone();
 
     let row0 = row_string(&buffer, 0);
@@ -104,9 +102,7 @@ fn draw_app_title_bar_at_row_zero() {
 fn draw_app_issue_header_at_row_one() {
     let backend = TestBackend::new(W, H);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal
-        .draw(|f| draw_app(f, &full_state()))
-        .unwrap();
+    terminal.draw(|f| draw_app(f, &full_state())).unwrap();
     let buffer = terminal.backend().buffer().clone();
 
     let row1 = row_string(&buffer, 1);
@@ -124,9 +120,7 @@ fn draw_app_issue_header_at_row_one() {
 fn draw_app_pipeline_bar_at_rows_2_to_6() {
     let backend = TestBackend::new(W, H);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal
-        .draw(|f| draw_app(f, &full_state()))
-        .unwrap();
+    terminal.draw(|f| draw_app(f, &full_state())).unwrap();
     let buffer = terminal.backend().buffer().clone();
 
     // At least one of rows 2–6 must contain pipeline content.
@@ -158,9 +152,7 @@ fn draw_app_pipeline_bar_at_rows_2_to_6() {
 fn draw_app_pipeline_hint_at_pipeline_bottom() {
     let backend = TestBackend::new(W, H);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal
-        .draw(|f| draw_app(f, &full_state()))
-        .unwrap();
+    terminal.draw(|f| draw_app(f, &full_state())).unwrap();
     let buffer = terminal.backend().buffer().clone();
 
     let hint_row = find_row(&buffer, "[a]dd")
@@ -181,9 +173,7 @@ fn draw_app_pipeline_hint_at_pipeline_bottom() {
 fn draw_app_tab_bar_at_rows_7_and_8() {
     let backend = TestBackend::new(W, H);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal
-        .draw(|f| draw_app(f, &full_state()))
-        .unwrap();
+    terminal.draw(|f| draw_app(f, &full_state())).unwrap();
     let buffer = terminal.backend().buffer().clone();
 
     let row7 = row_string(&buffer, 7);
@@ -207,9 +197,7 @@ fn draw_app_tab_bar_at_rows_7_and_8() {
 fn draw_app_body_starts_after_tab_bar() {
     let backend = TestBackend::new(W, H);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal
-        .draw(|f| draw_app(f, &full_state()))
-        .unwrap();
+    terminal.draw(|f| draw_app(f, &full_state())).unwrap();
     let buffer = terminal.backend().buffer().clone();
 
     let row9 = row_string(&buffer, 9);
@@ -232,9 +220,7 @@ fn draw_app_body_starts_after_tab_bar() {
 fn draw_app_status_line_at_last_row() {
     let backend = TestBackend::new(W, H);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal
-        .draw(|f| draw_app(f, &full_state()))
-        .unwrap();
+    terminal.draw(|f| draw_app(f, &full_state())).unwrap();
     let buffer = terminal.backend().buffer().clone();
 
     let last_row = row_string(&buffer, H - 1);
@@ -268,7 +254,7 @@ fn draw_app_body_renders_chat_pane_when_focus_is_chat() {
     // Body starts at row 9 (pipeline 5 rows + tab bar 2 rows + 2 fixed rows).
     // Status line is at row 39, so body ends at row 38.
     assert!(
-        msg_row >= 9 && msg_row <= H - 2,
+        (9..=H - 2).contains(&msg_row),
         "expected 'hello from chat' in body range [9..{}], found at row {msg_row}",
         H - 2
     );
@@ -312,9 +298,7 @@ fn draw_app_help_overlay_renders_when_open() {
 fn draw_app_help_overlay_hidden_when_closed() {
     let backend = TestBackend::new(W, H);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal
-        .draw(|f| draw_app(f, &full_state()))
-        .unwrap();
+    terminal.draw(|f| draw_app(f, &full_state())).unwrap();
     let buffer = terminal.backend().buffer().clone();
 
     let full = buffer_string(&buffer);
