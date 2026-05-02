@@ -458,8 +458,7 @@ fn status_line_renders_flash_text_in_accent_when_set() {
     );
 
     // Find the '✓' cell and assert fg == ACCENT and bg == HEADER_BG.
-    let (col, row) =
-        find_in_buffer(&buffer, "✓", width, height).expect("'✓' not found in buffer");
+    let (col, row) = find_in_buffer(&buffer, "✓", width, height).expect("'✓' not found in buffer");
     let checkmark_cell = buffer.cell((col, row)).unwrap();
     assert_eq!(
         checkmark_cell.style().fg,

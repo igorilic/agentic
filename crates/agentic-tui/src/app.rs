@@ -6,6 +6,8 @@
 //! [`AppState::handle`]. Both surfaces are pure mutators so the bin
 //! and tests share them.
 
+use std::time::{Duration, Instant};
+
 use agentic_core::events::EventEnvelope;
 use crossterm::event::KeyCode;
 
@@ -186,9 +188,12 @@ pub struct AppState {
     /// after the last log row. Keys y/s/n resolve it (T.13.2).
     pub pending_perms: Vec<PermissionRequest>,
     /// One-line flash message shown in the status line in place of the hint
-    /// for ~1.6 s (spec §4.8). Set by perm resolution keys (T.13.2);
-    /// the clear timer is a later-phase concern (T.13.4).
+    /// for ~1.6 s (spec §4.8). Set by perm resolution keys (T.13.2).
     pub flash: Option<Flash>,
+    /// Timestamp when `flash` was last set. Used by `tick()` to determine
+    /// when the flash lifetime (~1.6 s) has expired and the message should
+    /// be cleared (T.13.4).
+    pub flash_set_at: Option<Instant>,
 }
 
 impl Default for AppState {
@@ -213,6 +218,7 @@ impl Default for AppState {
             chat: vec![],
             pending_perms: vec![],
             flash: None,
+            flash_set_at: None,
         }
     }
 }
@@ -245,6 +251,18 @@ impl AppState {
     pub fn set_diff(&mut self, text: Option<String>) {
         self.current_diff = text;
         self.diff_scroll_offset = 0;
+    }
+
+    /// Called once per render iteration. Clears expired flash messages
+    /// (lifetime ~1.6 s per spec §4.8).
+    pub fn tick(&mut self) {
+        const FLASH_LIFETIME: Duration = Duration::from_millis(1600);
+        if let Some(t) = self.flash_set_at
+            && t.elapsed() >= FLASH_LIFETIME
+        {
+            self.flash = None;
+            self.flash_set_at = None;
+        }
     }
 
     /// Process a key event. The interpretation depends on `self.mode`:
@@ -292,6 +310,7 @@ impl AppState {
                         self.flash = Some(Flash {
                             text: format!("✓ once: {} \"{}\"", prefix, perm.command),
                         });
+                        self.flash_set_at = Some(Instant::now());
                     }
                     KeyCode::Char('s') if !self.pending_perms.is_empty() => {
                         let perm = self.pending_perms.remove(0);
@@ -299,6 +318,7 @@ impl AppState {
                         self.flash = Some(Flash {
                             text: format!("✓ session: {} \"{}\"", prefix, perm.command),
                         });
+                        self.flash_set_at = Some(Instant::now());
                     }
                     KeyCode::Char('n') if !self.pending_perms.is_empty() => {
                         let perm = self.pending_perms.remove(0);
@@ -306,6 +326,7 @@ impl AppState {
                         self.flash = Some(Flash {
                             text: format!("✗ denied: {} \"{}\"", prefix, perm.command),
                         });
+                        self.flash_set_at = Some(Instant::now());
                     }
                     _ => {}
                 }

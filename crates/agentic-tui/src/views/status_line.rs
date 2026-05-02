@@ -66,56 +66,69 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
     );
 
     // Compute the left-side content based on mode.
+    // Flash override (spec §4.8 / T.13.4): when set, flash text replaces the
+    // hint or command buffer for ~1.6 s. The mode label on the right is unaffected.
     // Clip left-side text at label_start so it never overwrites the right-aligned
     // mode label (F-1: hint overwrites label at width <= 84 cols).
-    match &state.mode {
-        Mode::Normal | Mode::Insert => {
-            write_str_clipped(
-                buf,
-                area,
-                0,
-                label_start,
-                NORMAL_HINT,
-                Style::default().fg(theme::DIM).bg(theme::HEADER_BG),
-            );
-        }
-        Mode::Command { buffer } => {
-            // Render ':' in ACCENT bold.
-            write_str_clipped(
-                buf,
-                area,
-                0,
-                label_start,
-                ":",
-                Style::default()
-                    .fg(theme::ACCENT)
-                    .bg(theme::HEADER_BG)
-                    .add_modifier(Modifier::BOLD),
-            );
-
-            if buffer.is_empty() {
-                // Placeholder hint in DIM.
+    if let Some(flash) = &state.flash {
+        write_str_clipped(
+            buf,
+            area,
+            0,
+            label_start,
+            &flash.text,
+            Style::default().fg(theme::ACCENT).bg(theme::HEADER_BG),
+        );
+    } else {
+        match &state.mode {
+            Mode::Normal | Mode::Insert => {
                 write_str_clipped(
                     buf,
                     area,
-                    1,
+                    0,
                     label_start,
-                    CMD_PLACEHOLDER,
+                    NORMAL_HINT,
                     Style::default().fg(theme::DIM).bg(theme::HEADER_BG),
                 );
-            } else {
-                // Buffer text in FG.
+            }
+            Mode::Command { buffer } => {
+                // Render ':' in ACCENT bold.
                 write_str_clipped(
                     buf,
                     area,
-                    1,
+                    0,
                     label_start,
-                    buffer,
-                    Style::default().fg(theme::FG).bg(theme::HEADER_BG),
+                    ":",
+                    Style::default()
+                        .fg(theme::ACCENT)
+                        .bg(theme::HEADER_BG)
+                        .add_modifier(Modifier::BOLD),
                 );
-                // T.13.3: cursor positioning via f.set_cursor_position is deferred
-                // to keep this function signature buffer-only; T.13.x will add it
-                // if needed. The buffer text renders correctly without it.
+
+                if buffer.is_empty() {
+                    // Placeholder hint in DIM.
+                    write_str_clipped(
+                        buf,
+                        area,
+                        1,
+                        label_start,
+                        CMD_PLACEHOLDER,
+                        Style::default().fg(theme::DIM).bg(theme::HEADER_BG),
+                    );
+                } else {
+                    // Buffer text in FG.
+                    write_str_clipped(
+                        buf,
+                        area,
+                        1,
+                        label_start,
+                        buffer,
+                        Style::default().fg(theme::FG).bg(theme::HEADER_BG),
+                    );
+                    // T.13.3: cursor positioning via f.set_cursor_position is deferred
+                    // to keep this function signature buffer-only; T.13.x will add it
+                    // if needed. The buffer text renders correctly without it.
+                }
             }
         }
     }
