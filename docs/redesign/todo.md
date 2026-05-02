@@ -2361,7 +2361,7 @@ Phase 12 — TUI body panes
 
 Phase 13 — TUI permission + status line
 - [x] T.13.1 Permission card
-- [ ] T.13.2 y/s/n keys
+- [x] T.13.2 y/s/n keys
 - [ ] T.13.3 Status line + modes
 - [ ] T.13.4 Flash lifecycle
 - [ ] T.13.5 Help overlay
