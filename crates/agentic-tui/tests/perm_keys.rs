@@ -40,7 +40,10 @@ fn key_y_pops_pending_perm_and_flashes_once() {
         state.pending_perms.len()
     );
 
-    let flash = state.flash.as_deref().expect("expected flash to be Some after 'y'");
+    let flash = state
+        .flash
+        .as_deref()
+        .expect("expected flash to be Some after 'y'");
     assert!(
         flash.starts_with("✓ once:"),
         "expected flash to start with '✓ once:', got {:?}",
@@ -69,7 +72,10 @@ fn key_s_pops_pending_perm_and_flashes_session() {
         state.pending_perms.len()
     );
 
-    let flash = state.flash.as_deref().expect("expected flash to be Some after 's'");
+    let flash = state
+        .flash
+        .as_deref()
+        .expect("expected flash to be Some after 's'");
     assert!(
         flash.starts_with("✓ session:"),
         "expected flash to start with '✓ session:', got {:?}",
@@ -98,7 +104,10 @@ fn key_n_pops_pending_perm_and_flashes_denied() {
         state.pending_perms.len()
     );
 
-    let flash = state.flash.as_deref().expect("expected flash to be Some after 'n'");
+    let flash = state
+        .flash
+        .as_deref()
+        .expect("expected flash to be Some after 'n'");
     assert!(
         flash.starts_with("✗ denied:"),
         "expected flash to start with '✗ denied:', got {:?}",
@@ -154,8 +163,7 @@ fn perm_keys_pop_only_first_when_multiple_pending() {
         state.pending_perms.len()
     );
     assert_eq!(
-        state.pending_perms[0].command,
-        "cmd2",
+        state.pending_perms[0].command, "cmd2",
         "expected remaining perm to be 'cmd2', got {:?}",
         state.pending_perms[0].command
     );

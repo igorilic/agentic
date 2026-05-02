@@ -177,6 +177,10 @@ pub struct AppState {
     /// pane is focused, the first entry renders as an inline permission card
     /// after the last log row. Keys y/s/n resolve it (T.13.2).
     pub pending_perms: Vec<PermissionRequest>,
+    /// One-line flash message shown in the status line in place of the hint
+    /// for ~1.6 s (spec §4.8). Set by perm resolution keys (T.13.2);
+    /// the clear timer is a later-phase concern.
+    pub flash: Option<String>,
 }
 
 impl Default for AppState {
@@ -200,6 +204,7 @@ impl Default for AppState {
             log: vec![],
             chat: vec![],
             pending_perms: vec![],
+            flash: None,
         }
     }
 }
@@ -237,7 +242,8 @@ impl AppState {
     /// Process a key event. The interpretation depends on `self.mode`:
     ///
     /// - `Normal`: `:` enters command mode; `Tab` cycles focus; `1`/`2`/`3`
-    ///   jump to logs/chat/issue. Unmapped keys are no-ops.
+    ///   jump to logs/chat/issue; `y`/`s`/`n` resolve the first pending perm
+    ///   (no-op when `pending_perms` is empty). Unmapped keys are no-ops.
     /// - `Command`: characters append to the buffer; Enter parses and
     ///   may return an `AppCommand`; Esc cancels back to Normal.
     ///
@@ -272,6 +278,18 @@ impl AppState {
                     KeyCode::Char('1') => self.focus = Pane::Logs,
                     KeyCode::Char('2') => self.focus = Pane::Chat,
                     KeyCode::Char('3') => self.focus = Pane::Issue,
+                    KeyCode::Char('y') if !self.pending_perms.is_empty() => {
+                        let perm = self.pending_perms.remove(0);
+                        self.flash = Some(format!("✓ once: {}", perm.command));
+                    }
+                    KeyCode::Char('s') if !self.pending_perms.is_empty() => {
+                        let perm = self.pending_perms.remove(0);
+                        self.flash = Some(format!("✓ session: {}", perm.command));
+                    }
+                    KeyCode::Char('n') if !self.pending_perms.is_empty() => {
+                        let perm = self.pending_perms.remove(0);
+                        self.flash = Some(format!("✗ denied: {}", perm.command));
+                    }
                     _ => {}
                 }
                 None
