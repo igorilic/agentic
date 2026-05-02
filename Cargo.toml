@@ -52,3 +52,4 @@ url = "2"
 ratatui = "0.29"
 crossterm = "0.28"
 zeroize = { version = "1", features = ["derive"] }
+glob = "0.3"

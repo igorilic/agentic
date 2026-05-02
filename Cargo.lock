@@ -40,6 +40,7 @@ dependencies = [
  "blake3",
  "chrono",
  "directories",
+ "glob",
  "keyring",
  "nix",
  "proptest",
