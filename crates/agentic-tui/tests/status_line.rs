@@ -671,6 +671,32 @@ fn flash_overrides_command_buffer_too() {
     );
 }
 
+// ── Test T.13.4-8 (S-1): tick() clears orphan flash when flash_set_at is None ─
+
+#[test]
+fn tick_clears_flash_when_set_at_is_none() {
+    let mut state = AppState {
+        flash: Some(Flash {
+            text: "orphan".into(),
+        }),
+        flash_set_at: None, // inconsistent: flash present but no timestamp
+        ..Default::default()
+    };
+
+    state.tick();
+
+    assert!(
+        state.flash.is_none(),
+        "expected tick() to clear orphan flash when flash_set_at is None, got {:?}",
+        state.flash
+    );
+    assert!(
+        state.flash_set_at.is_none(),
+        "expected flash_set_at to remain None after defensive clear, got {:?}",
+        state.flash_set_at
+    );
+}
+
 // ── Test 11: S-2 — NORMAL label is fully visible at 80 cols (F-1 regression) ──
 
 #[test]
