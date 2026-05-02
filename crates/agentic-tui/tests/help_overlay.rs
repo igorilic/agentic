@@ -129,7 +129,10 @@ fn pressing_esc_in_command_mode_with_help_closed_still_exits_command() {
         Mode::Normal,
         "Esc with help closed must exit command mode"
     );
-    assert!(!state.help_open, "help should remain closed when Esc exits command mode");
+    assert!(
+        !state.help_open,
+        "help should remain closed when Esc exits command mode"
+    );
 }
 
 #[test]

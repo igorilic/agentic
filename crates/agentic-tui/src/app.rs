@@ -343,7 +343,7 @@ impl AppState {
                         self.flash_set_at = Some(Instant::now());
                     }
                     KeyCode::Char('?') => {
-                        self.help_open = true;
+                        self.help_open = !self.help_open;
                     }
                     _ => {}
                 }
