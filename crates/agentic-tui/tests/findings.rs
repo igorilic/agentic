@@ -4,7 +4,7 @@
 //! buffer shows the cursor + status badges.
 
 use agentic_core::events::{Event, EventEnvelope, Severity};
-use agentic_tui::app::AppState;
+use agentic_tui::app::{AppState, Pane};
 use agentic_tui::draw_app;
 use agentic_tui::findings::{Finding, Triage};
 use crossterm::event::KeyCode;
@@ -134,7 +134,11 @@ fn pressing_f_triages_selected_row_as_fix() {
 
 #[test]
 fn pressing_i_triages_selected_row_as_ignore() {
-    let mut s = AppState::default();
+    // T.13.6: 'i' triages as Ignore only in Issue pane (not Logs/Chat).
+    let mut s = AppState {
+        focus: Pane::Issue,
+        ..Default::default()
+    };
     s.findings.items = vec![finding("a", "alpha")];
     s.handle_key(KeyCode::Char('i'));
     assert_eq!(s.findings.items[0].triage, Some(Triage::Ignore));
@@ -151,7 +155,11 @@ fn triage_keys_on_empty_list_are_noop() {
 
 #[test]
 fn re_triaging_a_row_overrides_the_previous_value() {
-    let mut s = AppState::default();
+    // T.13.6: 'i' triages as Ignore only in Issue pane.
+    let mut s = AppState {
+        focus: Pane::Issue,
+        ..Default::default()
+    };
     s.findings.items = vec![finding("a", "alpha")];
     s.handle_key(KeyCode::Char('f'));
     s.handle_key(KeyCode::Char('i'));

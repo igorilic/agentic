@@ -314,7 +314,17 @@ impl AppState {
                     }
                     KeyCode::Char('f') => self.findings.triage_selected(Triage::Fix),
                     KeyCode::Char('t') => self.findings.triage_selected(Triage::TechDebt),
-                    KeyCode::Char('i') => self.findings.triage_selected(Triage::Ignore),
+                    KeyCode::Char('i') => match self.focus {
+                        Pane::Logs | Pane::Chat => {
+                            self.mode = Mode::Insert;
+                        }
+                        Pane::Issue => {
+                            if !self.findings.items.is_empty() {
+                                self.findings.triage_selected(Triage::Ignore);
+                            }
+                            // else: no-op — mode stays Normal
+                        }
+                    },
                     KeyCode::Char('1') => self.focus = Pane::Logs,
                     KeyCode::Char('2') => self.focus = Pane::Chat,
                     KeyCode::Char('3') => self.focus = Pane::Issue,
@@ -379,10 +389,15 @@ impl AppState {
                 }
                 _ => None,
             },
-            // T.13.3: Insert variant added for the mode indicator; key routing
-            // (including Esc → Normal) is wired in T.13.6 when the compose
-            // widget lands. For now all keys are no-ops in Insert mode.
-            Mode::Insert => None,
+            // T.13.6: Insert mode key routing.
+            // Esc returns to Normal. Other keys are no-ops until the
+            // chat-compose widget lands in a later step.
+            Mode::Insert => {
+                if key == KeyCode::Esc {
+                    self.mode = Mode::Normal;
+                }
+                None
+            }
         }
     }
 }
