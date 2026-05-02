@@ -180,50 +180,60 @@ impl PermissionsConfig {
     ///
     /// # Claude Code tool names
     /// Tool names are PascalCase as emitted by the Claude CLI JSON stream.
-    /// Source: `crates/agentic-core/src/pipeline/tool_use_observer.rs:113`
-    ///         `crates/agentic-core/src/backends/claude_code/mod.rs:378`
+    /// Verified sources:
+    /// - `crates/agentic-core/src/backends/claude_code/mod.rs:378-380` — "Read", "Edit", "Bash"
+    /// - `crates/agentic-core/src/pipeline/tool_use_observer.rs:114`   — "Edit", "Write", "MultiEdit"
+    /// - `crates/agentic-core/tests/fixtures/agents/architect.md:5`     — "Glob", "Grep"
     ///
     /// # Copilot CLI tool names
     /// Tool names are lowercase as emitted by Copilot's JSON stream.
-    /// Source: `crates/agentic-core/src/backends/copilot_cli/parser.rs`
-    ///         `crates/agentic-core/tests/fixtures/copilot/tool_use_bash.jsonl`
-    ///         `crates/agentic-core/src/pipeline/tool_use_observer.rs:193`
+    /// Verified sources:
+    /// - `crates/agentic-core/tests/fixtures/copilot/tool_use_bash.jsonl:15` — "bash"
+    /// - `crates/agentic-core/src/pipeline/tool_use_observer.rs:115`          — "create", "str_replace"
+    /// - Remaining Copilot names (view, ls, grep, find): unverified — no fixture
+    ///   currently exercises them. Assumed lowercase from Copilot tool naming
+    ///   convention; verify when a fixture is captured.
     pub fn builtin_default() -> Self {
         let allowlist = vec![
-            // --- Claude Code: read-only / navigation tools ---
+            // --- Claude Code: read-only / navigation tools (PascalCase) ---
             // from: crates/agentic-core/src/backends/claude_code/mod.rs:378
             rule("Read(*)"),
-            // from: crates/agentic-core/src/backends/claude_code/mod.rs:378
+            // from: crates/agentic-core/src/backends/claude_code/mod.rs:379
             rule("Edit(*)"),
-            // from: crates/agentic-core/src/backends/claude_code/mod.rs:378
+            // from: crates/agentic-core/src/backends/claude_code/mod.rs:380
             rule("Bash(*)"),
             // from: crates/agentic-core/src/pipeline/tool_use_observer.rs:114
             rule("Write(*)"),
             // from: crates/agentic-core/src/pipeline/tool_use_observer.rs:114
             rule("MultiEdit(*)"),
-            // Claude navigation tools (PascalCase) — verified from claude parser ToolUse blocks
-            rule("LS(*)"),
-            rule("Grep(*)"),
+            // from: crates/agentic-core/tests/fixtures/agents/architect.md:5
             rule("Glob(*)"),
-            // --- Copilot CLI: read-only / navigation tools (lowercase) ---
-            // from: crates/agentic-core/src/pipeline/tool_use_observer.rs:205 ("view")
+            // from: crates/agentic-core/tests/fixtures/agents/architect.md:5
+            rule("Grep(*)"),
+            // unverified: no fixture shows LS(*); assumed PascalCase from Claude CLI naming
+            rule("LS(*)"),
+            // --- Copilot CLI: tools (lowercase) ---
+            // from: crates/agentic-core/tests/fixtures/copilot/tool_use_bash.jsonl:15
+            rule("bash(*)"),
+            // from: crates/agentic-core/src/pipeline/tool_use_observer.rs:115
+            rule("create(*)"),
+            // from: crates/agentic-core/src/pipeline/tool_use_observer.rs:115
+            rule("str_replace(*)"),
+            // unverified: no fixture shows view/ls/grep/find; assumed lowercase from Copilot naming
             rule("view(*)"),
-            // from: step description P.1.2 / copilot tool baseline
             rule("ls(*)"),
             rule("grep(*)"),
             rule("find(*)"),
-            // from: crates/agentic-core/src/pipeline/tool_use_observer.rs:195 ("create")
-            rule("create(*)"),
-            // from: crates/agentic-core/src/pipeline/tool_use_observer.rs:196 ("str_replace")
-            rule("str_replace(*)"),
-            // from: crates/agentic-core/tests/fixtures/copilot/tool_use_bash.jsonl:15 ("bash")
-            rule("bash(*)"),
         ];
 
         let denylist = vec![
             // High-risk shell destructor patterns — all backends
+            // absolute-path variant
             rule("Bash(rm -rf /*)"),
             rule("bash(rm -rf /*)"),
+            // home-dir variant (per P.1.2 plan)
+            rule("Bash(rm -rf ~*)"),
+            rule("bash(rm -rf ~*)"),
             rule("Bash(sudo *)"),
             rule("bash(sudo *)"),
             // Kubernetes irreversible operations
@@ -371,18 +381,12 @@ default_on_timeout = "deny"
         assert!(has_rm, "denylist should contain Bash(rm -rf /*)");
 
         // F-2: home-dir variant must also be present
-        let has_rm_home = cfg
-            .denylist
-            .iter()
-            .any(|r| r.pattern == "Bash(rm -rf ~*)");
+        let has_rm_home = cfg.denylist.iter().any(|r| r.pattern == "Bash(rm -rf ~*)");
         assert!(
             has_rm_home,
             "denylist should contain Bash(rm -rf ~*) per P.1.2 plan"
         );
-        let has_rm_home_lower = cfg
-            .denylist
-            .iter()
-            .any(|r| r.pattern == "bash(rm -rf ~*)");
+        let has_rm_home_lower = cfg.denylist.iter().any(|r| r.pattern == "bash(rm -rf ~*)");
         assert!(
             has_rm_home_lower,
             "denylist should contain bash(rm -rf ~*) per P.1.2 plan"
