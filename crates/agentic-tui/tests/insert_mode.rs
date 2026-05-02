@@ -192,7 +192,48 @@ fn esc_closes_help_before_insert_mode_exit() {
     );
 }
 
-// ── Test 7: Regression — `f` and `t` triage unconditionally in non-Issue pane
+// ── Test 8: `i` while already in Insert mode is a no-op ─────────────────────
+
+#[test]
+fn i_in_insert_mode_is_noop() {
+    // Pressing 'i' a second time while already composing must not reset the
+    // mode or do anything observable — the outer `match self.mode` returns
+    // early in the Insert arm (only Esc is handled there).
+    let mut state = AppState {
+        focus: Pane::Logs,
+        mode: Mode::Insert,
+        ..Default::default()
+    };
+    state.handle_key(KeyCode::Char('i'));
+    assert_eq!(
+        state.mode,
+        Mode::Insert,
+        "i in Insert mode should not re-trigger; mode stays Insert"
+    );
+
+    // 'f' and 't' in Insert mode are also no-ops — triage dispatch is gated
+    // behind the Normal-mode arm.
+    state.handle_key(KeyCode::Char('f'));
+    assert_eq!(
+        state.mode,
+        Mode::Insert,
+        "f in Insert mode must not exit Insert; got {:?}",
+        state.mode
+    );
+    state.handle_key(KeyCode::Char('t'));
+    assert_eq!(
+        state.mode,
+        Mode::Insert,
+        "t in Insert mode must not exit Insert; got {:?}",
+        state.mode
+    );
+    assert!(
+        state.findings.items.is_empty(),
+        "no findings should appear from key presses in Insert mode"
+    );
+}
+
+// ── Test 7 (original): Regression — `f` and `t` triage unconditionally in non-Issue pane
 
 #[test]
 fn f_and_t_keys_still_triage_unconditionally_in_logs() {

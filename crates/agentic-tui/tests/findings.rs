@@ -7,6 +7,7 @@ use agentic_core::events::{Event, EventEnvelope, Severity};
 use agentic_tui::app::{AppState, Pane};
 use agentic_tui::draw_app;
 use agentic_tui::findings::{Finding, Triage};
+use agentic_tui::modes::Mode;
 use crossterm::event::KeyCode;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -146,10 +147,24 @@ fn pressing_i_triages_selected_row_as_ignore() {
 
 #[test]
 fn triage_keys_on_empty_list_are_noop() {
-    let mut s = AppState::default();
+    // T.13.6: after pane-scoping, 'i' in Logs enters Insert mode, so we
+    // test all three triage keys from Pane::Issue where 'i' is the triage
+    // action.  With an empty list all three must be pure no-ops — no triage
+    // applied and mode stays Normal.
+    let mut s = AppState {
+        focus: Pane::Issue,
+        ..Default::default()
+    };
     s.handle_key(KeyCode::Char('f'));
+    assert_eq!(s.mode, Mode::Normal, "f on empty list must not change mode");
     s.handle_key(KeyCode::Char('t'));
+    assert_eq!(s.mode, Mode::Normal, "t on empty list must not change mode");
     s.handle_key(KeyCode::Char('i'));
+    assert_eq!(
+        s.mode,
+        Mode::Normal,
+        "i on empty list in Issue pane must not change mode"
+    );
     assert!(s.findings.items.is_empty());
 }
 
