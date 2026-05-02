@@ -13,8 +13,10 @@
 //! ```
 //! Plus a RED `┃` left accent column immediately left of the `┌`.
 
+use agentic_core::events::Severity;
 use agentic_tui::app::{AppState, LogEntry, LogLevel, Pane, PermissionRequest, PermissionRisk};
 use agentic_tui::draw_app;
+use agentic_tui::findings::Finding;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
@@ -123,8 +125,7 @@ fn perm_card_renders_top_border_with_perm_label_and_risk() {
     let buf = render(&state);
 
     // The card must contain "⚠ PERM" text.
-    let (col, row) =
-        find_str(&buf, "⚠ PERM", WIDTH, HEIGHT).expect("'⚠ PERM' not found in buffer");
+    let (col, row) = find_str(&buf, "⚠ PERM", WIDTH, HEIGHT).expect("'⚠ PERM' not found in buffer");
 
     // On the same row, verify "developer requests permission" is present.
     assert!(
@@ -150,8 +151,7 @@ fn perm_card_renders_top_border_with_perm_label_and_risk() {
     );
 
     // The `┌` cell must have RED foreground.
-    let (tl_col, tl_row) =
-        find_str(&buf, "┌", WIDTH, HEIGHT).expect("'┌' not found in buffer");
+    let (tl_col, tl_row) = find_str(&buf, "┌", WIDTH, HEIGHT).expect("'┌' not found in buffer");
     let tl_cell = buf.cell((tl_col, tl_row)).unwrap();
     assert_eq!(
         tl_cell.style().fg,
@@ -205,9 +205,10 @@ fn perm_card_renders_command_with_green_fg_and_black_bg() {
     );
 }
 
-// ── Test 3: reason row rendered in FG ────────────────────────────────────────
+// ── Test 3: reason row — DIM for reason text, YELLOW for scope value ─────────
 
 /// The reason row must contain "Cleaning stale build artifacts (scope: shell.destructive)".
+/// F2: reason text must be DIM, scope value must be YELLOW.
 #[test]
 fn perm_card_renders_reason_row() {
     let state = state_with_perm(vec![perm_request()]);
@@ -222,15 +223,26 @@ fn perm_card_renders_reason_row() {
         "expected 'scope: shell.destructive' in buffer"
     );
 
-    // The 'C' of "Cleaning" must be in FG color.
-    let (c_col, c_row) = find_str(&buf, "Cleaning", WIDTH, HEIGHT)
-        .expect("'Cleaning' not found in buffer");
+    // F2: The 'C' of "Cleaning" must be in DIM color (not FG).
+    let (c_col, c_row) =
+        find_str(&buf, "Cleaning", WIDTH, HEIGHT).expect("'Cleaning' not found in buffer");
     let c_cell = buf.cell((c_col, c_row)).unwrap();
     assert_eq!(
         c_cell.style().fg,
-        Some(agentic_tui::theme::FG),
-        "expected 'C' of 'Cleaning' at ({c_col}, {c_row}) to have fg=FG, got {:?}",
+        Some(agentic_tui::theme::DIM),
+        "expected 'C' of 'Cleaning' at ({c_col}, {c_row}) to have fg=DIM (F2), got {:?}",
         c_cell.style().fg
+    );
+
+    // F2: The 's' of "shell.destructive" (scope value) must be in YELLOW.
+    let (scope_col, scope_row) =
+        find_str(&buf, "shell.destructive", WIDTH, HEIGHT).expect("'shell.destructive' not found in buffer");
+    let scope_cell = buf.cell((scope_col, scope_row)).unwrap();
+    assert_eq!(
+        scope_cell.style().fg,
+        Some(agentic_tui::theme::YELLOW),
+        "expected 's' of 'shell.destructive' at ({scope_col}, {scope_row}) to have fg=YELLOW (F2), got {:?}",
+        scope_cell.style().fg
     );
 }
 
@@ -246,8 +258,7 @@ fn perm_card_renders_hotkey_row_with_correct_colors() {
     let buf = render(&state);
 
     // Locate "[y]".
-    let (y_col, y_row) =
-        find_str(&buf, "[y]", WIDTH, HEIGHT).expect("'[y]' not found in buffer");
+    let (y_col, y_row) = find_str(&buf, "[y]", WIDTH, HEIGHT).expect("'[y]' not found in buffer");
     // `[` is at y_col; check `y` at y_col+1.
     let y_cell = buf.cell((y_col + 1, y_row)).unwrap();
     assert_eq!(
@@ -262,8 +273,7 @@ fn perm_card_renders_hotkey_row_with_correct_colors() {
     );
 
     // Locate "[s]".
-    let (s_col, _s_row) =
-        find_str(&buf, "[s]", WIDTH, HEIGHT).expect("'[s]' not found in buffer");
+    let (s_col, _s_row) = find_str(&buf, "[s]", WIDTH, HEIGHT).expect("'[s]' not found in buffer");
     let s_cell = buf.cell((s_col + 1, y_row)).unwrap();
     assert_eq!(
         s_cell.style().fg,
@@ -277,8 +287,7 @@ fn perm_card_renders_hotkey_row_with_correct_colors() {
     );
 
     // Locate "[n]".
-    let (n_col, _n_row) =
-        find_str(&buf, "[n]", WIDTH, HEIGHT).expect("'[n]' not found in buffer");
+    let (n_col, _n_row) = find_str(&buf, "[n]", WIDTH, HEIGHT).expect("'[n]' not found in buffer");
     let n_cell = buf.cell((n_col + 1, y_row)).unwrap();
     assert_eq!(
         n_cell.style().fg,
@@ -300,29 +309,45 @@ fn perm_card_renders_hotkey_row_with_correct_colors() {
         buf_contains(&buf, "session", WIDTH, HEIGHT),
         "expected 'session' in buffer"
     );
-    assert!(buf_contains(&buf, "deny", WIDTH, HEIGHT), "expected 'deny' in buffer");
+    assert!(
+        buf_contains(&buf, "deny", WIDTH, HEIGHT),
+        "expected 'deny' in buffer"
+    );
 }
 
-// ── Test 5: RED left accent column (`┃`) ─────────────────────────────────────
+// ── Test 5: RED left accent column (`┃`) spans all 5 card rows ───────────────
 
-/// The buffer must contain at least one `┃` character with RED foreground.
-/// This is the 3-row left accent column outside (or at the left edge of) the card.
+/// S2 (tightened): The `┃` accent must appear at the SAME column on ALL 5
+/// card rows (top border, command, reason, hotkey, bottom border), each with
+/// RED foreground.
 #[test]
 fn perm_card_has_red_left_accent_column() {
     let state = state_with_perm(vec![perm_request()]);
     let buf = render(&state);
 
-    // Locate the `┃` character in the buffer.
-    let (accent_col, accent_row) =
+    // Locate the first `┃` to find the accent column and the card's top row.
+    let (accent_col, top_row) =
         find_str(&buf, "┃", WIDTH, HEIGHT).expect("'┃' (left accent) not found in buffer");
 
-    let cell = buf.cell((accent_col, accent_row)).unwrap();
-    assert_eq!(
-        cell.style().fg,
-        Some(agentic_tui::theme::RED),
-        "expected '┃' at ({accent_col}, {accent_row}) to have fg=RED, got {:?}",
-        cell.style().fg
-    );
+    // The card is 5 rows tall; assert accent at each of the 5 rows.
+    for offset in 0u16..5 {
+        let row = top_row + offset;
+        let cell = buf
+            .cell((accent_col, row))
+            .unwrap_or_else(|| panic!("no cell at ({accent_col}, {row}) for accent row offset={offset}"));
+        assert_eq!(
+            cell.symbol(),
+            "┃",
+            "expected '┃' at ({accent_col}, {row}) [card row {offset}], got {:?}",
+            cell.symbol()
+        );
+        assert_eq!(
+            cell.style().fg,
+            Some(agentic_tui::theme::RED),
+            "expected RED fg at ({accent_col}, {row}) [card row {offset}], got {:?}",
+            cell.style().fg
+        );
+    }
 }
 
 // ── Test 6: card only renders when focus is Logs ──────────────────────────────
@@ -469,5 +494,48 @@ fn perm_card_handles_low_and_medium_risk() {
     assert!(
         buf_contains(&buf_medium, "MEDIUM RISK", WIDTH, HEIGHT),
         "expected 'MEDIUM RISK' in buffer for PermissionRisk::Medium"
+    );
+}
+
+// ── Test 12: perm card renders BEFORE findings widget (S3) ───────────────────
+
+/// S3: When both a pending perm AND non-empty findings are present, the perm
+/// card's `⚠ PERM` row must appear ABOVE any findings row in the buffer.
+///
+/// This locks in the S1 ordering fix: log rows → perm card → findings.
+#[test]
+fn perm_card_renders_above_findings_when_both_present() {
+    let state = AppState {
+        focus: Pane::Logs,
+        pipeline: vec![],
+        pending_perms: vec![perm_request()],
+        findings: {
+            let mut fs = agentic_tui::findings::FindingsState::default();
+            fs.items = vec![Finding {
+                id: "f1".to_string(),
+                severity: Severity::Warning,
+                file: Some("src/main.rs".to_string()),
+                line: Some(42),
+                message: "UniqueFindingMessage42".to_string(),
+                triage: None,
+            }];
+            fs
+        },
+        ..Default::default()
+    };
+    let buf = render(&state);
+
+    // The perm card top border must be in the buffer.
+    let (_perm_col, perm_row) =
+        find_str(&buf, "⚠ PERM", WIDTH, HEIGHT).expect("'⚠ PERM' not found in buffer");
+
+    // The finding message must be in the buffer.
+    let (_find_col, find_row) =
+        find_str(&buf, "UniqueFindingMessage42", WIDTH, HEIGHT)
+            .expect("'UniqueFindingMessage42' not found in buffer");
+
+    assert!(
+        perm_row < find_row,
+        "expected perm card row ({perm_row}) to appear BEFORE findings row ({find_row}) [S1]"
     );
 }
