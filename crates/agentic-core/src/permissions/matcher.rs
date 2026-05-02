@@ -1,50 +1,50 @@
-/// Pattern grammar for `permissions.toml` rules (v1).
-///
-/// # Pattern shapes
-///
-/// Two shapes are supported:
-///
-/// ## 1. Tool wildcard — matches any arg for the named tool
-///
-/// ```text
-/// <tool>:*
-/// ```
-///
-/// - `<tool>` is an exact, case-sensitive tool name.
-/// - `:*` is a literal suffix — no other content after the colon is allowed.
-///
-/// Examples: `Bash:*`, `Read:*`, `bash:*`
-///
-/// ## 2. Arg glob — shell-glob on the full argument string
-///
-/// ```text
-/// <tool>(<arg-glob>)
-/// ```
-///
-/// - `<tool>` is an exact, case-sensitive tool name.
-/// - `<arg-glob>` uses **standard shell-glob syntax**: `*` (any chars), `?`
-///   (exactly one char), `[abc]` / `[a-z]` (character sets).
-/// - The pattern is anchored to the ENTIRE arg string — the parentheses are
-///   the implicit start/end anchors. There is no implicit prefix/suffix wildcard.
-///
-/// Examples: `Bash(rm -rf *)`, `Read(/tmp/?.txt)`, `Bash(git [pf]*)`
-///
-/// # Non-features (explicit)
-///
-/// - No regex syntax: slashes and backslashes are treated as literal characters.
-///   (A pattern like `Bash(/.+/)` is syntactically valid but matches only the
-///   literal string `/.+/`.)
-/// - No negation patterns.
-/// - No captures or back-references.
-/// - No implicit shell tokenization: the arg is matched as a flat string.
-///   `*` crosses spaces, quotes, and all other characters freely.
-///
-/// # Flat-string matching
-///
-/// The arg passed to `Pattern::matches` is matched as a single flat string.
-/// There is no shell word-splitting, quoting, or escaping — the glob sees
-/// exactly the bytes of the arg. For example, `Bash(rm * /tmp)` will match
-/// the arg `"rm -rf /tmp"` because `*` spans the intervening characters.
+//! Pattern grammar for `permissions.toml` rules (v1).
+//!
+//! # Pattern shapes
+//!
+//! Two shapes are supported:
+//!
+//! ## 1. Tool wildcard — matches any arg for the named tool
+//!
+//! ```text
+//! <tool>:*
+//! ```
+//!
+//! - `<tool>` is an exact, case-sensitive tool name.
+//! - `:*` is a literal suffix — no other content after the colon is allowed.
+//!
+//! Examples: `Bash:*`, `Read:*`, `bash:*`
+//!
+//! ## 2. Arg glob — shell-glob on the full argument string
+//!
+//! ```text
+//! <tool>(<arg-glob>)
+//! ```
+//!
+//! - `<tool>` is an exact, case-sensitive tool name.
+//! - `<arg-glob>` uses **standard shell-glob syntax**: `*` (any chars), `?`
+//!   (exactly one char), `[abc]` / `[a-z]` (character sets).
+//! - The pattern is anchored to the ENTIRE arg string — the parentheses are
+//!   the implicit start/end anchors. There is no implicit prefix/suffix wildcard.
+//!
+//! Examples: `Bash(rm -rf *)`, `Read(/tmp/?.txt)`, `Bash(git [pf]*)`
+//!
+//! # Non-features (explicit)
+//!
+//! - No regex syntax: slashes and backslashes are treated as literal characters.
+//!   (A pattern like `Bash(/.+/)` is syntactically valid but matches only the
+//!   literal string `/.+/`.)
+//! - No negation patterns.
+//! - No captures or back-references.
+//! - No implicit shell tokenization: the arg is matched as a flat string.
+//!   `*` crosses spaces, quotes, and all other characters freely.
+//!
+//! # Flat-string matching
+//!
+//! The arg passed to `Pattern::matches` is matched as a single flat string.
+//! There is no shell word-splitting, quoting, or escaping — the glob sees
+//! exactly the bytes of the arg. For example, `Bash(rm * /tmp)` will match
+//! the arg `"rm -rf /tmp"` because `*` spans the intervening characters.
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -89,8 +89,13 @@ pub enum PatternParseError {
 impl std::fmt::Display for PatternParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Malformed => write!(f, "malformed pattern: must be `<tool>:*` or `<tool>(<arg-glob>)`"),
-            Self::EmptyToolName => write!(f, "empty tool name: pattern must start with a tool name"),
+            Self::Malformed => write!(
+                f,
+                "malformed pattern: must be `<tool>:*` or `<tool>(<arg-glob>)`"
+            ),
+            Self::EmptyToolName => {
+                write!(f, "empty tool name: pattern must start with a tool name")
+            }
             Self::InvalidGlob(msg) => write!(f, "invalid glob syntax: {msg}"),
         }
     }
@@ -180,9 +185,18 @@ mod tests {
     #[test]
     fn tool_wildcard_matches_any_arg() {
         let p = Pattern::parse("Bash:*").unwrap();
-        assert!(p.matches("Bash", "ls -la"), "Bash:* should match ('Bash', 'ls -la')");
-        assert!(p.matches("Bash", ""), "Bash:* should match ('Bash', '') (empty arg)");
-        assert!(!p.matches("Read", "/tmp/x"), "Bash:* should NOT match ('Read', '/tmp/x')");
+        assert!(
+            p.matches("Bash", "ls -la"),
+            "Bash:* should match ('Bash', 'ls -la')"
+        );
+        assert!(
+            p.matches("Bash", ""),
+            "Bash:* should match ('Bash', '') (empty arg)"
+        );
+        assert!(
+            !p.matches("Read", "/tmp/x"),
+            "Bash:* should NOT match ('Read', '/tmp/x')"
+        );
     }
 
     // -----------------------------------------------------------------------

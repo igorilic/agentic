@@ -15,15 +15,18 @@
 ///
 /// # Pattern syntax (v1)
 ///
-/// Only shell-glob characters (`*` and `?`) are supported. Patterns containing
-/// regex syntax are rejected:
-/// - Slash-delimited regex:  a segment like `/.../` inside the parens is invalid.
-/// - Backslash-escaped char classes: `\d`, `\w`, `\s`, etc. are invalid.
+/// Two shapes are supported:
+/// - `<tool>:*` — matches any argument for the named tool.
+/// - `<tool>(<arg-glob>)` — matches using shell-glob syntax (`*`, `?`, `[abc]`)
+///   against the entire argument string.
 ///
-/// Matching logic lives in P.1.3; this module is the config carrier only.
+/// Tool names are case-sensitive. Slashes and backslashes are literal characters
+/// (no regex syntax is supported). Matching logic lives in `permissions::matcher`.
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+
+use crate::permissions::matcher::{Pattern, PatternParseError};
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -95,12 +98,13 @@ pub enum PermissionsConfigError {
     Io(std::io::Error),
     /// TOML parse error.
     Parse(toml::de::Error),
-    /// A pattern contains unsupported regex syntax.
+    /// A pattern string could not be compiled by the tool matcher.
     ///
-    /// Rejected patterns: slash-delimited (`/pattern/`) or backslash-escaped
-    /// char classes (`\d`, `\w`, `\s`, etc.). Shell-glob chars `*` and `?`
-    /// are fine.
-    InvalidPattern(String),
+    /// The inner [`PatternParseError`] gives the specific reason: `Malformed`
+    /// (unrecognised shape), `EmptyToolName`, or `InvalidGlob` (bad glob
+    /// syntax). The outer `String` is the raw pattern string from the config
+    /// file, for error-message context.
+    InvalidPattern(String, PatternParseError),
 }
 
 impl std::fmt::Display for PermissionsConfigError {
@@ -108,8 +112,8 @@ impl std::fmt::Display for PermissionsConfigError {
         match self {
             Self::Io(e) => write!(f, "permissions.toml I/O error: {e}"),
             Self::Parse(e) => write!(f, "permissions.toml parse error: {e}"),
-            Self::InvalidPattern(p) => {
-                write!(f, "invalid pattern (regex syntax not supported): {p}")
+            Self::InvalidPattern(p, reason) => {
+                write!(f, "invalid pattern `{p}`: {reason}")
             }
         }
     }
@@ -257,49 +261,18 @@ impl PermissionsConfig {
     // Validation
     // -----------------------------------------------------------------------
 
+    /// Validate all patterns by attempting to compile them with the real matcher.
+    ///
+    /// This replaces the P.1.2 heuristic (`pattern_has_regex_syntax`) which
+    /// falsely rejected patterns containing slashes (e.g. URL paths). The real
+    /// matcher treats slashes as literal characters, so `Bash(/tmp/*)` is valid.
     fn validate_patterns(&self) -> Result<(), PermissionsConfigError> {
         for rule in self.allowlist.iter().chain(self.denylist.iter()) {
-            if pattern_has_regex_syntax(&rule.pattern) {
-                return Err(PermissionsConfigError::InvalidPattern(rule.pattern.clone()));
-            }
+            Pattern::parse(&rule.pattern)
+                .map_err(|e| PermissionsConfigError::InvalidPattern(rule.pattern.clone(), e))?;
         }
         Ok(())
     }
-}
-
-/// Returns `true` if `pattern` contains regex-like syntax that v1 does not support.
-///
-/// Rejection rules:
-/// 1. The argument portion (inside parentheses, or the whole string) starts and
-///    ends with `/` — this is the slash-delimited regex convention.
-/// 2. The pattern contains a backslash followed by a letter (e.g. `\d`, `\w`,
-///    `\s`, `\b`) — these are regex escape sequences.
-///
-/// Shell-glob characters `*` and `?` are NOT rejected.
-fn pattern_has_regex_syntax(pattern: &str) -> bool {
-    // Rule 2: backslash followed by any ASCII letter.
-    if pattern.contains('\\')
-        && pattern
-            .chars()
-            .zip(pattern.chars().skip(1))
-            .any(|(a, b)| a == '\\' && b.is_ascii_alphabetic())
-    {
-        return true;
-    }
-
-    // Rule 1: argument portion (inside parens) is slash-delimited.
-    // Look for `(/.../)` anywhere in the pattern.
-    if let Some(open) = pattern.find('(') {
-        let args = &pattern[open + 1..];
-        // Strip trailing `)` if present.
-        let args = args.trim_end_matches(')');
-        let args = args.trim();
-        if args.starts_with('/') && args.ends_with('/') && args.len() >= 2 {
-            return true;
-        }
-    }
-
-    false
 }
 
 fn rule(pattern: &str) -> PermissionRule {
@@ -412,32 +385,57 @@ default_on_timeout = "deny"
     }
 
     // -----------------------------------------------------------------------
-    // 3. rejects_invalid_pattern — slash-delimited regex
+    // 3. rejects_invalid_pattern — truly malformed patterns
     // -----------------------------------------------------------------------
 
+    /// Patterns with slashes are VALID in v1 — slashes are literal characters.
+    /// `Bash(/.*/)` now parses successfully and matches the literal arg `/.*/`.
+    /// (The old P.1.2 heuristic falsely rejected this; the real matcher does not.)
     #[test]
-    fn rejects_slash_delimited_regex_pattern() {
+    fn slash_in_pattern_is_accepted_as_literal() {
         let dir = tempfile::TempDir::new().unwrap();
         let path = write_toml(
             &dir,
             r#"
 [allowlist]
-patterns = ["Bash(/.*/)"  ]
+patterns = ["Bash(/.*/)"]
 
 [denylist]
 patterns = []
 "#,
         );
 
-        let err = PermissionsConfig::load(&path).expect_err("Bash(/.*/) should be rejected");
+        // Must load successfully — slashes are literal chars, not regex.
+        let cfg = PermissionsConfig::load(&path)
+            .expect("Bash(/.*/) should be accepted — slashes are literal characters");
+        assert_eq!(cfg.allowlist.len(), 1);
+        assert_eq!(cfg.allowlist[0].pattern, "Bash(/.*/)")
+    }
+
+    #[test]
+    fn rejects_missing_close_paren_pattern() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = write_toml(
+            &dir,
+            r#"
+[allowlist]
+patterns = ["Bash(unclosed"]
+
+[denylist]
+patterns = []
+"#,
+        );
+
+        let err = PermissionsConfig::load(&path)
+            .expect_err("Bash(unclosed should be rejected — missing close paren");
         assert!(
-            matches!(err, PermissionsConfigError::InvalidPattern(_)),
+            matches!(err, PermissionsConfigError::InvalidPattern(_, _)),
             "expected InvalidPattern, got: {err}"
         );
     }
 
     #[test]
-    fn rejects_backslash_escaped_class_pattern() {
+    fn rejects_no_parens_no_wildcard_pattern() {
         let dir = tempfile::TempDir::new().unwrap();
         let path = write_toml(
             &dir,
@@ -446,14 +444,14 @@ patterns = []
 patterns = []
 
 [denylist]
-patterns = ["Bash(\\d+)"]
+patterns = ["Bash"]
 "#,
         );
 
-        let err =
-            PermissionsConfig::load(&path).expect_err("Bash(\\d+) should be rejected as regex");
+        let err = PermissionsConfig::load(&path)
+            .expect_err("Bash (no parens, no :*) should be rejected as malformed");
         assert!(
-            matches!(err, PermissionsConfigError::InvalidPattern(_)),
+            matches!(err, PermissionsConfigError::InvalidPattern(_, _)),
             "expected InvalidPattern, got: {err}"
         );
     }
