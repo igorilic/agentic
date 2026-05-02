@@ -257,11 +257,14 @@ impl AppState {
     /// (lifetime ~1.6 s per spec §4.8).
     pub fn tick(&mut self) {
         const FLASH_LIFETIME: Duration = Duration::from_millis(1600);
-        if let Some(t) = self.flash_set_at
-            && t.elapsed() >= FLASH_LIFETIME
-        {
+        if let Some(t) = self.flash_set_at {
+            if t.elapsed() >= FLASH_LIFETIME {
+                self.flash = None;
+                self.flash_set_at = None;
+            }
+        } else if self.flash.is_some() {
+            // flash_set_at missing — clear defensively rather than displaying forever.
             self.flash = None;
-            self.flash_set_at = None;
         }
     }
 
