@@ -59,26 +59,33 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
         area,
         label_start,
         label,
-        Style::default().fg(label_fg).bg(theme::HEADER_BG),
+        Style::default()
+            .fg(label_fg)
+            .bg(theme::HEADER_BG)
+            .add_modifier(Modifier::BOLD),
     );
 
     // Compute the left-side content based on mode.
+    // Clip left-side text at label_start so it never overwrites the right-aligned
+    // mode label (F-1: hint overwrites label at width <= 84 cols).
     match &state.mode {
         Mode::Normal | Mode::Insert => {
-            write_str(
+            write_str_clipped(
                 buf,
                 area,
                 0,
+                label_start,
                 NORMAL_HINT,
                 Style::default().fg(theme::DIM).bg(theme::HEADER_BG),
             );
         }
         Mode::Command { buffer } => {
             // Render ':' in ACCENT bold.
-            write_str(
+            write_str_clipped(
                 buf,
                 area,
                 0,
+                label_start,
                 ":",
                 Style::default()
                     .fg(theme::ACCENT)
@@ -88,19 +95,21 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
 
             if buffer.is_empty() {
                 // Placeholder hint in DIM.
-                write_str(
+                write_str_clipped(
                     buf,
                     area,
                     1,
+                    label_start,
                     CMD_PLACEHOLDER,
                     Style::default().fg(theme::DIM).bg(theme::HEADER_BG),
                 );
             } else {
                 // Buffer text in FG.
-                write_str(
+                write_str_clipped(
                     buf,
                     area,
                     1,
+                    label_start,
                     buffer,
                     Style::default().fg(theme::FG).bg(theme::HEADER_BG),
                 );
@@ -128,8 +137,22 @@ fn fill_bg(buf: &mut Buffer, area: Rect) {
 /// Write `text` starting at column offset `col_offset` within `area`,
 /// clipping at the right edge. Uses `.chars()` iteration for multi-byte safety.
 fn write_str(buf: &mut Buffer, area: Rect, col_offset: u16, text: &str, style: Style) {
+    write_str_clipped(buf, area, col_offset, area.width, text, style);
+}
+
+/// Like [`write_str`] but clips at `clip_cols` (measured from `area.x`) rather
+/// than the full `area.width`. Use this for left-side content to prevent it from
+/// overwriting the right-aligned mode label (F-1).
+fn write_str_clipped(
+    buf: &mut Buffer,
+    area: Rect,
+    col_offset: u16,
+    clip_cols: u16,
+    text: &str,
+    style: Style,
+) {
     let y = area.y;
-    let max_x = area.x + area.width;
+    let max_x = area.x + clip_cols.min(area.width);
 
     for (i, ch) in text.chars().enumerate() {
         let x = area.x + col_offset + i as u16;
