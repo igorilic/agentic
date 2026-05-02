@@ -141,6 +141,13 @@ fn status_line_normal_mode_shows_dim_normal_label_right() {
         n_cell.style().fg
     );
 
+    // S-1: mode label must be BOLD.
+    assert!(
+        n_cell.style().add_modifier.contains(Modifier::BOLD),
+        "expected 'N' of NORMAL label to have Modifier::BOLD, modifiers={:?}",
+        n_cell.style().add_modifier
+    );
+
     // Verify right-aligned: the last char 'L' of "NORMAL" (6 chars) must be
     // within 2 columns of the right edge of the terminal.
     let last_col = col + 5; // 'L' of NORMAL
@@ -238,6 +245,13 @@ fn status_line_command_mode_shows_yellow_command_label_right() {
         "expected 'C' of COMMAND to have fg=YELLOW, got {:?}",
         c_cell.style().fg
     );
+
+    // S-1: mode label must be BOLD.
+    assert!(
+        c_cell.style().add_modifier.contains(Modifier::BOLD),
+        "expected 'C' of COMMAND label to have Modifier::BOLD, modifiers={:?}",
+        c_cell.style().add_modifier
+    );
 }
 
 // ── Test 5: Command mode shows buffer text after ':' ─────────────────────────
@@ -327,6 +341,13 @@ fn status_line_insert_mode_shows_green_insert_label_right() {
         "expected 'I' of INSERT to have fg=GREEN, got {:?}",
         i_cell.style().fg
     );
+
+    // S-1: mode label must be BOLD.
+    assert!(
+        i_cell.style().add_modifier.contains(Modifier::BOLD),
+        "expected 'I' of INSERT label to have Modifier::BOLD, modifiers={:?}",
+        i_cell.style().add_modifier
+    );
 }
 
 // ── Test 8: Status line cells use HEADER_BG ──────────────────────────────────
@@ -396,5 +417,42 @@ fn status_line_renders_at_bottom_row() {
         "expected NORMAL label on the last row ({}), found on row {}",
         height - 1,
         label_row
+    );
+}
+
+// ── Test 11: S-2 — NORMAL label is fully visible at 80 cols (F-1 regression) ──
+
+#[test]
+fn status_line_normal_label_visible_at_80_cols() {
+    let width = 80u16;
+    let height = 24u16;
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        mode: Mode::Normal,
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // The full word "NORMAL" must be present on the bottom row — not truncated
+    // to a single trailing 'L' as happens when the hint overwrites it.
+    let bottom_row = height - 1;
+    let row_str = row_string(&buffer, bottom_row, width);
+    assert!(
+        row_str.contains("NORMAL"),
+        "expected full 'NORMAL' label on bottom row at width=80, got:\n'{row_str}'\n\
+         (hint text may be overwriting the label — check clip boundary)"
+    );
+
+    // Also assert BOLD is present at the 'N' position.
+    let (col, row) =
+        find_in_buffer(&buffer, "NORMAL", width, height).expect("'NORMAL' not found in buffer");
+    let n_cell = buffer.cell((col, row)).unwrap();
+    assert!(
+        n_cell.style().add_modifier.contains(Modifier::BOLD),
+        "expected 'N' of NORMAL label to have Modifier::BOLD at 80 cols, modifiers={:?}",
+        n_cell.style().add_modifier
     );
 }
