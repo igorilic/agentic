@@ -1856,7 +1856,7 @@ opens `SpecDialog` from the chat column.
 
 ---
 
-### Step T.12.3: Issue pane — id, title, labels, description, acceptance
+### Step T.12.3: Issue pane — id, title, labels, description, acceptance ✓ COMPLETE
 
 **Goal**: Render the issue body in monospace per spec §4.6 issue variant.
 
@@ -2256,10 +2256,8 @@ pane**. The dual binding is the contract:
     - Why deferred: the `run_status` field doesn't exist yet; scaffolding it without a producer is premature.
     - Trigger: alongside T.13.x runner wiring when `run_status` is added.
 
-12. **TUI Pane::Issue body placeholder** (GH #98).
-    - What's missing: pressing `3` (or Tab-cycling to Issue) sets `state.focus = Pane::Issue` and the tab bar highlights `③ issue`, but `draw_app` has no Issue branch — the body silently shows Logs+Chat split, leaving the tab indicator out of sync with the body content.
-    - Why deferred: adding a placeholder requires touching `draw_app`'s body composition, which is the body restructure scoped to T.12.3 (Issue pane). T.12.1 stayed narrow (logs content only) and kept the L|R split.
-    - Trigger: when T.12.3 (Issue pane) lands — restructure body to one-pane-at-a-time per spec §4.6, and the empty-state question dissolves (Issue gets a real renderer).
+12. **TUI Pane::Issue body placeholder** (GH #98 — closed by T.12.3).
+    - RESOLVED: T.12.3 restructured draw_app to single-pane dispatch and added views::issue_pane with the full spec §4.6 renderer (ACCENT id, bold title, ▏chips▕, description paragraphs, [ ] acceptance checklist). The tab indicator is now in sync with body content.
 
 13. **TUI logs pane: Finding events as WARN log rows** (GH #99).
     - What's missing: `findings::render` is rendered as a separate widget below the log rows. Spec §4.6 line 476 specifies that Finding events should appear AS log rows at `LogLevel::Warn`, not as a sidebar widget.
