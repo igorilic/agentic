@@ -60,4 +60,7 @@ pub fn draw_app(f: &mut Frame<'_>, state: &AppState) {
     }
 
     views::status_line::render(rows[5], f, state);
+
+    // Help overlay renders LAST so it sits on top of all other widgets.
+    views::help_overlay::render(f.area(), f, state);
 }

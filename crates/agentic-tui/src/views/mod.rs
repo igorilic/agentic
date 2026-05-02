@@ -5,6 +5,7 @@
 pub mod chat_pane;
 pub mod diff;
 pub mod findings;
+pub mod help_overlay;
 pub mod issue_header;
 pub mod issue_pane;
 pub mod logs_pane;

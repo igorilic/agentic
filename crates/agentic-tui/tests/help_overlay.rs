@@ -11,7 +11,6 @@ use agentic_tui::theme;
 use crossterm::event::KeyCode;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use ratatui::style::Color;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -69,20 +68,27 @@ fn buf_contains(buf: &ratatui::buffer::Buffer, needle: &str, width: u16, height:
 
 #[test]
 fn pressing_question_mark_opens_help() {
-    let mut state = AppState::default();
+    let mut state = AppState {
+        help_open: false,
+        ..AppState::default()
+    };
     assert_eq!(state.mode, Mode::Normal);
-    state.help_open = false;
     state.handle_key(KeyCode::Char('?'));
-    assert!(state.help_open, "help_open should be true after pressing '?'");
+    assert!(
+        state.help_open,
+        "help_open should be true after pressing '?'"
+    );
 }
 
 #[test]
 fn pressing_question_mark_in_command_mode_does_not_open_help() {
-    let mut state = AppState::default();
-    state.mode = Mode::Command {
-        buffer: String::new(),
+    let mut state = AppState {
+        mode: Mode::Command {
+            buffer: String::new(),
+        },
+        help_open: false,
+        ..AppState::default()
     };
-    state.help_open = false;
     state.handle_key(KeyCode::Char('?'));
     assert!(
         !state.help_open,
@@ -100,19 +106,23 @@ fn pressing_question_mark_in_command_mode_does_not_open_help() {
 
 #[test]
 fn pressing_esc_when_help_open_closes_it() {
-    let mut state = AppState::default();
-    state.help_open = true;
+    let mut state = AppState {
+        help_open: true,
+        ..AppState::default()
+    };
     state.handle_key(KeyCode::Esc);
     assert!(!state.help_open, "help_open should be false after Esc");
 }
 
 #[test]
 fn pressing_esc_in_command_mode_with_help_closed_still_exits_command() {
-    let mut state = AppState::default();
-    state.mode = Mode::Command {
-        buffer: "plan".to_string(),
+    let mut state = AppState {
+        mode: Mode::Command {
+            buffer: "plan".to_string(),
+        },
+        help_open: false,
+        ..AppState::default()
     };
-    state.help_open = false;
     state.handle_key(KeyCode::Esc);
     assert_eq!(
         state.mode,
@@ -125,8 +135,10 @@ fn pressing_esc_in_command_mode_with_help_closed_still_exits_command() {
 
 #[test]
 fn help_overlay_renders_keybindings_header_when_open() {
-    let mut state = AppState::default();
-    state.help_open = true;
+    let state = AppState {
+        help_open: true,
+        ..AppState::default()
+    };
     let buf = render(&state);
     assert!(
         buf_contains(&buf, "KEYBINDINGS", WIDTH, HEIGHT),
@@ -136,8 +148,10 @@ fn help_overlay_renders_keybindings_header_when_open() {
 
 #[test]
 fn help_overlay_does_not_render_when_closed() {
-    let mut state = AppState::default();
-    state.help_open = false;
+    let state = AppState {
+        help_open: false,
+        ..AppState::default()
+    };
     let buf = render(&state);
     assert!(
         !buf_contains(&buf, "KEYBINDINGS", WIDTH, HEIGHT),
@@ -147,11 +161,13 @@ fn help_overlay_does_not_render_when_closed() {
 
 #[test]
 fn help_overlay_uses_accent_border() {
-    let mut state = AppState::default();
-    state.help_open = true;
+    let state = AppState {
+        help_open: true,
+        ..AppState::default()
+    };
     let buf = render(&state);
 
-    // Find a corner character on the border. Try both "┌" and "┐".
+    // Find a corner character on the border.
     let corner_pos = find_str(&buf, "┌", WIDTH, HEIGHT)
         .or_else(|| find_str(&buf, "┐", WIDTH, HEIGHT))
         .expect("Should find a corner char when help is open");
@@ -168,16 +184,16 @@ fn help_overlay_uses_accent_border() {
 
 #[test]
 fn help_overlay_uses_header_bg_fill() {
-    let mut state = AppState::default();
-    state.help_open = true;
+    let state = AppState {
+        help_open: true,
+        ..AppState::default()
+    };
     let buf = render(&state);
 
-    // Find the KEYBINDINGS header and look for a cell with HEADER_BG inside the modal.
-    // We search for a space or text cell between the borders.
-    let (kx, ky) = find_str(&buf, "KEYBINDINGS", WIDTH, HEIGHT)
-        .expect("Must find KEYBINDINGS when help open");
+    // Find the KEYBINDINGS header and check HEADER_BG on a cell inside the modal.
+    let (kx, ky) =
+        find_str(&buf, "KEYBINDINGS", WIDTH, HEIGHT).expect("Must find KEYBINDINGS when help open");
 
-    // The cell containing 'K' of KEYBINDINGS is inside the modal — check its bg.
     let cell = buf.cell((kx, ky)).expect("Cell must exist");
     assert_eq!(
         cell.bg,
@@ -188,11 +204,12 @@ fn help_overlay_uses_header_bg_fill() {
 
 #[test]
 fn help_overlay_lists_canonical_keybindings() {
-    let mut state = AppState::default();
-    state.help_open = true;
+    let state = AppState {
+        help_open: true,
+        ..AppState::default()
+    };
     let buf = render(&state);
 
-    // Each key must appear somewhere in the rendered buffer.
     for key_label in &["Tab", "1", ":", "?"] {
         assert!(
             buf_contains(&buf, key_label, WIDTH, HEIGHT),
@@ -204,15 +221,16 @@ fn help_overlay_lists_canonical_keybindings() {
 
 #[test]
 fn help_overlay_centered_horizontally() {
-    let mut state = AppState::default();
-    state.help_open = true;
+    let state = AppState {
+        help_open: true,
+        ..AppState::default()
+    };
     let buf = render(&state);
 
-    // Find the KEYBINDINGS row.
-    let (_kx, ky) = find_str(&buf, "KEYBINDINGS", WIDTH, HEIGHT)
-        .expect("Must find KEYBINDINGS when help open");
+    let (_kx, ky) =
+        find_str(&buf, "KEYBINDINGS", WIDTH, HEIGHT).expect("Must find KEYBINDINGS when help open");
 
-    // Find the leftmost '┌' on that same row.
+    // Find the leftmost '┌' and '┐' on the KEYBINDINGS row.
     let mut left_col: Option<u16> = None;
     let mut right_col: Option<u16> = None;
     for x in 0..WIDTH {
@@ -241,8 +259,10 @@ fn help_overlay_centered_horizontally() {
 
 #[test]
 fn help_overlay_does_not_panic_on_narrow_terminal() {
-    let mut state = AppState::default();
-    state.help_open = true;
+    let state = AppState {
+        help_open: true,
+        ..AppState::default()
+    };
     // Should not panic — just clip or skip.
     render_sized(&state, 30, 10);
 }

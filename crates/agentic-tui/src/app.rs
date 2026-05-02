@@ -194,6 +194,10 @@ pub struct AppState {
     /// when the flash lifetime (~1.6 s) has expired and the message should
     /// be cleared (T.13.4).
     pub flash_set_at: Option<Instant>,
+    /// Whether the help overlay is currently displayed (spec §4.9).
+    /// Toggled by `?` in Normal mode; closed by Esc (takes precedence over
+    /// all other Esc handling).
+    pub help_open: bool,
 }
 
 impl Default for AppState {
@@ -219,6 +223,7 @@ impl Default for AppState {
             pending_perms: vec![],
             flash: None,
             flash_set_at: None,
+            help_open: false,
         }
     }
 }
@@ -278,6 +283,12 @@ impl AppState {
     ///
     /// Returns `Some(AppCommand)` when a command should be executed.
     pub fn handle_key(&mut self, key: KeyCode) -> Option<AppCommand> {
+        // Esc closes the help overlay first, regardless of mode.
+        if self.help_open && key == KeyCode::Esc {
+            self.help_open = false;
+            return None;
+        }
+
         match &mut self.mode {
             Mode::Normal => {
                 match key {
@@ -330,6 +341,9 @@ impl AppState {
                             text: format!("✗ denied: {} \"{}\"", prefix, perm.command),
                         });
                         self.flash_set_at = Some(Instant::now());
+                    }
+                    KeyCode::Char('?') => {
+                        self.help_open = true;
                     }
                     _ => {}
                 }
