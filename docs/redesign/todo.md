@@ -2269,6 +2269,11 @@ pane**. The dual binding is the contract:
     - Why deferred: T.12.1 ships the visual contract (column-aligned rows). Scroll behavior isn't in the spec for this step and isn't visible until T.13.x produces real event volume.
     - Trigger: when runner produces enough events to fill the pane — add scroll offset, j/k navigation, and a "+N earlier" indicator.
 
+15. **TUI help overlay: mouse-click dismissal** (GH #101).
+    - What's missing: `help_overlay` only dismisses on Esc. Spec §4.9 + hand-off (`tui-view.jsx:252`) specify "Esc or any click dismisses".
+    - Why deferred: mouse handling in ratatui requires plumbing `MouseEvent` through the keyboard event loop, including hit-testing against the modal Rect. Non-trivial; keyboard-driven Esc covers the core flow.
+    - Trigger: before T.13.8 integration milestone, OR earlier if a user reports it.
+
 ---
 
 ## Status checklist
