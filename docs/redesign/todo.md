@@ -3246,7 +3246,7 @@ Phase 15 — Cleanup + tech debt
 
 Phase P — Permissions (GH #88)
 - [x] P.1.1 Add PermissionRequest + PermissionResolved event variants
-- [ ] P.1.2 permissions.toml config loader
+- [x] P.1.2 permissions.toml config loader
 - [ ] P.1.3 Tool matcher (`<tool>(<arg-glob>)` and `<tool>:*`)
 - [ ] P.1.4 Risk classifier table
 - [ ] P.2.1 PermissionGate trait + ConfigGate static
