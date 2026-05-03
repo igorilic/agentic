@@ -2708,7 +2708,7 @@ persist to disk.
 
 ---
 
-### Step P.2.4: Wire gate into `PipelineOrchestrator`
+### Step P.2.4: Wire gate into `PipelineOrchestrator` ✓ DONE
 
 **Goal**: The orchestrator (which already consumes the bus) now also
 consults the permission gate on every `Event::ToolUseStart`. This is
