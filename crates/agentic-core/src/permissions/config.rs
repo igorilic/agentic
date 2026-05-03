@@ -53,12 +53,14 @@ pub struct PermissionsConfig {
     pub settings: PermissionsSettings,
 }
 
-/// A single permission rule containing a glob pattern string.
+/// A single permission rule containing a pattern string.
 ///
-/// The pattern syntax is:
-/// - Tool name (exact or `*`) followed by optional `(<arg-glob>)`.
-/// - Examples: `Read(*)`, `Bash(cargo:*)`, `Bash(rm -rf /*)`.
-/// - Regex syntax (slash-delimited or `\`-escaped) is rejected on load.
+/// Pattern syntax (see `permissions/matcher.rs` for the grammar):
+/// - `<tool>:*` — matches any argument for the named tool.
+/// - `<tool>(<arg-glob>)` — shell-glob (`*`, `?`, `[abc]`) on the full arg.
+/// - Examples: `Read(*)`, `Bash(rm -rf /*)`, `Bash:*`.
+/// - Tool names are case-sensitive. Slashes and backslashes are literal arg chars.
+/// - Patterns are validated by `Pattern::parse` at config-load time.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PermissionRule {
     pub pattern: String,

@@ -321,6 +321,19 @@ mod tests {
             !p.matches("Bash", "anything else"),
             "Bash(/.*/) should NOT match ('Bash', 'anything else')"
         );
+
+        // Colon present but followed by non-`*` content — Malformed.
+        assert_eq!(
+            Pattern::parse("Bash:foo").unwrap_err(),
+            PatternParseError::Malformed,
+            "Bash:foo: only :* is a valid colon shape"
+        );
+        // Anything after :* is also malformed (no trailing content allowed).
+        assert_eq!(
+            Pattern::parse("Bash:*extra").unwrap_err(),
+            PatternParseError::Malformed,
+            "Bash:*extra: nothing allowed after :*"
+        );
     }
 
     // -----------------------------------------------------------------------
