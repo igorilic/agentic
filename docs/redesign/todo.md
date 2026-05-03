@@ -3250,7 +3250,7 @@ Phase P — Permissions (GH #88)
 - [x] P.1.3 Tool matcher (`<tool>(<arg-glob>)` and `<tool>:*`)
 - [x] P.1.4 Risk classifier table
 - [ ] P.2.1 PermissionGate trait + ConfigGate static
-- [ ] P.2.2 Decision channel + async evaluate_async (60 s timeout)
+- [x] P.2.2 Decision channel + async evaluate_async (60 s timeout)
 - [ ] P.2.3 Per-run session allowlist
 - [ ] P.2.4 Wire gate into PipelineOrchestrator
 - [ ] P.3.1 Tauri permission_decide command
