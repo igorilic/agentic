@@ -634,6 +634,388 @@ mod tests {
     // its own decision and is not accidentally unblocked by the other's event.
     // -----------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------
+    // Test P.2.3-1: session_decision_caches_pattern_for_subsequent_calls
+    //
+    // First call to ("Bash", "ls -la") prompts. User resolves with AllowSession.
+    // Second identical call returns AnnotateAllow { SessionAllowlist } WITHOUT
+    // publishing a new PermissionRequest.
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn session_decision_caches_pattern_for_subsequent_calls() {
+        use std::sync::Arc;
+
+        let bus = EventBus::new();
+        let mut rx = bus.subscribe();
+        let gate = Arc::new(AsyncGate::new(
+            empty_config(OnTimeout::Deny),
+            bus.clone(),
+            Duration::from_secs(5),
+            "test-agent".to_string(),
+        ));
+
+        // --- First call: prompts the user ---
+        let g1 = Arc::clone(&gate);
+        let cancel1 = CancellationToken::new();
+        let cancel1c = cancel1.clone();
+        let handle1 = tokio::spawn(async move {
+            g1.evaluate_async("Bash", "ls -la", "run-session", None, cancel1c, OnTimeout::Deny)
+                .await
+        });
+
+        // Receive the PermissionRequest.
+        let request_id = loop {
+            let env = tokio::time::timeout(Duration::from_millis(500), rx.recv())
+                .await
+                .expect("timed out waiting for PermissionRequest")
+                .expect("bus closed");
+            if let Event::PermissionRequest { request_id, .. } = env.event {
+                break request_id;
+            }
+        };
+
+        // Resolve with AllowSession.
+        bus.publish(EventEnvelope::now(
+            "run-session".to_string(),
+            None,
+            Event::PermissionResolved {
+                request_id,
+                decision: PermissionDecision::AllowSession,
+                source: PermissionSource::User,
+            },
+        ));
+
+        let outcome1 = tokio::time::timeout(Duration::from_millis(500), handle1)
+            .await
+            .expect("task1 timed out")
+            .expect("task1 panicked");
+
+        assert_eq!(
+            outcome1,
+            GateOutcome::AnnotateAllow {
+                source: PermissionSource::User
+            },
+            "first call must resolve to AnnotateAllow{{User}}"
+        );
+
+        // --- Second call: must hit session cache, no bus publish ---
+        let cancel2 = CancellationToken::new();
+        let outcome2 = gate
+            .evaluate_async("Bash", "ls -la", "run-session", None, cancel2, OnTimeout::Deny)
+            .await;
+
+        assert_eq!(
+            outcome2,
+            GateOutcome::AnnotateAllow {
+                source: PermissionSource::SessionAllowlist
+            },
+            "second call must resolve immediately via session cache"
+        );
+
+        // Verify no new PermissionRequest was published (within a short window).
+        let nothing = tokio::time::timeout(Duration::from_millis(30), async {
+            loop {
+                let env = rx.recv().await.expect("bus closed");
+                if matches!(env.event, Event::PermissionRequest { .. }) {
+                    return true; // found one — unexpected
+                }
+            }
+        })
+        .await;
+
+        assert!(
+            nothing.is_err(),
+            "no PermissionRequest should be published for the cached second call"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test P.2.3-2: session_pattern_is_exact_arg_match
+    //
+    // Session entry for ("Bash", "ls -la") does NOT match ("Bash", "ls -la /tmp").
+    // A new PermissionRequest must be published for the different arg.
+    //
+    // DESIGN NOTE: session matching is exact-arg, not glob (Q2 minimality).
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn session_pattern_is_exact_arg_match() {
+        use std::sync::Arc;
+
+        let bus = EventBus::new();
+        let mut rx = bus.subscribe();
+        let gate = Arc::new(AsyncGate::new(
+            empty_config(OnTimeout::Deny),
+            bus.clone(),
+            Duration::from_secs(5),
+            "test-agent".to_string(),
+        ));
+
+        // Step 1: cache ("Bash", "ls -la") via AllowSession.
+        let g1 = Arc::clone(&gate);
+        let cancel1 = CancellationToken::new();
+        let cancel1c = cancel1.clone();
+        let handle1 = tokio::spawn(async move {
+            g1.evaluate_async("Bash", "ls -la", "run-exact", None, cancel1c, OnTimeout::Deny)
+                .await
+        });
+
+        let request_id = loop {
+            let env = tokio::time::timeout(Duration::from_millis(500), rx.recv())
+                .await
+                .expect("timed out")
+                .expect("bus closed");
+            if let Event::PermissionRequest { request_id, .. } = env.event {
+                break request_id;
+            }
+        };
+
+        bus.publish(EventEnvelope::now(
+            "run-exact".to_string(),
+            None,
+            Event::PermissionResolved {
+                request_id,
+                decision: PermissionDecision::AllowSession,
+                source: PermissionSource::User,
+            },
+        ));
+
+        tokio::time::timeout(Duration::from_millis(500), handle1)
+            .await
+            .expect("task1 timed out")
+            .expect("task1 panicked");
+
+        // Step 2: different arg — must NOT hit session cache.
+        let g2 = Arc::clone(&gate);
+        let cancel2 = CancellationToken::new();
+        let cancel2c = cancel2.clone();
+        let handle2 = tokio::spawn(async move {
+            g2.evaluate_async(
+                "Bash",
+                "ls -la /tmp", // different arg — exact match only (Q2)
+                "run-exact",
+                None,
+                cancel2c,
+                OnTimeout::Deny,
+            )
+            .await
+        });
+
+        // A new PermissionRequest must appear.
+        let got_new_request = tokio::time::timeout(Duration::from_millis(500), async {
+            loop {
+                let env = rx.recv().await.expect("bus closed");
+                if matches!(env.event, Event::PermissionRequest { .. }) {
+                    return true;
+                }
+            }
+        })
+        .await;
+
+        assert!(
+            got_new_request.is_ok(),
+            "different arg must not hit session cache — new PermissionRequest expected"
+        );
+
+        cancel2.cancel();
+        let _ = handle2.await;
+    }
+
+    // -----------------------------------------------------------------------
+    // Test P.2.3-3: run_complete_clears_session_allowlist
+    //
+    // After caching an entry, publish Event::RunComplete for that run_id
+    // (via the envelope's run_id field). A subsequent identical call must
+    // prompt again.
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn run_complete_clears_session_allowlist() {
+        use std::sync::Arc;
+
+        let bus = EventBus::new();
+        let mut rx = bus.subscribe();
+        let gate = Arc::new(AsyncGate::new(
+            empty_config(OnTimeout::Deny),
+            bus.clone(),
+            Duration::from_secs(5),
+            "test-agent".to_string(),
+        ));
+
+        // Step 1: cache via AllowSession.
+        let g1 = Arc::clone(&gate);
+        let cancel1 = CancellationToken::new();
+        let cancel1c = cancel1.clone();
+        let handle1 = tokio::spawn(async move {
+            g1.evaluate_async("Bash", "ls", "run-clear", None, cancel1c, OnTimeout::Deny)
+                .await
+        });
+
+        let request_id = loop {
+            let env = tokio::time::timeout(Duration::from_millis(500), rx.recv())
+                .await
+                .expect("timed out")
+                .expect("bus closed");
+            if let Event::PermissionRequest { request_id, .. } = env.event {
+                break request_id;
+            }
+        };
+
+        bus.publish(EventEnvelope::now(
+            "run-clear".to_string(),
+            None,
+            Event::PermissionResolved {
+                request_id,
+                decision: PermissionDecision::AllowSession,
+                source: PermissionSource::User,
+            },
+        ));
+
+        tokio::time::timeout(Duration::from_millis(500), handle1)
+            .await
+            .expect("task1 timed out")
+            .expect("task1 panicked");
+
+        // Verify cached — second call should return SessionAllowlist immediately.
+        let cancel_check = CancellationToken::new();
+        let outcome_cached = gate
+            .evaluate_async("Bash", "ls", "run-clear", None, cancel_check, OnTimeout::Deny)
+            .await;
+        assert_eq!(
+            outcome_cached,
+            GateOutcome::AnnotateAllow {
+                source: PermissionSource::SessionAllowlist
+            },
+            "must be cached before RunComplete"
+        );
+
+        // Step 2: publish RunComplete for this run_id (run_id is in the envelope).
+        // NOTE: Event::RunComplete has no run_id field — run_id lives in the
+        // EventEnvelope wrapper. The listener task must read envelope.run_id.
+        bus.publish(EventEnvelope::now(
+            "run-clear".to_string(),
+            None,
+            Event::RunComplete {
+                status: crate::events::RunStatus::Completed,
+                duration_ms: 100,
+                summary: "done".to_string(),
+            },
+        ));
+
+        // Give the listener task time to process the event.
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        // Step 3: same call must now prompt again (cache was cleared).
+        let g3 = Arc::clone(&gate);
+        let cancel3 = CancellationToken::new();
+        let cancel3c = cancel3.clone();
+        let handle3 = tokio::spawn(async move {
+            g3.evaluate_async("Bash", "ls", "run-clear", None, cancel3c, OnTimeout::Deny)
+                .await
+        });
+
+        let got_new_request = tokio::time::timeout(Duration::from_millis(500), async {
+            loop {
+                let env = rx.recv().await.expect("bus closed");
+                if matches!(env.event, Event::PermissionRequest { .. }) {
+                    return true;
+                }
+            }
+        })
+        .await;
+
+        assert!(
+            got_new_request.is_ok(),
+            "RunComplete must clear session cache — new PermissionRequest expected"
+        );
+
+        cancel3.cancel();
+        let _ = handle3.await;
+    }
+
+    // -----------------------------------------------------------------------
+    // Test P.2.3-4: cross_run_isolation
+    //
+    // Session entry cached under run_id_1 must NOT be visible under run_id_2.
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn cross_run_isolation() {
+        use std::sync::Arc;
+
+        let bus = EventBus::new();
+        let mut rx = bus.subscribe();
+        let gate = Arc::new(AsyncGate::new(
+            empty_config(OnTimeout::Deny),
+            bus.clone(),
+            Duration::from_secs(5),
+            "test-agent".to_string(),
+        ));
+
+        // Step 1: cache ("Bash", "ls -la") under run-A via AllowSession.
+        let g1 = Arc::clone(&gate);
+        let cancel1 = CancellationToken::new();
+        let cancel1c = cancel1.clone();
+        let handle1 = tokio::spawn(async move {
+            g1.evaluate_async("Bash", "ls -la", "run-A", None, cancel1c, OnTimeout::Deny)
+                .await
+        });
+
+        let request_id = loop {
+            let env = tokio::time::timeout(Duration::from_millis(500), rx.recv())
+                .await
+                .expect("timed out")
+                .expect("bus closed");
+            if let Event::PermissionRequest { request_id, .. } = env.event {
+                break request_id;
+            }
+        };
+
+        bus.publish(EventEnvelope::now(
+            "run-A".to_string(),
+            None,
+            Event::PermissionResolved {
+                request_id,
+                decision: PermissionDecision::AllowSession,
+                source: PermissionSource::User,
+            },
+        ));
+
+        tokio::time::timeout(Duration::from_millis(500), handle1)
+            .await
+            .expect("task1 timed out")
+            .expect("task1 panicked");
+
+        // Step 2: same tool/arg under run-B must NOT hit the session cache.
+        let g2 = Arc::clone(&gate);
+        let cancel2 = CancellationToken::new();
+        let cancel2c = cancel2.clone();
+        let handle2 = tokio::spawn(async move {
+            g2.evaluate_async("Bash", "ls -la", "run-B", None, cancel2c, OnTimeout::Deny)
+                .await
+        });
+
+        // A new PermissionRequest must appear for run-B.
+        let got_new_request = tokio::time::timeout(Duration::from_millis(500), async {
+            loop {
+                let env = rx.recv().await.expect("bus closed");
+                if let Event::PermissionRequest { .. } = env.event {
+                    return true;
+                }
+            }
+        })
+        .await;
+
+        assert!(
+            got_new_request.is_ok(),
+            "run-B must not share session state with run-A"
+        );
+
+        cancel2.cancel();
+        let _ = handle2.await;
+    }
+
     #[tokio::test]
     async fn concurrent_calls_are_independently_resolved() {
         use std::sync::Arc;

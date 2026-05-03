@@ -3,6 +3,7 @@ pub mod gate;
 pub mod gate_async;
 pub mod matcher;
 pub mod risk;
+pub mod session;
 pub use config::{
     OnTimeout, PermissionRule, PermissionsConfig, PermissionsConfigError, PermissionsSettings,
 };
