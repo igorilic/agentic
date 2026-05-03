@@ -1,18 +1,32 @@
 //! Async permission gate — wraps [`ConfigGate`] and adds a bus-based
 //! decision channel for the `Prompt` branch.
 //!
-//! See P.2.2 in docs/redesign/todo.md for the full design contract.
+//! When `evaluate` returns [`GateOutcome::Prompt`], [`AsyncGate::evaluate_async`]:
+//!
+//! 1. Mints a ULID `request_id`.
+//! 2. Subscribes to the bus (per-call subscription — simpler than a
+//!    long-running listener task; no shared routing map needed).
+//! 3. Publishes [`Event::PermissionRequest`] on the [`EventBus`].
+//! 4. Awaits a matching [`Event::PermissionResolved`] envelope via
+//!    `tokio::select!` over: (a) per-call bus subscriber filtered by
+//!    `request_id`, (b) configurable timeout, (c) external
+//!    [`CancellationToken`].
+//!
+//! On timeout a synthetic [`Event::PermissionResolved`] is published so the
+//! audit log and UI see the closure event. On cancellation no synthetic event
+//! is published (the run is shutting down — no further audit value).
 
 use std::time::Duration;
 
+use tokio::sync::broadcast::error::RecvError;
 use tokio_util::sync::CancellationToken;
 
-use crate::events::EventBus;
+use crate::events::{Event, EventBus, EventEnvelope, PermissionDecision, PermissionSource};
 use crate::permissions::config::{OnTimeout, PermissionsConfig};
 use crate::permissions::gate::{ConfigGate, GateOutcome, PermissionGate};
 
 // ---------------------------------------------------------------------------
-// Public API — STUBS (GREEN implementation to follow)
+// Public API
 // ---------------------------------------------------------------------------
 
 /// Async permission gate.
@@ -29,6 +43,12 @@ pub struct AsyncGate {
 
 impl AsyncGate {
     /// Create a new `AsyncGate`.
+    ///
+    /// - `config`: permissions config (allow/deny lists + settings).
+    /// - `bus`: the in-process event bus.
+    /// - `timeout`: how long to wait for a human decision before applying
+    ///   `default_on_timeout` (passed per-call so tests can override).
+    /// - `agent`: agent name emitted in `PermissionRequest` envelopes.
     pub fn new(config: PermissionsConfig, bus: EventBus, timeout: Duration, agent: String) -> Self {
         let inner = ConfigGate::new(config);
         Self {
@@ -39,17 +59,162 @@ impl AsyncGate {
         }
     }
 
-    /// Evaluate `(tool, arg)` asynchronously. STUB — panics.
+    /// Evaluate `(tool, arg)` asynchronously.
+    ///
+    /// - Non-prompt outcomes are returned immediately without touching the bus.
+    /// - For `Prompt` outcomes, publishes a `PermissionRequest` and awaits
+    ///   a matching `PermissionResolved` within `self.timeout`.
+    ///
+    /// # Arguments
+    ///
+    /// - `run_id`: forwarded into published envelopes.
+    /// - `step_id`: forwarded into published envelopes (`None` is fine).
+    /// - `cancel`: cancelled externally to abort the pending decision early.
+    /// - `default_on_timeout`: what to do when no decision arrives in time.
     pub async fn evaluate_async(
         &self,
-        _tool: &str,
-        _arg: &str,
-        _run_id: &str,
-        _step_id: Option<&str>,
-        _cancel: CancellationToken,
-        _default_on_timeout: OnTimeout,
+        tool: &str,
+        arg: &str,
+        run_id: &str,
+        step_id: Option<&str>,
+        cancel: CancellationToken,
+        default_on_timeout: OnTimeout,
     ) -> GateOutcome {
-        todo!("P.2.2 GREEN: implement evaluate_async")
+        // 1. Run sync evaluation first.
+        match self.inner.evaluate(tool, arg) {
+            // Non-prompt: return immediately, no bus interaction.
+            non_prompt @ (GateOutcome::AnnotateAllow { .. } | GateOutcome::AnnotateDeny { .. }) => {
+                non_prompt
+            }
+            GateOutcome::Prompt { risk } => {
+                // 2. Mint a fresh request_id.
+                let request_id = ulid::Ulid::new().to_string();
+
+                // 3. Subscribe BEFORE publishing so we never miss a fast reply.
+                let mut subscriber = self.bus.subscribe();
+
+                // Derive scope from tool family (v1: tool name is the scope).
+                let scope = tool.to_string();
+
+                // 4. Publish PermissionRequest.
+                self.bus.publish(EventEnvelope::now(
+                    run_id.to_string(),
+                    step_id.map(str::to_string),
+                    Event::PermissionRequest {
+                        request_id: request_id.clone(),
+                        agent: self.agent.clone(),
+                        tool: tool.to_string(),
+                        arg: arg.to_string(),
+                        scope,
+                        risk,
+                        reason: String::new(),
+                    },
+                ));
+
+                // 5. Wait for matching PermissionResolved (or timeout/cancel).
+                match wait_for_decision(&mut subscriber, &request_id, self.timeout, cancel).await {
+                    WaitResult::Resolved { decision, source } => match decision {
+                        PermissionDecision::AllowOnce | PermissionDecision::AllowSession => {
+                            GateOutcome::AnnotateAllow { source }
+                        }
+                        PermissionDecision::Deny | PermissionDecision::TimedOut => {
+                            GateOutcome::AnnotateDeny { source }
+                        }
+                    },
+
+                    WaitResult::TimedOut => {
+                        // Publish synthetic resolved event for audit/UI.
+                        self.bus.publish(EventEnvelope::now(
+                            run_id.to_string(),
+                            step_id.map(str::to_string),
+                            Event::PermissionResolved {
+                                request_id,
+                                decision: PermissionDecision::TimedOut,
+                                source: PermissionSource::Timeout,
+                            },
+                        ));
+
+                        match default_on_timeout {
+                            OnTimeout::Allow => GateOutcome::AnnotateAllow {
+                                source: PermissionSource::Timeout,
+                            },
+                            OnTimeout::Deny => GateOutcome::AnnotateDeny {
+                                source: PermissionSource::Timeout,
+                            },
+                        }
+                    }
+
+                    WaitResult::Cancelled => GateOutcome::AnnotateDeny {
+                        source: PermissionSource::Cancelled,
+                    },
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Internal wait helper
+// ---------------------------------------------------------------------------
+
+enum WaitResult {
+    Resolved {
+        decision: PermissionDecision,
+        source: PermissionSource,
+    },
+    TimedOut,
+    Cancelled,
+}
+
+/// Wait for a `PermissionResolved` envelope whose `request_id` matches, or
+/// until the timeout fires, or the cancel token is cancelled.
+///
+/// Envelopes with a different `request_id` are silently ignored and the loop
+/// continues waiting.
+async fn wait_for_decision(
+    subscriber: &mut tokio::sync::broadcast::Receiver<EventEnvelope>,
+    request_id: &str,
+    timeout: Duration,
+    cancel: CancellationToken,
+) -> WaitResult {
+    let deadline = tokio::time::sleep(timeout);
+    tokio::pin!(deadline);
+
+    loop {
+        tokio::select! {
+            biased;
+
+            // Cancellation has highest priority.
+            _ = cancel.cancelled() => return WaitResult::Cancelled,
+
+            // Timeout.
+            _ = &mut deadline => return WaitResult::TimedOut,
+
+            // Bus event.
+            recv = subscriber.recv() => match recv {
+                Ok(envelope) => {
+                    if let Event::PermissionResolved {
+                        request_id: ref rid,
+                        decision,
+                        source,
+                    } = envelope.event
+                        && rid == request_id
+                    {
+                        return WaitResult::Resolved { decision, source };
+                    }
+                    // Different request_id or other event variant — keep waiting.
+                }
+                Err(RecvError::Lagged(_)) => {
+                    // We lagged; some events were dropped from the broadcast
+                    // buffer. Keep waiting — the matching resolved event may
+                    // still arrive.
+                }
+                Err(RecvError::Closed) => {
+                    // Bus shut down — treat as cancellation.
+                    return WaitResult::Cancelled;
+                }
+            },
+        }
     }
 }
 
@@ -73,9 +238,7 @@ mod tests {
         PermissionsConfig {
             allowlist: vec![],
             denylist: vec![],
-            settings: PermissionsSettings {
-                default_on_timeout,
-            },
+            settings: PermissionsSettings { default_on_timeout },
         }
     }
 
@@ -158,8 +321,7 @@ mod tests {
             } => {
                 assert!(!request_id.is_empty(), "request_id must not be empty");
                 assert_eq!(request_id.len(), 26, "ULID must be 26 chars");
-                ulid::Ulid::from_string(&request_id)
-                    .expect("request_id must be a parseable ULID");
+                ulid::Ulid::from_string(&request_id).expect("request_id must be a parseable ULID");
                 assert_eq!(agent, "test-agent");
                 assert_eq!(tool, "CustomTool");
                 assert_eq!(arg, "x");
@@ -252,15 +414,8 @@ mod tests {
         let cancel = CancellationToken::new();
         let cancel2 = cancel.clone();
         let handle = tokio::spawn(async move {
-            gate.evaluate_async(
-                "CustomTool",
-                "x",
-                "run-1",
-                None,
-                cancel2,
-                OnTimeout::Deny,
-            )
-            .await
+            gate.evaluate_async("CustomTool", "x", "run-1", None, cancel2, OnTimeout::Deny)
+                .await
         });
 
         let correct_request_id = loop {
@@ -289,9 +444,12 @@ mod tests {
             _ = handle => false,
             _ = tokio::time::sleep(Duration::from_millis(50)) => true,
         };
-        assert!(still_pending, "task must stay pending after mismatched request_id");
+        assert!(
+            still_pending,
+            "task must stay pending after mismatched request_id"
+        );
 
-        // Publish correct id to unblock (consumed by the background task).
+        // Publish correct id to unblock background task.
         bus.publish(EventEnvelope::now(
             "run-1".to_string(),
             None,
@@ -322,15 +480,8 @@ mod tests {
 
         let cancel = CancellationToken::new();
         let handle = tokio::spawn(async move {
-            gate.evaluate_async(
-                "CustomTool",
-                "x",
-                "run-1",
-                None,
-                cancel,
-                OnTimeout::Deny,
-            )
-            .await
+            gate.evaluate_async("CustomTool", "x", "run-1", None, cancel, OnTimeout::Deny)
+                .await
         });
 
         let outcome = tokio::time::timeout(Duration::from_millis(500), handle)
@@ -345,6 +496,7 @@ mod tests {
             },
         );
 
+        // Verify synthetic PermissionResolved was published.
         let (_, decision, source) = next_resolved(&mut rx).await;
         assert_eq!(decision, PermissionDecision::TimedOut);
         assert_eq!(source, PermissionSource::Timeout);
@@ -367,15 +519,8 @@ mod tests {
 
         let cancel = CancellationToken::new();
         let handle = tokio::spawn(async move {
-            gate.evaluate_async(
-                "CustomTool",
-                "x",
-                "run-1",
-                None,
-                cancel,
-                OnTimeout::Allow,
-            )
-            .await
+            gate.evaluate_async("CustomTool", "x", "run-1", None, cancel, OnTimeout::Allow)
+                .await
         });
 
         let outcome = tokio::time::timeout(Duration::from_millis(500), handle)
@@ -406,15 +551,8 @@ mod tests {
         let cancel = CancellationToken::new();
         let cancel2 = cancel.clone();
         let handle = tokio::spawn(async move {
-            gate.evaluate_async(
-                "CustomTool",
-                "x",
-                "run-1",
-                None,
-                cancel2,
-                OnTimeout::Deny,
-            )
-            .await
+            gate.evaluate_async("CustomTool", "x", "run-1", None, cancel2, OnTimeout::Deny)
+                .await
         });
 
         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -460,6 +598,7 @@ mod tests {
             },
         );
 
+        // No envelopes should be published — verify within a short window.
         let nothing = tokio::time::timeout(Duration::from_millis(50), rx.recv()).await;
         assert!(
             nothing.is_err(),
