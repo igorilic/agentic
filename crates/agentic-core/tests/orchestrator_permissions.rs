@@ -11,12 +11,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use agentic_core::permissions::config::{OnTimeout, PermissionRule, PermissionsConfig, PermissionsSettings};
+use agentic_core::events::{PermissionDecision, PermissionSource};
+use agentic_core::permissions::config::{
+    OnTimeout, PermissionRule, PermissionsConfig, PermissionsSettings,
+};
 use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     Db, Event, EventBus, EventEnvelope, Paths, PipelineOrchestrator, RunRepo, StepRepo,
 };
-use agentic_core::events::{PermissionDecision, PermissionSource};
 use rusqlite::params;
 
 // ---------------------------------------------------------------------------
@@ -48,11 +50,15 @@ fn make_config(allow: &[&str], deny: &[&str]) -> PermissionsConfig {
     PermissionsConfig {
         allowlist: allow
             .iter()
-            .map(|s| PermissionRule { pattern: s.to_string() })
+            .map(|s| PermissionRule {
+                pattern: s.to_string(),
+            })
             .collect(),
         denylist: deny
             .iter()
-            .map(|s| PermissionRule { pattern: s.to_string() })
+            .map(|s| PermissionRule {
+                pattern: s.to_string(),
+            })
             .collect(),
         settings: PermissionsSettings {
             default_on_timeout: OnTimeout::Deny,
@@ -139,12 +145,16 @@ async fn tool_use_start_with_allowlist_hit_emits_permission_resolved() {
         },
     ));
 
-    let event = next_permission_event(&mut rx).await.expect(
-        "expected PermissionResolved for allowlist hit, but timed out waiting",
-    );
+    let event = next_permission_event(&mut rx)
+        .await
+        .expect("expected PermissionResolved for allowlist hit, but timed out waiting");
 
     match event {
-        Event::PermissionResolved { decision, source, request_id } => {
+        Event::PermissionResolved {
+            decision,
+            source,
+            request_id,
+        } => {
             assert_eq!(
                 decision,
                 PermissionDecision::AllowOnce,
@@ -193,12 +203,14 @@ async fn tool_use_start_with_denylist_hit_emits_permission_resolved_deny_plus_wa
         },
     ));
 
-    let event = next_permission_event(&mut rx).await.expect(
-        "expected PermissionResolved for denylist hit, but timed out waiting",
-    );
+    let event = next_permission_event(&mut rx)
+        .await
+        .expect("expected PermissionResolved for denylist hit, but timed out waiting");
 
     match event {
-        Event::PermissionResolved { decision, source, .. } => {
+        Event::PermissionResolved {
+            decision, source, ..
+        } => {
             assert_eq!(
                 decision,
                 PermissionDecision::Deny,
@@ -254,9 +266,9 @@ async fn tool_use_start_with_no_match_emits_permission_request() {
         },
     ));
 
-    let event = next_permission_event(&mut rx).await.expect(
-        "expected PermissionRequest for unmatched tool, but timed out waiting",
-    );
+    let event = next_permission_event(&mut rx)
+        .await
+        .expect("expected PermissionRequest for unmatched tool, but timed out waiting");
 
     match event {
         Event::PermissionRequest { tool, agent, .. } => {
@@ -339,12 +351,14 @@ async fn bash_arg_extraction_uses_command_field() {
         },
     ));
 
-    let event = next_permission_event(&mut rx).await.expect(
-        "expected PermissionResolved(Deny) for Bash denylist hit, timed out",
-    );
+    let event = next_permission_event(&mut rx)
+        .await
+        .expect("expected PermissionResolved(Deny) for Bash denylist hit, timed out");
 
     match event {
-        Event::PermissionResolved { decision, source, .. } => {
+        Event::PermissionResolved {
+            decision, source, ..
+        } => {
             assert_eq!(
                 decision,
                 PermissionDecision::Deny,

@@ -129,7 +129,12 @@ async fn four_scripted_backends_complete_full_pipeline_and_persist_all_events() 
     let agent_to_step_id = seed_steps(&steps_repo, "run1", &pipeline);
 
     // --- Spawn orchestrator + persister ---
-    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone(), passthrough_gate(&bus));
+    let orch_handle = PipelineOrchestrator::spawn(
+        bus.clone(),
+        runs.clone(),
+        steps_repo.clone(),
+        passthrough_gate(&bus),
+    );
     let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
     // --- Publish RunStarted ---

@@ -107,7 +107,12 @@ async fn happy_path_run_drives_sm_events_through_orchestrator_to_completed_state
     // 3. Spawn orchestrator (subscribes before RunStarted is published).
     //    The SM's Start input emits RunStarted first; the orchestrator handles
     //    it and transitions the run Pending → Running automatically.
-    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone(), passthrough_gate(&bus));
+    let handle = PipelineOrchestrator::spawn(
+        bus.clone(),
+        runs.clone(),
+        steps.clone(),
+        passthrough_gate(&bus),
+    );
 
     // 5. Construct SM with the same pipeline
     let mut sm = PipelineSm::new("run1".to_string(), pipeline.clone());

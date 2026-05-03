@@ -110,7 +110,12 @@ async fn persister_writes_all_events_under_heavy_volume() {
         .unwrap();
 
     // Spawn orchestrator + persister.
-    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone(), passthrough_gate(&bus));
+    let orch_handle = PipelineOrchestrator::spawn(
+        bus.clone(),
+        runs.clone(),
+        steps_repo.clone(),
+        passthrough_gate(&bus),
+    );
     let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
     // Seed a step row so orchestrator has something to mark Running -> Passed.
@@ -216,7 +221,12 @@ async fn persister_and_orchestrator_survive_interleaved_writes() {
     let steps_repo = StepRepo::new(&db);
     runs.insert(seed_run_running("run-int", "ws-int")).unwrap();
 
-    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone(), passthrough_gate(&bus));
+    let orch_handle = PipelineOrchestrator::spawn(
+        bus.clone(),
+        runs.clone(),
+        steps_repo.clone(),
+        passthrough_gate(&bus),
+    );
     let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
     // Simulate 3 sequential steps with real orchestrator + persister interleaving.

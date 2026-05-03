@@ -7,7 +7,9 @@ use tokio_util::sync::CancellationToken;
 use crate::Result;
 use crate::db::runs::RunRepo;
 use crate::db::steps::StepRepo;
-use crate::events::{Event, EventBus, EventEnvelope, PermissionDecision, PermissionSource, RunStatus, StepStatus};
+use crate::events::{
+    Event, EventBus, EventEnvelope, PermissionDecision, PermissionSource, RunStatus, StepStatus,
+};
 use crate::permissions::config::OnTimeout;
 use crate::permissions::gate::GateOutcome;
 use crate::permissions::gate_async::AsyncGate;
@@ -47,7 +49,12 @@ impl PipelineOrchestrator {
     /// Per-tool-call gating uses approach (a): a `tokio::spawn` per
     /// `ToolUseStart` so the bus-consuming loop is never blocked behind the
     /// gate's interactive-prompt timeout (up to 60 s by default).
-    pub fn spawn(bus: EventBus, runs: RunRepo, steps: StepRepo, gate: Arc<AsyncGate>) -> JoinHandle<()> {
+    pub fn spawn(
+        bus: EventBus,
+        runs: RunRepo,
+        steps: StepRepo,
+        gate: Arc<AsyncGate>,
+    ) -> JoinHandle<()> {
         let mut subscriber = bus.subscribe();
         tokio::spawn(async move {
             loop {
@@ -102,7 +109,9 @@ fn handle_tool_use_start(envelope: EventEnvelope, gate: Arc<AsyncGate>, bus: Eve
     let step_id = envelope.step_id.clone();
 
     let (tool_name, input) = match &envelope.event {
-        Event::ToolUseStart { tool_name, input, .. } => (tool_name.clone(), input.clone()),
+        Event::ToolUseStart {
+            tool_name, input, ..
+        } => (tool_name.clone(), input.clone()),
         _ => return, // unreachable — caller checks the variant
     };
 

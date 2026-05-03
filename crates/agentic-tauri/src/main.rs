@@ -67,9 +67,8 @@ fn main() {
                 // Load permissions config from the app data dir, falling back
                 // to the built-in default if the file does not exist.
                 let permissions_path = paths.data_dir().join("permissions.toml");
-                let permissions_config =
-                    agentic_core::PermissionsConfig::load(&permissions_path)
-                        .unwrap_or_else(|_| agentic_core::PermissionsConfig::builtin_default());
+                let permissions_config = agentic_core::PermissionsConfig::load(&permissions_path)
+                    .unwrap_or_else(|_| agentic_core::PermissionsConfig::builtin_default());
                 let gate = Arc::new(AsyncGate::new(
                     permissions_config,
                     (*bus).clone(),
