@@ -64,6 +64,7 @@ pub use auth::{PkceChallenge, generate_state};
 pub mod permissions;
 pub use permissions::{
     OnTimeout, PermissionRule, PermissionsConfig, PermissionsConfigError, PermissionsSettings,
+    classify,
 };
 mod time;
 

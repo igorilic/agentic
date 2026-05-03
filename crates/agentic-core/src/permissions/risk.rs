@@ -11,14 +11,79 @@
 //! Future v2 may consolidate by letting users tag risk per pattern in
 //! permissions.toml. See Q11 in the GH #88 plan.
 
+use std::sync::OnceLock;
+
+use crate::events::PermissionRisk;
+use crate::permissions::matcher::Pattern;
+
+/// File-write tool names that map to `Medium` risk.
+const FILE_WRITE_TOOLS: &[&str] = &["Write", "Edit", "MultiEdit", "create", "str_replace"];
+
+/// High-risk pattern strings — compiled once via [`high_risk_patterns`].
+static HIGH_RISK_STR: &[&str] = &[
+    // Claude casing
+    "Bash(rm -rf *)",
+    "Bash(sudo *)",
+    "Bash(kubectl delete *)",
+    "Bash(git reset --hard*)",
+    "Bash(git push --force*)",
+    "Bash(* | sh)",
+    // Copilot lowercase casing
+    "bash(rm -rf *)",
+    "bash(sudo *)",
+    "bash(kubectl delete *)",
+    "bash(git reset --hard*)",
+    "bash(git push --force*)",
+    "bash(* | sh)",
+];
+
+fn high_risk_patterns() -> &'static Vec<Pattern> {
+    static PATTERNS: OnceLock<Vec<Pattern>> = OnceLock::new();
+    PATTERNS.get_or_init(|| {
+        HIGH_RISK_STR
+            .iter()
+            .map(|s| Pattern::parse(s).expect("static high-risk pattern must be valid"))
+            .collect()
+    })
+}
+
+/// Classify a `(tool, arg)` pair into a [`PermissionRisk`] level.
+///
+/// Priority order:
+/// 1. Match against the High-risk static table → `High`.
+/// 2. Tool is `Bash` (Claude) or `bash` (Copilot) and didn't match #1 → `Medium`.
+/// 3. Tool is one of the file-write tools → `Medium`.
+/// 4. Everything else → `Low`.
+pub fn classify(tool: &str, arg: &str) -> PermissionRisk {
+    // 1. High-risk table
+    for pattern in high_risk_patterns() {
+        if pattern.matches(tool, arg) {
+            return PermissionRisk::High;
+        }
+    }
+
+    // 2. Any Bash/bash that didn't hit High
+    if tool == "Bash" || tool == "bash" {
+        return PermissionRisk::Medium;
+    }
+
+    // 3. File-write tools
+    if FILE_WRITE_TOOLS.contains(&tool) {
+        return PermissionRisk::Medium;
+    }
+
+    // 4. Everything else
+    PermissionRisk::Low
+}
+
 // ---------------------------------------------------------------------------
-// Tests (RED phase — no implementation yet)
+// Tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
-    use crate::events::PermissionRisk;
     use super::classify;
+    use crate::events::PermissionRisk;
 
     // 1. bash_rm_rf_is_high
     #[test]
