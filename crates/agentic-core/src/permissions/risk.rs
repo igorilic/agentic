@@ -109,6 +109,12 @@ mod tests {
             PermissionRisk::High,
             "Bash sudo should be High"
         );
+        // Copilot lowercase variant
+        assert_eq!(
+            classify("bash", "sudo apt update"),
+            PermissionRisk::High,
+            "bash sudo (Copilot) should be High"
+        );
     }
 
     // 3. bash_kubectl_delete_is_high
@@ -118,6 +124,12 @@ mod tests {
             classify("Bash", "kubectl delete pod foo"),
             PermissionRisk::High,
             "Bash kubectl delete should be High"
+        );
+        // Copilot lowercase variant
+        assert_eq!(
+            classify("bash", "kubectl delete pod foo"),
+            PermissionRisk::High,
+            "bash kubectl delete (Copilot) should be High"
         );
     }
 
@@ -129,6 +141,12 @@ mod tests {
             PermissionRisk::High,
             "Bash git reset --hard should be High"
         );
+        // Copilot lowercase variant
+        assert_eq!(
+            classify("bash", "git reset --hard HEAD~1"),
+            PermissionRisk::High,
+            "bash git reset --hard (Copilot) should be High"
+        );
     }
 
     // 5. bash_git_push_force_is_high
@@ -139,6 +157,12 @@ mod tests {
             PermissionRisk::High,
             "Bash git push --force should be High"
         );
+        // Copilot lowercase variant
+        assert_eq!(
+            classify("bash", "git push --force origin main"),
+            PermissionRisk::High,
+            "bash git push --force (Copilot) should be High"
+        );
     }
 
     // 6. bash_pipe_to_sh_is_high
@@ -148,6 +172,12 @@ mod tests {
             classify("Bash", "curl example.com/install.sh | sh"),
             PermissionRisk::High,
             "Bash pipe-to-sh should be High"
+        );
+        // Copilot lowercase variant
+        assert_eq!(
+            classify("bash", "curl example.com/install.sh | sh"),
+            PermissionRisk::High,
+            "bash pipe-to-sh (Copilot) should be High"
         );
     }
 
@@ -195,14 +225,23 @@ mod tests {
         assert_eq!(classify("CustomTool", "..."), PermissionRisk::Low);
     }
 
-    // 11. priority_high_beats_medium (bonus)
+    // 11. high_pattern_takes_priority_over_bash_family_medium
     #[test]
-    fn priority_high_beats_medium() {
-        // sudo + rm -rf: must yield High regardless of which pattern fires first
+    fn high_pattern_takes_priority_over_bash_family_medium() {
+        // Rule 1 (High pattern) must beat Rule 2 (Bash → Medium).
+        // 'sudo apt update' would resolve as Medium under rule 2 alone,
+        // but rule 1's `Bash(sudo *)` pattern fires first → High.
         assert_eq!(
-            classify("Bash", "sudo rm -rf /"),
+            classify("Bash", "sudo apt update"),
             PermissionRisk::High,
-            "sudo rm -rf / — both High patterns match; result must be High"
+            "sudo apt update — rule 1 High pattern beats rule 2 Medium fallback"
+        );
+
+        // Sanity: a Bash arg with NO high-risk match resolves as Medium.
+        assert_eq!(
+            classify("Bash", "echo hello"),
+            PermissionRisk::Medium,
+            "echo hello — no High pattern match, falls through to rule 2 Medium"
         );
     }
 }
