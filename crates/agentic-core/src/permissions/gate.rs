@@ -19,7 +19,7 @@ use crate::permissions::matcher::Pattern;
 use crate::permissions::risk;
 
 // ---------------------------------------------------------------------------
-// Public types (stubs — GREEN phase fills in the implementation)
+// Public types
 // ---------------------------------------------------------------------------
 
 /// The outcome of a permission gate evaluation.
@@ -42,6 +42,8 @@ pub trait PermissionGate {
 pub struct ConfigGate {
     allow: Vec<Pattern>,
     deny: Vec<Pattern>,
+    /// Used by `evaluate_async` (P.2.2) for `default_on_timeout` configuration.
+    /// Stored at `new()` time so the gate doesn't re-borrow the config later.
     #[allow(dead_code)]
     settings: PermissionsSettings,
 }
@@ -243,5 +245,32 @@ mod tests {
             },
             "multiple overlapping allow patterns — first match wins, same source"
         );
+    }
+
+    // 9. empty_config_always_prompts
+    #[test]
+    fn empty_config_always_prompts() {
+        let gate = ConfigGate::new(cfg_with(&[], &[]));
+        // Empty config means no allow rules and no deny rules — every
+        // (tool, arg) combination falls through to Prompt with the
+        // classifier's risk verdict.
+        assert!(matches!(
+            gate.evaluate("Read", "/tmp/x"),
+            GateOutcome::Prompt {
+                risk: PermissionRisk::Low
+            }
+        ));
+        assert!(matches!(
+            gate.evaluate("Bash", "ls"),
+            GateOutcome::Prompt {
+                risk: PermissionRisk::Medium
+            }
+        ));
+        assert!(matches!(
+            gate.evaluate("CustomTool", ""),
+            GateOutcome::Prompt {
+                risk: PermissionRisk::Low
+            }
+        ));
     }
 }
