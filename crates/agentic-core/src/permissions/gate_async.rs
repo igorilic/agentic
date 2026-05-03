@@ -24,6 +24,7 @@ use tokio_util::sync::CancellationToken;
 use crate::events::{Event, EventBus, EventEnvelope, PermissionDecision, PermissionSource};
 use crate::permissions::config::{OnTimeout, PermissionsConfig};
 use crate::permissions::gate::{ConfigGate, GateOutcome, PermissionGate};
+use crate::permissions::session::SessionAllowlist;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -34,11 +35,18 @@ use crate::permissions::gate::{ConfigGate, GateOutcome, PermissionGate};
 /// Wraps [`ConfigGate`] and adds bus-based interactive prompting for the
 /// `Prompt` branch. Non-prompt outcomes (allow/deny from config) are returned
 /// synchronously without any bus interaction.
+///
+/// A per-run in-memory [`SessionAllowlist`] is maintained: when the user
+/// resolves a prompt with `AllowSession`, the `(tool, arg)` pair is cached.
+/// Subsequent identical calls within the same run return immediately without
+/// any bus interaction. The cache is cleared when `Event::RunComplete` is
+/// observed for that run (via a background listener task spawned in `new`).
 pub struct AsyncGate {
     inner: ConfigGate,
     bus: EventBus,
     timeout: Duration,
     agent: String,
+    session: SessionAllowlist,
 }
 
 impl std::fmt::Debug for AsyncGate {
@@ -61,13 +69,46 @@ impl AsyncGate {
     /// - `timeout`: how long to wait for a human decision before applying
     ///   `default_on_timeout` (passed per-call so tests can override).
     /// - `agent`: agent name emitted in `PermissionRequest` envelopes.
+    ///
+    /// Internally spawns a long-running background task that subscribes to the
+    /// bus and calls [`SessionAllowlist::drop_run`] when `Event::RunComplete`
+    /// arrives. The task is fire-and-forget: it is aborted when the tokio
+    /// runtime shuts down.
     pub fn new(config: PermissionsConfig, bus: EventBus, timeout: Duration, agent: String) -> Self {
         let inner = ConfigGate::new(config);
+        let session = SessionAllowlist::new();
+
+        // Spawn the RunComplete listener task. We hold an Arc-backed clone of
+        // the SessionAllowlist so the task and the gate share state without
+        // either needing to own the other.
+        let session_clone = session.clone();
+        let mut run_complete_sub = bus.subscribe();
+        tokio::spawn(async move {
+            loop {
+                match run_complete_sub.recv().await {
+                    Ok(envelope) => {
+                        if matches!(envelope.event, Event::RunComplete { .. }) {
+                            session_clone.drop_run(&envelope.run_id);
+                        }
+                    }
+                    Err(RecvError::Lagged(_)) => {
+                        // Missed some events due to lag; keep listening.
+                        // A RunComplete may still arrive in the next batch.
+                    }
+                    Err(RecvError::Closed) => {
+                        // Bus shut down — exit the listener loop.
+                        break;
+                    }
+                }
+            }
+        });
+
         Self {
             inner,
             bus,
             timeout,
             agent,
+            session,
         }
     }
 
@@ -92,7 +133,15 @@ impl AsyncGate {
         cancel: CancellationToken,
         default_on_timeout: OnTimeout,
     ) -> GateOutcome {
-        // 1. Run sync evaluation first.
+        // 0. Check per-run session allowlist BEFORE running the sync gate.
+        //    A cached (tool, arg) pair returns immediately — no bus interaction.
+        if self.session.contains(run_id, tool, arg) {
+            return GateOutcome::AnnotateAllow {
+                source: PermissionSource::SessionAllowlist,
+            };
+        }
+
+        // 1. Run sync evaluation.
         match self.inner.evaluate(tool, arg) {
             // Non-prompt: return immediately, no bus interaction.
             non_prompt @ (GateOutcome::AnnotateAllow { .. } | GateOutcome::AnnotateDeny { .. }) => {
@@ -131,7 +180,10 @@ impl AsyncGate {
                 // 5. Wait for matching PermissionResolved (or timeout/cancel).
                 match wait_for_decision(&mut subscriber, &request_id, self.timeout, cancel).await {
                     WaitResult::Resolved { decision, source } => match decision {
-                        PermissionDecision::AllowOnce | PermissionDecision::AllowSession => {
+                        PermissionDecision::AllowOnce => GateOutcome::AnnotateAllow { source },
+                        PermissionDecision::AllowSession => {
+                            // Cache this pair so future identical calls skip the prompt.
+                            self.session.insert(run_id, tool, arg);
                             GateOutcome::AnnotateAllow { source }
                         }
                         PermissionDecision::Deny | PermissionDecision::TimedOut => {
@@ -660,8 +712,15 @@ mod tests {
         let cancel1 = CancellationToken::new();
         let cancel1c = cancel1.clone();
         let handle1 = tokio::spawn(async move {
-            g1.evaluate_async("Bash", "ls -la", "run-session", None, cancel1c, OnTimeout::Deny)
-                .await
+            g1.evaluate_async(
+                "Bash",
+                "ls -la",
+                "run-session",
+                None,
+                cancel1c,
+                OnTimeout::Deny,
+            )
+            .await
         });
 
         // Receive the PermissionRequest.
@@ -702,7 +761,14 @@ mod tests {
         // --- Second call: must hit session cache, no bus publish ---
         let cancel2 = CancellationToken::new();
         let outcome2 = gate
-            .evaluate_async("Bash", "ls -la", "run-session", None, cancel2, OnTimeout::Deny)
+            .evaluate_async(
+                "Bash",
+                "ls -la",
+                "run-session",
+                None,
+                cancel2,
+                OnTimeout::Deny,
+            )
             .await;
 
         assert_eq!(
@@ -757,8 +823,15 @@ mod tests {
         let cancel1 = CancellationToken::new();
         let cancel1c = cancel1.clone();
         let handle1 = tokio::spawn(async move {
-            g1.evaluate_async("Bash", "ls -la", "run-exact", None, cancel1c, OnTimeout::Deny)
-                .await
+            g1.evaluate_async(
+                "Bash",
+                "ls -la",
+                "run-exact",
+                None,
+                cancel1c,
+                OnTimeout::Deny,
+            )
+            .await
         });
 
         let request_id = loop {
@@ -880,7 +953,14 @@ mod tests {
         // Verify cached — second call should return SessionAllowlist immediately.
         let cancel_check = CancellationToken::new();
         let outcome_cached = gate
-            .evaluate_async("Bash", "ls", "run-clear", None, cancel_check, OnTimeout::Deny)
+            .evaluate_async(
+                "Bash",
+                "ls",
+                "run-clear",
+                None,
+                cancel_check,
+                OnTimeout::Deny,
+            )
             .await;
         assert_eq!(
             outcome_cached,

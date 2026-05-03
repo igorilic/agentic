@@ -23,12 +23,15 @@ use std::sync::{Arc, Mutex};
 /// field. We alias it here for readability.
 pub type RunId = str;
 
+/// Inner map type: run_id → set of (tool, arg) pairs.
+type AllowlistMap = Mutex<HashMap<String, HashSet<(String, String)>>>;
+
 /// Per-run in-memory cache of user-approved `(tool, arg)` pairs.
 ///
 /// Cheap to clone: the `Arc` is cloned, not the inner map.
 #[derive(Debug, Clone, Default)]
 pub struct SessionAllowlist {
-    inner: Arc<Mutex<HashMap<String, HashSet<(String, String)>>>>,
+    inner: Arc<AllowlistMap>,
 }
 
 impl SessionAllowlist {
@@ -113,8 +116,14 @@ mod tests {
 
         al.drop_run("run-1");
 
-        assert!(!al.contains("run-1", "Bash", "ls"), "run-1 should be cleared");
-        assert!(al.contains("run-2", "Bash", "ls"), "run-2 must be unaffected");
+        assert!(
+            !al.contains("run-1", "Bash", "ls"),
+            "run-1 should be cleared"
+        );
+        assert!(
+            al.contains("run-2", "Bash", "ls"),
+            "run-2 must be unaffected"
+        );
     }
 
     // -----------------------------------------------------------------------

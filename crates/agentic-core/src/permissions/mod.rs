@@ -11,3 +11,4 @@ pub use gate::{ConfigGate, GateOutcome, PermissionGate};
 pub use gate_async::AsyncGate;
 pub use matcher::{Pattern, PatternParseError};
 pub use risk::classify;
+pub use session::SessionAllowlist;
