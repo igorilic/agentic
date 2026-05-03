@@ -2282,6 +2282,11 @@ pane**. The dual binding is the contract:
     - Why deferred: mouse handling in ratatui requires plumbing `MouseEvent` through the keyboard event loop, including hit-testing against the modal Rect. Non-trivial; keyboard-driven Esc covers the core flow.
     - Trigger: before T.13.8 integration milestone, OR earlier if a user reports it.
 
+16. **Permission gate: SessionAllowlist memory leak on abnormal run exit** (GH #102).
+    - What's missing: `permissions/session.rs` clears entries via the RunComplete listener task. If a run terminates abnormally (crash, cancellation that bypasses RunComplete, error path), entries for that run_id remain until process exit. Long-lived processes (Tauri) accumulate stale entries.
+    - Why deferred: v1-acceptable; entries are tiny and Tauri restarts naturally on shutdown. Premature mitigation muddies the v1 contract.
+    - Trigger: when the gate is observed reused across many runs without restart in production, OR when memory profiling shows SessionAllowlist as a measurable retainer. Approach: TTL, run-count LRU, or hard cap.
+
 ---
 
 ## Phase P — Backend permission stream (GH #88)
