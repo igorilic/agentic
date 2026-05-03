@@ -41,6 +41,18 @@ pub struct AsyncGate {
     agent: String,
 }
 
+impl std::fmt::Debug for AsyncGate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // `ConfigGate` and `EventBus` do not implement `Debug`, so we surface
+        // the fields that are most useful for diagnostics and omit the rest
+        // via `finish_non_exhaustive`.
+        f.debug_struct("AsyncGate")
+            .field("timeout", &self.timeout)
+            .field("agent", &self.agent)
+            .finish_non_exhaustive()
+    }
+}
+
 impl AsyncGate {
     /// Create a new `AsyncGate`.
     ///
@@ -107,6 +119,11 @@ impl AsyncGate {
                         arg: arg.to_string(),
                         scope,
                         risk,
+                        // TODO(P.2.4): The orchestrator passes the LLM's "why"
+                        // string here once gate-side context is wired (e.g. tool
+                        // description from the pipeline's tool registry).  For now,
+                        // the reason is empty and the UI displays the scope/risk
+                        // fields instead.
                         reason: String::new(),
                     },
                 ));
@@ -317,6 +334,7 @@ mod tests {
                 tool,
                 arg,
                 risk,
+                scope,
                 ..
             } => {
                 assert!(!request_id.is_empty(), "request_id must not be empty");
@@ -326,6 +344,7 @@ mod tests {
                 assert_eq!(tool, "CustomTool");
                 assert_eq!(arg, "x");
                 assert_eq!(risk, PermissionRisk::Low);
+                assert_eq!(scope, "CustomTool", "scope must equal tool name");
             }
             other => panic!("expected PermissionRequest, got: {other:?}"),
         }
@@ -603,6 +622,120 @@ mod tests {
         assert!(
             nothing.is_err(),
             "no bus envelopes expected for non-prompt outcome"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 8: concurrent_calls_are_independently_resolved
+    //
+    // Two concurrent evaluate_async calls on the same gate must each receive
+    // ONLY their own PermissionResolved decision.  Per-call subscriber pattern
+    // safety: even when resolutions arrive in reversed order, each task gets
+    // its own decision and is not accidentally unblocked by the other's event.
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn concurrent_calls_are_independently_resolved() {
+        use std::sync::Arc;
+
+        let bus = EventBus::new();
+        let mut sub = bus.subscribe();
+        let gate = Arc::new(AsyncGate::new(
+            empty_config(OnTimeout::Deny),
+            bus.clone(),
+            Duration::from_secs(5),
+            "test-agent".to_string(),
+        ));
+
+        let cancel = CancellationToken::new();
+
+        // Spawn two concurrent evaluate_async calls on the same gate.
+        let g1 = Arc::clone(&gate);
+        let c1 = cancel.clone();
+        let task1 = tokio::spawn(async move {
+            g1.evaluate_async("ToolOne", "x", "run-c", Some("step-1"), c1, OnTimeout::Deny)
+                .await
+        });
+
+        let g2 = Arc::clone(&gate);
+        let c2 = cancel.clone();
+        let task2 = tokio::spawn(async move {
+            g2.evaluate_async("ToolTwo", "y", "run-c", Some("step-2"), c2, OnTimeout::Deny)
+                .await
+        });
+
+        // Collect both PermissionRequest envelopes and capture their request_ids.
+        let mut req_ids: Vec<(String, String)> = Vec::new(); // (tool, request_id)
+        while req_ids.len() < 2 {
+            let envelope = tokio::time::timeout(Duration::from_millis(500), sub.recv())
+                .await
+                .expect("timed out waiting for PermissionRequest envelopes")
+                .expect("bus closed");
+            if let Event::PermissionRequest {
+                request_id, tool, ..
+            } = envelope.event
+            {
+                req_ids.push((tool, request_id));
+            }
+        }
+
+        let id_one = req_ids
+            .iter()
+            .find(|(t, _)| t == "ToolOne")
+            .map(|(_, id)| id.clone())
+            .expect("PermissionRequest for ToolOne not found");
+        let id_two = req_ids
+            .iter()
+            .find(|(t, _)| t == "ToolTwo")
+            .map(|(_, id)| id.clone())
+            .expect("PermissionRequest for ToolTwo not found");
+
+        // Publish resolutions in REVERSED order: ToolTwo's decision first.
+        bus.publish(EventEnvelope::now(
+            "run-c".to_string(),
+            Some("step-2".to_string()),
+            Event::PermissionResolved {
+                request_id: id_two,
+                decision: PermissionDecision::Deny,
+                source: PermissionSource::User,
+            },
+        ));
+        bus.publish(EventEnvelope::now(
+            "run-c".to_string(),
+            Some("step-1".to_string()),
+            Event::PermissionResolved {
+                request_id: id_one,
+                decision: PermissionDecision::AllowOnce,
+                source: PermissionSource::User,
+            },
+        ));
+
+        let r1 = tokio::time::timeout(Duration::from_millis(500), task1)
+            .await
+            .expect("task1 timed out")
+            .expect("task1 panicked");
+        let r2 = tokio::time::timeout(Duration::from_millis(500), task2)
+            .await
+            .expect("task2 timed out")
+            .expect("task2 panicked");
+
+        assert!(
+            matches!(
+                r1,
+                GateOutcome::AnnotateAllow {
+                    source: PermissionSource::User
+                }
+            ),
+            "task1 (ToolOne, AllowOnce) → AnnotateAllow{{User}}, got {r1:?}"
+        );
+        assert!(
+            matches!(
+                r2,
+                GateOutcome::AnnotateDeny {
+                    source: PermissionSource::User
+                }
+            ),
+            "task2 (ToolTwo, Deny) → AnnotateDeny{{User}}, got {r2:?}"
         );
     }
 }
