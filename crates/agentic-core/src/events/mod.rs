@@ -116,6 +116,9 @@ pub enum PermissionSource {
     DenylistConfig,
     SessionAllowlist,
     Timeout,
+    /// The run was cancelled (e.g. via `CancellationToken`) before a decision
+    /// arrived. Added in P.2.2 — additive, no schema version bump required.
+    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
