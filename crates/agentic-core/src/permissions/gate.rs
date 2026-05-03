@@ -16,6 +16,7 @@
 use crate::events::{PermissionRisk, PermissionSource};
 use crate::permissions::config::{PermissionsConfig, PermissionsSettings};
 use crate::permissions::matcher::Pattern;
+use crate::permissions::risk;
 
 // ---------------------------------------------------------------------------
 // Public types (stubs — GREEN phase fills in the implementation)
@@ -52,14 +53,62 @@ impl ConfigGate {
     ///
     /// Panics if any pattern string fails to parse. This should never happen
     /// because `PermissionsConfig::load` validates all patterns at load time.
-    pub fn new(_config: PermissionsConfig) -> Self {
-        todo!("GREEN: implement ConfigGate::new")
+    /// A panic here indicates an internal invariant violation.
+    pub fn new(config: PermissionsConfig) -> Self {
+        let allow = config
+            .allowlist
+            .into_iter()
+            .map(|rule| {
+                Pattern::parse(&rule.pattern).expect("config patterns validated at load time")
+            })
+            .collect();
+
+        let deny = config
+            .denylist
+            .into_iter()
+            .map(|rule| {
+                Pattern::parse(&rule.pattern).expect("config patterns validated at load time")
+            })
+            .collect();
+
+        Self {
+            allow,
+            deny,
+            settings: config.settings,
+        }
     }
 }
 
 impl PermissionGate for ConfigGate {
-    fn evaluate(&self, _tool: &str, _arg: &str) -> GateOutcome {
-        todo!("GREEN: implement ConfigGate::evaluate")
+    /// Evaluate a `(tool, arg)` pair against the config.
+    ///
+    /// Priority order:
+    /// 1. **Denylist** — any match → `AnnotateDeny { DenylistConfig }`.
+    /// 2. **Allowlist** — any match → `AnnotateAllow { AllowlistConfig }`.
+    /// 3. **Neither** → `Prompt { risk }` where risk comes from the classifier.
+    fn evaluate(&self, tool: &str, arg: &str) -> GateOutcome {
+        // 1. Denylist takes precedence over allowlist.
+        for pattern in &self.deny {
+            if pattern.matches(tool, arg) {
+                return GateOutcome::AnnotateDeny {
+                    source: PermissionSource::DenylistConfig,
+                };
+            }
+        }
+
+        // 2. Allowlist.
+        for pattern in &self.allow {
+            if pattern.matches(tool, arg) {
+                return GateOutcome::AnnotateAllow {
+                    source: PermissionSource::AllowlistConfig,
+                };
+            }
+        }
+
+        // 3. Neither matched — classify risk and ask the user.
+        GateOutcome::Prompt {
+            risk: risk::classify(tool, arg),
+        }
     }
 }
 
