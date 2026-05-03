@@ -2544,7 +2544,7 @@ following rules in priority order:
 
 ---
 
-### Step P.2.1: `PermissionGate` trait + `ConfigGate` static implementation
+### Step P.2.1: `PermissionGate` trait + `ConfigGate` static implementation ✓
 
 **Goal**: Define the gate trait that the orchestrator will call on
 every `Event::ToolUseStart` it consumes. Provide a static
