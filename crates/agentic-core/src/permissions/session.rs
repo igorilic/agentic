@@ -52,12 +52,21 @@ impl SessionAllowlist {
     /// Returns `true` if `(tool, arg)` was previously inserted under `run_id`.
     ///
     /// Matching is **exact-arg** — no glob or prefix logic.
+    ///
+    /// # Allocation note
+    ///
+    /// The `(tool, arg)` strings are only heap-allocated when the `run_id` bucket
+    /// exists. The most common case on the hot path is that no session entries have
+    /// been inserted for the run (cold run or no `AllowSession` decisions yet), so
+    /// this early-return avoids both allocations entirely for that path.
     pub fn contains(&self, run_id: &RunId, tool: &str, arg: &str) -> bool {
         let guard = self.inner.lock().expect("SessionAllowlist mutex poisoned");
-        guard
-            .get(run_id)
-            .map(|set| set.contains(&(tool.to_string(), arg.to_string())))
-            .unwrap_or(false)
+        let Some(set) = guard.get(run_id) else {
+            // Most common case: no bucket for this run_id — skip both allocations.
+            return false;
+        };
+        // Only allocate the owned tuple when we have a bucket to consult.
+        set.contains(&(tool.to_string(), arg.to_string()))
     }
 
     /// Remove all cached entries for `run_id`. Called when `Event::RunComplete`

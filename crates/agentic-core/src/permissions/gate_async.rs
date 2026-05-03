@@ -46,7 +46,9 @@ pub struct AsyncGate {
     bus: EventBus,
     timeout: Duration,
     agent: String,
-    session: SessionAllowlist,
+    /// Per-run session allowlist. Exposed as `pub(crate)` so test helpers
+    /// within the crate can inspect cache state without going through the bus.
+    pub(crate) session: SessionAllowlist,
 }
 
 impl std::fmt::Debug for AsyncGate {
@@ -983,8 +985,22 @@ mod tests {
             },
         ));
 
-        // Give the listener task time to process the event.
-        tokio::time::sleep(Duration::from_millis(30)).await;
+        // Poll until the listener task has cleared the cache, with a 1s timeout.
+        // This is robust on slow CI (gives the task up to 1s) and fast on normal
+        // machines (the loop typically exits within a few ms).
+        let cleared = tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if !gate.session.contains("run-clear", "Bash", "ls") {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await;
+        assert!(
+            cleared.is_ok(),
+            "listener task should clear session within 1s after RunComplete"
+        );
 
         // Step 3: same call must now prompt again (cache was cleared).
         let g3 = Arc::clone(&gate);
