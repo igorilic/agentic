@@ -1,9 +1,31 @@
+use std::sync::Arc;
+use std::time::Duration;
+
+use agentic_core::permissions::config::{OnTimeout, PermissionsConfig, PermissionsSettings};
+use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     BackendId, CURRENT_SCHEMA_VERSION, Db, Event, EventBus, EventEnvelope, ModelId, Paths,
     PipelineOrchestrator, ProfileId, Run, RunRepo, RunStatus, Step, StepRepo, StepStatus,
     TicketKind, TicketRef, TokenUsage,
 };
 use rusqlite::params;
+
+/// Build a pass-through gate (empty config, no allow/deny lists) for tests
+/// that do not exercise permission logic.
+fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
+    Arc::new(AsyncGate::new(
+        PermissionsConfig {
+            allowlist: vec![],
+            denylist: vec![],
+            settings: PermissionsSettings {
+                default_on_timeout: OnTimeout::Deny,
+            },
+        },
+        bus.clone(),
+        Duration::from_secs(60),
+        "test-agent".to_string(),
+    ))
+}
 
 fn setup() -> (tempfile::TempDir, Db, RunRepo, StepRepo, EventBus) {
     let tmp = tempfile::tempdir().unwrap();
@@ -96,7 +118,7 @@ async fn step_started_event_transitions_step_row_to_running() {
         .insert(seed_step("step1", "run1", 0, StepStatus::Pending))
         .unwrap();
 
-    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
+    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone(), passthrough_gate(&bus));
 
     bus.publish(EventEnvelope::now(
         "run1".to_string(),
@@ -122,7 +144,7 @@ async fn step_complete_sets_status_completed_at_and_duration_ms() {
         .insert(seed_step("step1", "run1", 0, StepStatus::Running))
         .unwrap();
 
-    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
+    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone(), passthrough_gate(&bus));
 
     bus.publish(EventEnvelope {
         schema_version: CURRENT_SCHEMA_VERSION,
@@ -155,7 +177,7 @@ async fn run_complete_transitions_run_row_and_delivers_to_subscribers() {
 
     // Second subscriber simulates the UI; must see the event via broadcast semantics.
     let mut ui_rx = bus.subscribe();
-    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
+    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone(), passthrough_gate(&bus));
 
     bus.publish(EventEnvelope {
         schema_version: CURRENT_SCHEMA_VERSION,
@@ -195,7 +217,7 @@ async fn run_started_event_transitions_run_row_to_running() {
     // Seed run as Pending (the natural default).
     runs.insert(seed_run_pending("run-rs", 100)).unwrap();
 
-    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
+    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone(), passthrough_gate(&bus));
     bus.publish(EventEnvelope::now(
         "run-rs".to_string(),
         None,
@@ -224,7 +246,7 @@ async fn run_started_for_unknown_run_logs_error_and_continues() {
 
     // Do NOT insert any run row for "ghost-run".
 
-    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
+    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone(), passthrough_gate(&bus));
 
     // Publish RunStarted for a run_id that doesn't exist.
     bus.publish(EventEnvelope::now(

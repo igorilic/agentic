@@ -14,6 +14,7 @@ use agentic_core::db::runs::RunRepo;
 use agentic_core::db::steps::StepRepo;
 use agentic_core::db::workspaces::{Workspace, WorkspaceRepo};
 use agentic_core::events::EventBus;
+use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::pipeline::PipelineOrchestrator;
 use agentic_core::{Db, Paths, init as init_logging};
 use commands::auth::{AuthState, WebbrowserOpener};
@@ -63,6 +64,18 @@ fn main() {
             // The handle is intentionally not stored: the orchestrator
             // exits when the bus is dropped, which happens at app shutdown.
             tauri::async_runtime::block_on(async {
+                // Load permissions config from the app data dir, falling back
+                // to the built-in default if the file does not exist.
+                let permissions_path = paths.data_dir().join("permissions.toml");
+                let permissions_config =
+                    agentic_core::PermissionsConfig::load(&permissions_path)
+                        .unwrap_or_else(|_| agentic_core::PermissionsConfig::builtin_default());
+                let gate = Arc::new(AsyncGate::new(
+                    permissions_config,
+                    (*bus).clone(),
+                    std::time::Duration::from_secs(60),
+                    "agentic-tauri".to_string(),
+                ));
                 // Drop the JoinHandle deliberately — the spawned task runs
                 // independently and exits when the bus is dropped at app
                 // shutdown.
@@ -70,6 +83,7 @@ fn main() {
                     (*bus).clone(),
                     RunRepo::new(&db),
                     StepRepo::new(&db),
+                    gate,
                 );
             });
 

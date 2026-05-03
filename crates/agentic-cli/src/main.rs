@@ -7,6 +7,7 @@ use agentic_cli::ticket_run::{
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     Backend, BackendId, ClaudeCodeBackend, CopilotCliBackend, Db, Event, EventBus, EventEnvelope,
     EventPersister, ExecuteRequest, ModelId, Paths, PipelineConfig, PipelineOrchestrator,
@@ -231,8 +232,22 @@ fn spawn_infra(
     tokio::task::JoinHandle<()>,
     tokio::task::JoinHandle<()>,
 ) {
+    // Load permissions config from the current working directory's permissions.toml,
+    // or fall back to the built-in default. The gate is shared across all pipeline
+    // steps for this run.
+    let permissions_path = std::env::current_dir()
+        .unwrap_or_default()
+        .join("permissions.toml");
+    let permissions_config = agentic_core::PermissionsConfig::load(&permissions_path)
+        .unwrap_or_else(|_| agentic_core::PermissionsConfig::builtin_default());
+    let gate = std::sync::Arc::new(AsyncGate::new(
+        permissions_config,
+        bus.clone(),
+        std::time::Duration::from_secs(60),
+        "agentic-cli".to_string(),
+    ));
     let orch_handle =
-        PipelineOrchestrator::spawn(bus.clone(), runs_repo.clone(), steps_repo.clone());
+        PipelineOrchestrator::spawn(bus.clone(), runs_repo.clone(), steps_repo.clone(), gate);
     let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
     let mut printer_rx = bus.subscribe();
     let printer_handle = tokio::spawn(async move {

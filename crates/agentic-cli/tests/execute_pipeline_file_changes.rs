@@ -3,9 +3,12 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use agentic_cli::ticket_run::{BackendFactory, PipelineRunContext, execute_pipeline};
 use agentic_core::backends::EventSink;
+use agentic_core::permissions::config::{OnTimeout, PermissionsConfig, PermissionsSettings};
+use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     Backend, BackendId, Db, Event, EventBus, EventEnvelope, EventPersister, ExecuteOutcome,
     ExecuteRequest, HealthStatus, ModelId, Paths, Pipeline, PipelineStep, Run, RunRepo, RunStatus,
@@ -19,6 +22,21 @@ use tokio::sync::Mutex;
 
 // ---------------------------------------------------------------------------
 // FileEditingBackend: emits ToolUseStart, writes files to disk, then completes
+fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
+    Arc::new(AsyncGate::new(
+        PermissionsConfig {
+            allowlist: vec![],
+            denylist: vec![],
+            settings: PermissionsSettings {
+                default_on_timeout: OnTimeout::Deny,
+            },
+        },
+        bus.clone(),
+        Duration::from_secs(60),
+        "test-agent".to_string(),
+    ))
+}
+
 // ---------------------------------------------------------------------------
 
 /// A one-off test backend that:
@@ -232,6 +250,7 @@ async fn execute_pipeline_writes_per_step_diff_file() {
         bus.clone(),
         RunRepo::new(&db),
         agentic_core::StepRepo::new(&db),
+        passthrough_gate(&bus),
     );
     let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 

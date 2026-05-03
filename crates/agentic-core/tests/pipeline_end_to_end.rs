@@ -1,11 +1,30 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
+use agentic_core::permissions::config::{OnTimeout, PermissionsConfig, PermissionsSettings};
+use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     BackendId, Db, Event, EventBus, EventEnvelope, ModelId, Paths, Pipeline, PipelineConfig,
     PipelineOrchestrator, PipelineSm, ProfileId, Run, RunRepo, RunStatus, SmInput, Step, StepRepo,
     StepStatus, TicketKind, TicketRef,
 };
 use rusqlite::params;
+
+fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
+    Arc::new(AsyncGate::new(
+        PermissionsConfig {
+            allowlist: vec![],
+            denylist: vec![],
+            settings: PermissionsSettings {
+                default_on_timeout: OnTimeout::Deny,
+            },
+        },
+        bus.clone(),
+        Duration::from_secs(60),
+        "test-agent".to_string(),
+    ))
+}
 
 fn seed_workspace(db: &Db, id: &str) {
     let conn = db.conn().unwrap();
@@ -88,7 +107,7 @@ async fn happy_path_run_drives_sm_events_through_orchestrator_to_completed_state
     // 3. Spawn orchestrator (subscribes before RunStarted is published).
     //    The SM's Start input emits RunStarted first; the orchestrator handles
     //    it and transitions the run Pending → Running automatically.
-    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone());
+    let handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps.clone(), passthrough_gate(&bus));
 
     // 5. Construct SM with the same pipeline
     let mut sm = PipelineSm::new("run1".to_string(), pipeline.clone());

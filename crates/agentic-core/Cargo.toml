@@ -42,7 +42,7 @@ glob = { workspace = true }
 nix = { workspace = true }
 
 [dev-dependencies]
-tracing-test = "0.2"
+tracing-test = { version = "0.2", features = ["no-env-filter"] }
 serial_test = "3"
 tempfile = { workspace = true }
 proptest = { workspace = true }

@@ -1,8 +1,11 @@
 #![cfg(feature = "testing")]
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
+use agentic_core::permissions::config::{OnTimeout, PermissionsConfig, PermissionsSettings};
+use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     Backend, Db, Event, EventBus, EventEnvelope, EventPersister, ExecuteRequest, ModelId, Paths,
     PipelineOrchestrator, Run, RunId, RunRepo, RunStatus, ScriptedBackend, Step, StepId, StepRepo,
@@ -10,6 +13,21 @@ use agentic_core::{
 };
 use rusqlite::params;
 use tokio_util::sync::CancellationToken;
+
+fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
+    Arc::new(AsyncGate::new(
+        PermissionsConfig {
+            allowlist: vec![],
+            denylist: vec![],
+            settings: PermissionsSettings {
+                default_on_timeout: OnTimeout::Deny,
+            },
+        },
+        bus.clone(),
+        Duration::from_secs(60),
+        "test-agent".to_string(),
+    ))
+}
 
 fn init_tracing() {
     // Best-effort — don't panic if another test already set a subscriber.
@@ -92,7 +110,7 @@ async fn persister_writes_all_events_under_heavy_volume() {
         .unwrap();
 
     // Spawn orchestrator + persister.
-    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone());
+    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone(), passthrough_gate(&bus));
     let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
     // Seed a step row so orchestrator has something to mark Running -> Passed.
@@ -198,7 +216,7 @@ async fn persister_and_orchestrator_survive_interleaved_writes() {
     let steps_repo = StepRepo::new(&db);
     runs.insert(seed_run_running("run-int", "ws-int")).unwrap();
 
-    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone());
+    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone(), passthrough_gate(&bus));
     let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
     // Simulate 3 sequential steps with real orchestrator + persister interleaving.

@@ -5,9 +5,14 @@
 //! verifies the host code path persists the rows + republishes
 //! `Event::Finding` envelopes for the cockpit.
 
+use std::sync::Arc;
+use std::time::Duration;
+
 use agentic_cli::ticket_run::{BackendFactory, PipelineRunContext, execute_pipeline};
 use agentic_core::db::findings::FindingsRepo;
 use agentic_core::db::workspaces::{Workspace, WorkspaceRepo};
+use agentic_core::permissions::config::{OnTimeout, PermissionsConfig, PermissionsSettings};
+use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     Backend, BackendId, Db, Event, EventBus, EventEnvelope, ExecuteOutcome, ExecuteRequest,
     ModelId, Paths, PipelineConfig, PipelineStep, Run, RunRepo, RunStatus, StepRepo, StepStatus,
@@ -15,6 +20,21 @@ use agentic_core::{
 };
 use tempfile::TempDir;
 use tokio::sync::broadcast::Sender;
+
+fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
+    Arc::new(AsyncGate::new(
+        PermissionsConfig {
+            allowlist: vec![],
+            denylist: vec![],
+            settings: PermissionsSettings {
+                default_on_timeout: OnTimeout::Deny,
+            },
+        },
+        bus.clone(),
+        Duration::from_secs(60),
+        "test-agent".to_string(),
+    ))
+}
 
 const RUN_ID: &str = "run-finding-projection";
 
@@ -125,6 +145,7 @@ async fn reviewer_findings_block_is_projected_into_findings_table() {
         bus.clone(),
         RunRepo::new(&db),
         StepRepo::new(&db),
+        passthrough_gate(&bus),
     );
 
     // Pipeline with a single "reviewer" step.

@@ -2,7 +2,11 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 
+use agentic_core::permissions::config::{OnTimeout, PermissionsConfig, PermissionsSettings};
+use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     Backend, BackendId, Db, Event, EventBus, EventEnvelope, EventPersister, ExecuteRequest,
     ModelId, Paths, Pipeline, PipelineConfig, PipelineOrchestrator, ProfileId, Run, RunId, RunRepo,
@@ -11,6 +15,21 @@ use agentic_core::{
 };
 use rusqlite::params;
 use tokio_util::sync::CancellationToken;
+
+fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
+    Arc::new(AsyncGate::new(
+        PermissionsConfig {
+            allowlist: vec![],
+            denylist: vec![],
+            settings: PermissionsSettings {
+                default_on_timeout: OnTimeout::Deny,
+            },
+        },
+        bus.clone(),
+        Duration::from_secs(60),
+        "test-agent".to_string(),
+    ))
+}
 
 fn seed_workspace(db: &Db, id: &str) {
     let conn = db.conn().unwrap();
@@ -110,7 +129,7 @@ async fn four_scripted_backends_complete_full_pipeline_and_persist_all_events() 
     let agent_to_step_id = seed_steps(&steps_repo, "run1", &pipeline);
 
     // --- Spawn orchestrator + persister ---
-    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone());
+    let orch_handle = PipelineOrchestrator::spawn(bus.clone(), runs.clone(), steps_repo.clone(), passthrough_gate(&bus));
     let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
     // --- Publish RunStarted ---

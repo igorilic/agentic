@@ -213,6 +213,12 @@ async fn tool_use_start_with_denylist_hit_emits_permission_resolved_deny_plus_wa
         other => panic!("expected PermissionResolved(Deny), got {other:?}"),
     }
 
+    // The warn is emitted from a spawned task. Give it a moment to land in the
+    // tracing_test log buffer before asserting (the PermissionResolved envelope
+    // arriving above means the task has already run, so this yield is a safety
+    // margin rather than a real wait).
+    tokio::time::sleep(Duration::from_millis(20)).await;
+
     // Verify advisory warn log was emitted.
     assert!(
         logs_contain("permission gate denied"),

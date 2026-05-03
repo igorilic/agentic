@@ -434,7 +434,10 @@ mod tests {
     use super::*;
 
     use std::sync::Arc;
+    use std::time::Duration;
 
+    use agentic_core::permissions::config::{OnTimeout, PermissionsConfig, PermissionsSettings};
+    use agentic_core::permissions::gate_async::AsyncGate;
     use agentic_core::{
         Db, Event, EventBus, EventPersister, ModelId, Paths, PipelineConfig, PipelineStep, Run,
         RunRepo, RunStatus, ScriptedBackend, StepRepo, StepStatus, TokenUsage, Workspace,
@@ -442,6 +445,21 @@ mod tests {
     };
     use rusqlite::params;
     use tempfile::TempDir;
+
+    fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
+        Arc::new(AsyncGate::new(
+            PermissionsConfig {
+                allowlist: vec![],
+                denylist: vec![],
+                settings: PermissionsSettings {
+                    default_on_timeout: OnTimeout::Deny,
+                },
+            },
+            bus.clone(),
+            Duration::from_secs(60),
+            "test-agent".to_string(),
+        ))
+    }
 
     /// Create a minimal tempdir workspace with DB and agent fixture files.
     /// Returns `(tmp, paths, db, bus, ws_id)` — `tmp` must be kept alive for
@@ -550,6 +568,7 @@ mod tests {
             bus.clone(),
             RunRepo::new(&db),
             StepRepo::new(&db),
+            passthrough_gate(&bus),
         );
         let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
@@ -652,6 +671,7 @@ mod tests {
             bus.clone(),
             RunRepo::new(&db),
             StepRepo::new(&db),
+            passthrough_gate(&bus),
         );
         let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
@@ -758,6 +778,7 @@ mod tests {
             bus.clone(),
             RunRepo::new(&db),
             StepRepo::new(&db),
+            passthrough_gate(&bus),
         );
         let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
@@ -869,6 +890,7 @@ mod tests {
             bus.clone(),
             RunRepo::new(&db),
             StepRepo::new(&db),
+            passthrough_gate(&bus),
         );
         let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
@@ -1021,6 +1043,7 @@ mod tests {
             bus.clone(),
             RunRepo::new(&db),
             StepRepo::new(&db),
+            passthrough_gate(&bus),
         );
         let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
@@ -1167,6 +1190,7 @@ mod tests {
             bus.clone(),
             RunRepo::new(&db),
             StepRepo::new(&db),
+            passthrough_gate(&bus),
         );
         let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
@@ -1238,6 +1262,7 @@ mod tests {
             bus.clone(),
             RunRepo::new(&db),
             StepRepo::new(&db),
+            passthrough_gate(&bus),
         );
         let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
