@@ -19,6 +19,7 @@
     "allow-connect-github",
     "allow-connect-github-via-gh",
     "allow-start-ticket-run",
-    "allow-list-runs"
+    "allow-list-runs",
+    "allow-permission-decide"
   ]
 }
