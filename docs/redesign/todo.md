@@ -2291,6 +2291,11 @@ pane**. The dual binding is the contract:
     - Why deferred: the TUI does not yet have a runtime that subscribes to / publishes on the agentic-core EventBus. P.5.1 ships envelope INGESTION (PermissionRequest → pending_perms; PermissionResolved → remove) but not egress.
     - Trigger: when the TUI gains a runtime (TUI as standalone agent runner, or TUI subscribes to agentic-tauri's bus via IPC). What's needed: (1) a bus handle on AppState (Arc<EventBus> or similar), (2) handle_key for y/s/n constructs an EventEnvelope::PermissionResolved with the matching request_id and publishes to bus, (3) tests that mock the bus to verify the publish happens.
 
+18. **App.handleRunPipeline silently swallows pre-flight errors** (GH #106).
+    - What's missing: the HeaderBar "Run pipeline" button calls `start_ticket_run` directly via `App.handleRunPipeline`; on rejection (e.g. binary not found) the catch is a `/* no-op */`. F.1.4 surfaced pre-flight errors via the `/plan` slash-command path (which already had `systemMessages` access), but the button path still swallows.
+    - Why deferred: surfacing the error from `App.handleRunPipeline` requires hoisting `systemMessages` state from `ChatPane` to `App` or adding a callback prop — invasive restructuring for a placeholder button.
+    - Trigger: Run-pipeline button graduates to a SpecDialog-driven flow (W.8.x successor), OR a global toast surface lands first.
+
 ---
 
 ## Phase P — Backend permission stream (GH #88)
