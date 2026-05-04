@@ -51,6 +51,11 @@ const FILTERED_TYPES = new Set([
   "ThinkingDelta",
   "ToolUseDelta",
   "ToolUseEnd",
+  // PermissionResolved is audit-only — the card lifecycle (mount on
+  // PermissionRequest, unmount when the matching Resolved arrives) is
+  // the user-visible feedback. Showing the resolution as a separate
+  // row produces a confusing untranslated "PermissionResolved" line.
+  "PermissionResolved",
 ]);
 
 function formatTime(ms: number): string {
