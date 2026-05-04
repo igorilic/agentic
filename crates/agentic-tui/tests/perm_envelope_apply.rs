@@ -150,6 +150,38 @@ fn unmatched_resolved_is_noop() {
     );
 }
 
+// ── Test 5: Low risk arm is mapped correctly through the wire ─────────────────
+
+/// `map_wire_risk` has three arms (Low / Medium / High). Test 1 covers High
+/// and test 4 covers Medium via fixture. This test pins the Low arm so a
+/// future enum extension or refactor cannot silently drop it.
+#[test]
+fn apply_permission_request_envelope_maps_low_risk() {
+    let mut state = AppState::default();
+    let env = envelope(Event::PermissionRequest {
+        request_id: "r-low".into(),
+        agent: "qa".into(),
+        tool: "Read".into(),
+        arg: "/tmp/safe.txt".into(),
+        scope: "fs.read".into(),
+        risk: WireRisk::Low,
+        reason: "read-only".into(),
+    });
+
+    state.apply_envelope(&env);
+
+    assert_eq!(
+        state.pending_perms.len(),
+        1,
+        "expected 1 pending perm after Low-risk PermissionRequest envelope"
+    );
+    assert_eq!(
+        state.pending_perms[0].risk,
+        PermissionRisk::Low,
+        "expected risk to be mapped to PermissionRisk::Low"
+    );
+}
+
 // ── Test 4: multiple requests resolve independently ───────────────────────────
 
 /// Applying two `PermissionRequest` envelopes followed by `PermissionResolved`
