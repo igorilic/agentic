@@ -78,6 +78,7 @@ fn buf_contains(buf: &ratatui::buffer::Buffer, needle: &str, width: u16, height:
 /// Build a `PermissionRequest` with fixed HIGH-RISK values used across tests.
 fn perm_request() -> PermissionRequest {
     PermissionRequest {
+        request_id: "test-r1".into(),
         agent: "developer".into(),
         command: "rm -rf node_modules".into(),
         reason: "Cleaning stale build artifacts".into(),
@@ -429,6 +430,7 @@ fn perm_card_does_not_panic_on_narrow_terminal() {
 fn perm_card_handles_multiple_pending_perms() {
     let perm1 = perm_request();
     let perm2 = PermissionRequest {
+        request_id: "test-r2".into(),
         agent: "architect".into(),
         command: "git push --force".into(),
         reason: "Force-push after rebase".into(),

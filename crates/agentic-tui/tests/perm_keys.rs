@@ -18,6 +18,7 @@ use crossterm::event::KeyCode;
 
 fn perm_request(command: &str) -> PermissionRequest {
     PermissionRequest {
+        request_id: "test-r1".into(),
         agent: "developer".into(),
         command: command.into(),
         reason: "test".into(),

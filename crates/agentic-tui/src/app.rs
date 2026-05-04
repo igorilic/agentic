@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use agentic_core::events::EventEnvelope;
+use agentic_core::events::{Event, EventEnvelope};
 use crossterm::event::KeyCode;
 
 use crate::findings::{FindingsState, Triage};
@@ -97,9 +97,18 @@ pub enum PermissionRisk {
 /// A single permission request pending user approval (spec §4.7).
 #[derive(Debug, Clone)]
 pub struct PermissionRequest {
+    /// Unique identifier for this request; used to match against
+    /// `Event::PermissionResolved` to remove the entry (P.5.1).
+    pub request_id: String,
     /// Agent requesting the permission, e.g. `"developer"`.
     pub agent: String,
     /// Shell command or action requiring approval, e.g. `"rm -rf node_modules"`.
+    ///
+    /// Mapped from the wire envelope's `arg` field. The `tool` field is
+    /// intentionally dropped here: the TUI perm card doesn't render the tool
+    /// name separately, and for Bash the command string already carries the
+    /// tool context. Pretty-printing structured tool args (Write, Edit, etc.)
+    /// is deferred to a later layout step.
     pub command: String,
     /// Human-readable justification.
     pub reason: String,
@@ -243,11 +252,39 @@ impl AppState {
 
     /// Forward a bus envelope into both the run-state machine (for
     /// step-status events) and the findings list (for `Event::Finding`).
+    /// Also handles `Event::PermissionRequest` (push to `pending_perms`) and
+    /// `Event::PermissionResolved` (remove by `request_id`). P.5.1.
+    ///
     /// The bin's main loop will call this for every envelope yielded by
     /// `EventBus::subscribe`.
     pub fn apply_envelope(&mut self, envelope: &EventEnvelope) {
         self.run.apply_envelope(envelope);
         self.findings.ingest(envelope);
+
+        match &envelope.event {
+            Event::PermissionRequest {
+                request_id,
+                agent,
+                tool: _,
+                arg,
+                scope,
+                risk,
+                reason,
+            } => {
+                self.pending_perms.push(PermissionRequest {
+                    request_id: request_id.clone(),
+                    agent: agent.clone(),
+                    command: arg.clone(),
+                    reason: reason.clone(),
+                    scope: scope.clone(),
+                    risk: map_wire_risk(*risk),
+                });
+            }
+            Event::PermissionResolved { request_id, .. } => {
+                self.pending_perms.retain(|p| &p.request_id != request_id);
+            }
+            _ => {}
+        }
     }
 
     /// Replace the currently-viewed diff text and re-anchor scroll to
@@ -399,5 +436,17 @@ impl AppState {
                 None
             }
         }
+    }
+}
+
+/// Translate the wire-format `events::PermissionRisk` to the TUI-local
+/// `app::PermissionRisk`. Both enums have identical variants. Deferred
+/// consolidation (dropping the local enum in favour of re-exporting the
+/// wire one) is tracked as tech-debt in the TUI runner integration issue.
+fn map_wire_risk(risk: agentic_core::events::PermissionRisk) -> PermissionRisk {
+    match risk {
+        agentic_core::events::PermissionRisk::Low => PermissionRisk::Low,
+        agentic_core::events::PermissionRisk::Medium => PermissionRisk::Medium,
+        agentic_core::events::PermissionRisk::High => PermissionRisk::High,
     }
 }

@@ -6,8 +6,8 @@
 //! `perm_card.rs`.
 
 use agentic_core::events::{
-    Event, EventEnvelope, PermissionDecision, PermissionRisk as WireRisk, PermissionSource,
-    CURRENT_SCHEMA_VERSION,
+    CURRENT_SCHEMA_VERSION, Event, EventEnvelope, PermissionDecision, PermissionRisk as WireRisk,
+    PermissionSource,
 };
 use agentic_tui::app::{AppState, PermissionRequest, PermissionRisk};
 
@@ -83,10 +83,17 @@ fn apply_permission_request_envelope_appends_to_pending_perms() {
     let perm = &state.pending_perms[0];
     assert_eq!(perm.request_id, "r1", "request_id mismatch");
     assert_eq!(perm.agent, "developer", "agent mismatch");
-    assert_eq!(perm.command, "rm -rf node_modules", "command (mapped from arg) mismatch");
+    assert_eq!(
+        perm.command, "rm -rf node_modules",
+        "command (mapped from arg) mismatch"
+    );
     assert_eq!(perm.reason, "destructive shell", "reason mismatch");
     assert_eq!(perm.scope, "shell.destructive", "scope mismatch");
-    assert_eq!(perm.risk, PermissionRisk::High, "risk mismatch (expected High)");
+    assert_eq!(
+        perm.risk,
+        PermissionRisk::High,
+        "risk mismatch (expected High)"
+    );
 }
 
 // ── Test 2: PermissionResolved removes the matching request ──────────────────
@@ -165,7 +172,11 @@ fn multiple_requests_resolve_independently() {
     });
     state.apply_envelope(&env2);
 
-    assert_eq!(state.pending_perms.len(), 2, "expected 2 perms after 2 PermissionRequest envelopes");
+    assert_eq!(
+        state.pending_perms.len(),
+        2,
+        "expected 2 perms after 2 PermissionRequest envelopes"
+    );
 
     // Resolve the first.
     let resolve_r1 = envelope(Event::PermissionResolved {
