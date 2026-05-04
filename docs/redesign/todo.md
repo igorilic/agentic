@@ -3065,7 +3065,7 @@ its `agentic-core` runtime handle." File as a separate GH issue with
 
 ---
 
-### Step P.6.1: End-to-end pipeline test (web)
+### Step P.6.1: End-to-end pipeline test (web) — Vitest ✓ / live-Rust: P.6.1.b
 
 **Goal**: One Vitest integration test that drives the complete
 loop: backend emits `PermissionRequest` → web UI renders card →
@@ -3103,6 +3103,23 @@ extract a helper into `apps/web-ui/src/__tests__/setup.ts`.
 **Commit**: `test(web): add permission-flow E2E integration test`
 
 **Verification**: `pnpm -F @agentic/web-ui test permissionFlow`
+
+**Status**: Vitest portion complete (3 tests added, all pass on first run — P.4.3
+confirmed correct). Live-Rust complement is P.6.1.b below.
+
+---
+
+### Step P.6.1.b: Live-Rust complement test (P.6.1 follow-up)
+
+**Goal**: Spawn a real Tauri backend (or use the agentic-tui integration harness)
+to exercise the permission flow end-to-end without any mocks at the Tauri boundary.
+Complements the Vitest jsdom test in P.6.1.
+
+**Depends on**: P.6.1 (Vitest portion complete).
+
+**Deferred from**: P.6.1 dispatch — live backend infrastructure not needed for
+regression lock; the Vitest mock layer is sufficient for UI integration coverage.
+This step is the trigger when a real Tauri E2E harness is set up in the repo.
 
 ---
 
