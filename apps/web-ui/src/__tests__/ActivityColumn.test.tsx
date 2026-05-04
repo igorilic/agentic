@@ -897,6 +897,13 @@ describe("ActivityColumn — P.4.2 live hook + IPC wiring", () => {
     expect(screen.getByTestId("permission-card")).toBeInTheDocument();
   });
 
+  // TECH-DEBT(P.4.3): This test simulates Resolved by mocking the hook
+  // to return []. A higher-fidelity version would inject a real
+  // PermissionResolved envelope through the Tauri event listener that
+  // usePermissionRequests wraps. The integration is fully exercised by
+  // usePermissionRequests.test.ts (P.4.1); this layer just confirms
+  // ActivityColumn re-renders when the hook output shrinks. P.4.3's
+  // app-level integration test will own the envelope-injection variant.
   it("card_unmounts_when_resolved_arrives", () => {
     // First render with the permission present
     mockUsePermissionRequests.mockReturnValue([r1Perm]);
@@ -922,5 +929,37 @@ describe("ActivityColumn — P.4.2 live hook + IPC wiring", () => {
       expect.stringContaining("permission_decide called with no runId"),
     );
     warnSpy.mockRestore();
+  });
+
+  it("ipc_failure_surfaces_console_error", async () => {
+    mockUsePermissionRequests.mockReturnValue([r1Perm]);
+    mockInvoke.mockRejectedValue(new Error("backend unavailable"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(<ControlledActivityColumnLive runId="run-1" />);
+    fireEvent.click(screen.getByTestId("permission-card-allow-once"));
+
+    await vi.waitFor(() => {
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("permission_decide failed"),
+        expect.any(Error),
+      );
+    });
+    errorSpy.mockRestore();
+  });
+
+  it("stepId_is_threaded_into_ipc_payload", async () => {
+    mockUsePermissionRequests.mockReturnValue([r1Perm]);
+    render(<ControlledActivityColumnLive runId="run-1" stepId="step-1" />);
+    fireEvent.click(screen.getByTestId("permission-card-allow-once"));
+
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("permission_decide", {
+        requestId: "r1",
+        decision: "once",
+        runId: "run-1",
+        stepId: "step-1",
+      });
+    });
   });
 });
