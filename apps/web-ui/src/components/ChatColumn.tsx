@@ -3,6 +3,7 @@ import ChatComposer from "./ChatComposer";
 import ChatMessageComp from "./ChatMessage";
 import SpecDialog from "./SpecDialog";
 import { createSpec } from "../utils/createSpec";
+import { useBackend } from "../hooks/useBackend";
 import type { ChatMessage } from "../types/chat";
 
 export type ChatColumnProps = {
@@ -41,10 +42,11 @@ export default function ChatColumn({
   onTicketRunStarted,
 }: ChatColumnProps) {
   const [specOpen, setSpecOpen] = useState(false);
+  const { backend } = useBackend();
 
   const handleSpecSubmit = async (title: string, body: string) => {
     try {
-      const runId = await createSpec(title);
+      const runId = await createSpec(title, backend);
       if (runId !== undefined) {
         const description = body.trim().length > 0 ? body.trim() : undefined;
         onTicketRunStarted?.({ runId, ticketLabel: title, description });

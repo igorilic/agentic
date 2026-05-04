@@ -6,6 +6,7 @@ import { parseSlashCommand, formatSlashParseError } from "../slash/parser";
 import { dispatchSlashCommand, type SlashServices } from "../slash/dispatcher";
 import { parseMention, formatMentionParseError } from "../mention/parser";
 import { splitTicketText } from "../utils/splitTicketText";
+import { useBackend } from "../hooks/useBackend";
 import ChatColumn from "./ChatColumn";
 
 type MentionResult = {
@@ -31,6 +32,7 @@ export default function ChatPane({
     Record<string, string>
   >({});
   const mentionEvents = useMentionEvents();
+  const { backend: selectedBackend } = useBackend();
 
   // Slash-command services wired to IPC.
   const slashServices: SlashServices = useMemo(
@@ -38,7 +40,7 @@ export default function ChatPane({
       plan: async (ticket, backend) => {
         const runId = (await invoke("start_ticket_run", {
           ticket,
-          backend: backend ?? "claude-code",
+          backend: backend ?? selectedBackend,
           model: null,
         })) as string;
         const { ticketLabel, description } = splitTicketText(ticket);
@@ -56,7 +58,7 @@ export default function ChatPane({
         );
       },
     }),
-    [onTicketRunStarted],
+    [onTicketRunStarted, selectedBackend],
   );
 
   // Project mention envelopes into renderable chat messages.

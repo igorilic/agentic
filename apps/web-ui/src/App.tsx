@@ -17,6 +17,7 @@ import type { IssueTicket } from "./types/pipeline";
 import { findingsToActionItems } from "./utils/findingsToActionItems";
 import { isTauriDense } from "./utils/isTauriDense";
 import { usePipelineMutation } from "./hooks/usePipelineMutation";
+import { useBackend } from "./hooks/useBackend";
 
 const PLACEHOLDER_TICKET: IssueTicket = {
   id: "AGT-000",
@@ -35,6 +36,7 @@ export default function App() {
 
   const { events } = useTauriEvents(activeRunId);
   const { findings } = useFindings(findingsRunId, findingsRefetchKey);
+  const { backend } = useBackend();
 
   useEffect(() => {
     if (activeRunId && activeRunId !== findingsRunId) setFindingsRunId(activeRunId);
@@ -98,7 +100,7 @@ export default function App() {
     // A SpecDialog-driven Run flow is tracked for a future W.8.x step.
     void invoke("start_ticket_run", {
       ticket: "Untitled run",
-      backend: "claude-code",
+      backend,
       model: null,
     })
       .then((result: unknown) => {
@@ -111,7 +113,7 @@ export default function App() {
       .catch(() => {
         /* no-op; failure surfaces via the run-state pill remaining idle */
       });
-  }, []);
+  }, [backend]);
 
   const dense = isTauriDense();
   const ticket: IssueTicket = useMemo(() => {

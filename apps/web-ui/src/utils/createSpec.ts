@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { BackendKind } from "../slash/types";
 
 /**
  * Invokes the start_ticket_run IPC with the spec title as the ticket
@@ -10,10 +11,10 @@ import { invoke } from "@tauri-apps/api/core";
  * only { ticket, backend, model }. Tracked in GH #92 for when the
  * backend gains a body/description field.
  */
-export async function createSpec(title: string): Promise<string | undefined> {
+export async function createSpec(title: string, backend: BackendKind): Promise<string | undefined> {
   const result = await invoke("start_ticket_run", {
     ticket: title,
-    backend: "claude-code",
+    backend,
     model: null,
   });
   return typeof result === "string" ? result : undefined;

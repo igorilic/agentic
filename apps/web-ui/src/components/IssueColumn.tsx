@@ -3,6 +3,7 @@ import type { ActionItem, AgentStatus, IssueTicket, RunStateOverall } from "../t
 import StatusDot from "./StatusDot";
 import SpecDialog from "./SpecDialog";
 import { createSpec } from "../utils/createSpec";
+import { useBackend } from "../hooks/useBackend";
 
 const RUN_STATE_TO_AGENT_STATUS: Record<RunStateOverall, AgentStatus> = {
   idle: "queued",
@@ -30,10 +31,11 @@ export default function IssueColumn({ ticket, runState, actionItems, onTicketRun
     runState === "completed" ? (actionItems ?? []) : [];
 
   const [specDialogOpen, setSpecDialogOpen] = useState(false);
+  const { backend } = useBackend();
 
   const handleCreateSpecSubmit = async (title: string, body: string) => {
     try {
-      const runId = await createSpec(title);
+      const runId = await createSpec(title, backend);
       if (runId !== undefined) {
         const description = body.trim().length > 0 ? body.trim() : undefined;
         onTicketRunStarted?.({ runId, ticketLabel: title, description });
