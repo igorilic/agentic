@@ -2864,7 +2864,7 @@ filter them out.
 
 ---
 
-### Step P.4.1: `usePermissionRequests` hook with id-dedup
+### Step P.4.1: `usePermissionRequests` hook with id-dedup ✅
 
 **Goal**: New React hook that subscribes to the existing
 `useTauriEvents` envelope stream and yields the **current set of
