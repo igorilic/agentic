@@ -3262,7 +3262,7 @@ Phase P — Permissions (GH #88)
 - [ ] P.3.2 Forwarder regression-test for Permission* envelopes
 - [x] P.4.1 usePermissionRequests hook with id-dedup
 - [x] P.4.2 ActivityColumn consumes live usePermissionRequests
-- [ ] P.4.3 App.tsx wires runId/stepId into permission_decide
+- [x] P.4.3 App.tsx wires runId/stepId into permission_decide
 - [ ] P.5.1 TUI applies Permission envelopes to AppState (deferred runner integration)
 - [ ] P.6.1 End-to-end web permission-flow integration test
 - [ ] P.6.2 File follow-up tech-debt issues + close GH #88
