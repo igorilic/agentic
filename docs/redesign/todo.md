@@ -3501,7 +3501,7 @@ source of truth.
 
 ---
 
-### [ ] Step F.1.3: HeaderBar segmented control wired to the hook
+### [x] Step F.1.3: HeaderBar segmented control wired to the hook
 
 **Goal**: Add a 2-button segmented control (`Claude Code` |
 `Copilot CLI`) to HeaderBar's right cluster, **left of the run-state
