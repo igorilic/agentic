@@ -267,4 +267,42 @@ describe("ChatPane", () => {
     const agentMsg = screen.getByTestId("chat-message-agent");
     expect(agentMsg).toHaveAttribute("data-agent");
   });
+
+  // -------------------------------------------------------------------------
+  // F.1.4: Pre-flight error surfacing
+  // -------------------------------------------------------------------------
+
+  it("surfaces start_ticket_run pre-flight errors as system messages without 'Command failed:' prefix", async () => {
+    const preflightError = "pre-flight: `claude` not found on PATH. Install: https://claude.ai/cli";
+    invokeMock.mockRejectedValueOnce(preflightError);
+    const user = userEvent.setup();
+    render(<ChatPane />);
+
+    await user.type(screen.getByTestId("chat-input"), "/plan #42 do thing");
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-message-system")).toBeInTheDocument();
+    });
+    const msg = screen.getByTestId("chat-message-system").textContent ?? "";
+    expect(msg).toContain("pre-flight:");
+    expect(msg).not.toMatch(/^Command failed:/);
+    expect(msg).toContain("https://claude.ai/cli");
+  });
+
+  it("wraps non-pre-flight errors in 'Command failed:' prefix", async () => {
+    invokeMock.mockRejectedValueOnce("Some other backend error");
+    const user = userEvent.setup();
+    render(<ChatPane />);
+
+    await user.type(screen.getByTestId("chat-input"), "/plan #99 do thing");
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-message-system")).toBeInTheDocument();
+    });
+    const msg = screen.getByTestId("chat-message-system").textContent ?? "";
+    expect(msg).toContain("Command failed:");
+    expect(msg).toContain("Some other backend error");
+  });
 });
