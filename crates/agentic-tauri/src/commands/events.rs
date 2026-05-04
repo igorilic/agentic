@@ -134,3 +134,81 @@ pub async fn get_event_history(
 ) -> Result<Vec<EventEnvelope>, String> {
     Ok(state.history.get(&run_id).await)
 }
+
+#[cfg(test)]
+mod tests {
+    use agentic_core::events::{Event, EventEnvelope, PermissionDecision, PermissionRisk, PermissionSource};
+
+    fn valid_run_id() -> String {
+        ulid::Ulid::new().to_string()
+    }
+
+    /// Regression test: `Event::PermissionRequest` serialises to the JSON shape
+    /// the TypeScript frontend expects. The forwarder calls `app.emit(CHANNEL, &envelope)`,
+    /// which delegates serialisation to serde — so confirming the serde output here
+    /// covers the entire risk surface without needing a live `AppHandle`.
+    #[test]
+    fn forwards_permission_request_envelope() {
+        let env = EventEnvelope::now(
+            valid_run_id(),
+            None,
+            Event::PermissionRequest {
+                request_id: "req-01J".into(),
+                agent: "developer".into(),
+                tool: "Bash".into(),
+                arg: "rm -rf node_modules".into(),
+                scope: "shell.destructive".into(),
+                risk: PermissionRisk::High,
+                reason: "destructive shell".into(),
+            },
+        );
+
+        let json = serde_json::to_value(&env).unwrap();
+
+        // Envelope-level fields
+        assert!(json["event_id"].is_string(), "event_id must be a string");
+        assert!(json["timestamp_ms"].is_number(), "timestamp_ms must be a number");
+
+        // Event discriminant: tag="type", content="data", rename_all="PascalCase"
+        assert_eq!(json["event"]["type"], "PermissionRequest");
+
+        // Nested payload fields (under "data")
+        let data = &json["event"]["data"];
+        assert_eq!(data["request_id"], "req-01J");
+        assert_eq!(data["agent"], "developer");
+        assert_eq!(data["tool"], "Bash");
+        assert_eq!(data["arg"], "rm -rf node_modules");
+        assert_eq!(data["scope"], "shell.destructive");
+        assert_eq!(data["risk"], "high");
+        assert_eq!(data["reason"], "destructive shell");
+    }
+
+    /// Regression test: `Event::PermissionResolved` serialises correctly.
+    #[test]
+    fn forwards_permission_resolved_envelope() {
+        let env = EventEnvelope::now(
+            valid_run_id(),
+            Some("step-01".into()),
+            Event::PermissionResolved {
+                request_id: "req-01J".into(),
+                decision: PermissionDecision::AllowOnce,
+                source: PermissionSource::User,
+            },
+        );
+
+        let json = serde_json::to_value(&env).unwrap();
+
+        // Envelope-level fields
+        assert!(json["event_id"].is_string(), "event_id must be a string");
+        assert_eq!(json["step_id"], "step-01");
+
+        // Event discriminant
+        assert_eq!(json["event"]["type"], "PermissionResolved");
+
+        // Nested payload fields
+        let data = &json["event"]["data"];
+        assert_eq!(data["request_id"], "req-01J");
+        assert_eq!(data["decision"], "allow_once");
+        assert_eq!(data["source"], "user");
+    }
+}
