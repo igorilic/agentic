@@ -1,12 +1,10 @@
 #![cfg(feature = "testing")]
 
+mod common;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
 
-use agentic_core::permissions::config::{OnTimeout, PermissionsConfig, PermissionsSettings};
-use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     Backend, BackendId, Db, Event, EventBus, EventEnvelope, EventPersister, ExecuteRequest,
     ModelId, Paths, Pipeline, PipelineConfig, PipelineOrchestrator, ProfileId, Run, RunId, RunRepo,
@@ -16,20 +14,7 @@ use agentic_core::{
 use rusqlite::params;
 use tokio_util::sync::CancellationToken;
 
-fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
-    Arc::new(AsyncGate::new(
-        PermissionsConfig {
-            allowlist: vec![],
-            denylist: vec![],
-            settings: PermissionsSettings {
-                default_on_timeout: OnTimeout::Deny,
-            },
-        },
-        bus.clone(),
-        Duration::from_secs(60),
-        "test-agent".to_string(),
-    ))
-}
+use common::passthrough_gate;
 
 fn seed_workspace(db: &Db, id: &str) {
     let conn = db.conn().unwrap();

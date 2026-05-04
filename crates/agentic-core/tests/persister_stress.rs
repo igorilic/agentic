@@ -1,11 +1,10 @@
 #![cfg(feature = "testing")]
 
+mod common;
+
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
-use agentic_core::permissions::config::{OnTimeout, PermissionsConfig, PermissionsSettings};
-use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     Backend, Db, Event, EventBus, EventEnvelope, EventPersister, ExecuteRequest, ModelId, Paths,
     PipelineOrchestrator, Run, RunId, RunRepo, RunStatus, ScriptedBackend, Step, StepId, StepRepo,
@@ -14,20 +13,7 @@ use agentic_core::{
 use rusqlite::params;
 use tokio_util::sync::CancellationToken;
 
-fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
-    Arc::new(AsyncGate::new(
-        PermissionsConfig {
-            allowlist: vec![],
-            denylist: vec![],
-            settings: PermissionsSettings {
-                default_on_timeout: OnTimeout::Deny,
-            },
-        },
-        bus.clone(),
-        Duration::from_secs(60),
-        "test-agent".to_string(),
-    ))
-}
+use common::passthrough_gate;
 
 fn init_tracing() {
     // Best-effort — don't panic if another test already set a subscriber.

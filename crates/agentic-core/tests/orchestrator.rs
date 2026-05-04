@@ -1,8 +1,5 @@
-use std::sync::Arc;
-use std::time::Duration;
+mod common;
 
-use agentic_core::permissions::config::{OnTimeout, PermissionsConfig, PermissionsSettings};
-use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
     BackendId, CURRENT_SCHEMA_VERSION, Db, Event, EventBus, EventEnvelope, ModelId, Paths,
     PipelineOrchestrator, ProfileId, Run, RunRepo, RunStatus, Step, StepRepo, StepStatus,
@@ -10,22 +7,7 @@ use agentic_core::{
 };
 use rusqlite::params;
 
-/// Build a pass-through gate (empty config, no allow/deny lists) for tests
-/// that do not exercise permission logic.
-fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
-    Arc::new(AsyncGate::new(
-        PermissionsConfig {
-            allowlist: vec![],
-            denylist: vec![],
-            settings: PermissionsSettings {
-                default_on_timeout: OnTimeout::Deny,
-            },
-        },
-        bus.clone(),
-        Duration::from_secs(60),
-        "test-agent".to_string(),
-    ))
-}
+use common::passthrough_gate;
 
 fn setup() -> (tempfile::TempDir, Db, RunRepo, StepRepo, EventBus) {
     let tmp = tempfile::tempdir().unwrap();

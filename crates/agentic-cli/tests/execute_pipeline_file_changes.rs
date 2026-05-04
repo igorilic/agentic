@@ -20,8 +20,7 @@ use serde_json::json;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 
-// ---------------------------------------------------------------------------
-// FileEditingBackend: emits ToolUseStart, writes files to disk, then completes
+// Duplicated from agentic-core/tests/common/mod.rs - cross-crate test scope.
 fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
     Arc::new(AsyncGate::new(
         PermissionsConfig {
@@ -37,6 +36,8 @@ fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
     ))
 }
 
+// ---------------------------------------------------------------------------
+// FileEditingBackend: emits ToolUseStart, writes files to disk, then completes
 // ---------------------------------------------------------------------------
 
 /// A one-off test backend that:

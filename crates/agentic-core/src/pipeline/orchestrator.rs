@@ -101,9 +101,11 @@ impl PipelineOrchestrator {
 /// - `AllowlistConfig` / `DenylistConfig` sources: the gate never touches the
 ///   bus for these (pure sync evaluation). The orchestrator publishes the
 ///   `PermissionResolved` for the audit log.
-/// - `User` / `Timeout` / `Cancelled` / `SessionAllowlist` sources: the gate
-///   or the UI already emitted the `PermissionResolved` envelope. The
-///   orchestrator does NOT double-publish.
+/// - `User` / `Timeout` sources: the gate or the UI already emitted the
+///   `PermissionResolved` envelope. The orchestrator does NOT double-publish.
+/// - `SessionAllowlist` / `Cancelled` sources: currently leave audit gaps
+///   (no `PermissionResolved` published). See inline comment in match arm
+///   for rationale and future-work notes.
 fn handle_tool_use_start(envelope: EventEnvelope, gate: Arc<AsyncGate>, bus: EventBus) {
     let run_id = envelope.run_id.clone();
     let step_id = envelope.step_id.clone();
@@ -118,8 +120,9 @@ fn handle_tool_use_start(envelope: EventEnvelope, gate: Arc<AsyncGate>, bus: Eve
     tokio::spawn(async move {
         let arg = extract_tool_arg(&tool_name, &input);
 
-        // TODO: thread a real orchestrator-level CancellationToken once the
-        // orchestrator gains a graceful-shutdown cancellation path (later step).
+        // TODO: thread real cancel token from orchestrator. When done, also add a
+        // publish_audit_resolved call in the Cancelled arm of handle_tool_use_start
+        // so cancelled tool calls land in the audit log.
         let cancel = CancellationToken::new();
 
         let outcome = gate
@@ -162,9 +165,24 @@ fn handle_tool_use_start(envelope: EventEnvelope, gate: Arc<AsyncGate>, bus: Eve
                 );
             }
             _ => {
-                // User / Timeout / Cancelled / SessionAllowlist:
-                // the gate or the UI already published PermissionResolved.
-                // The orchestrator does not double-publish.
+                // Sources that DO emit their own PermissionResolved on the bus:
+                //   - User: the UI publishes the user's decision envelope; AsyncGate
+                //     consumes it and returns the matching outcome.
+                //   - Timeout: AsyncGate publishes a synthetic
+                //     PermissionResolved { TimedOut, Timeout } at timeout expiry.
+                //
+                // Sources that DO NOT yet emit a PermissionResolved (audit gaps):
+                //   - SessionAllowlist: gate_async.rs returns immediately on cache
+                //     hit; no envelope is emitted. Acceptable for v1 — the session
+                //     allowlist itself is the audit trail (the original AllowSession
+                //     decision was already recorded). If we add session-hit audit
+                //     logging later, emit here.
+                //   - Cancelled: gate_async.rs returns Deny{Cancelled} on cancel
+                //     without publishing. TODO: when the orchestrator-level
+                //     CancellationToken is threaded (replacing the per-task
+                //     CancellationToken::new() at orchestrator.rs:123), add a
+                //     publish_audit_resolved call here for the Cancelled source so
+                //     the run-shutdown event log shows the abandoned tool calls.
             }
         }
     });

@@ -209,7 +209,9 @@ async fn tool_use_start_with_denylist_hit_emits_permission_resolved_deny_plus_wa
 
     match event {
         Event::PermissionResolved {
-            decision, source, ..
+            decision,
+            source,
+            request_id,
         } => {
             assert_eq!(
                 decision,
@@ -221,6 +223,7 @@ async fn tool_use_start_with_denylist_hit_emits_permission_resolved_deny_plus_wa
                 PermissionSource::DenylistConfig,
                 "denylist hit must have DenylistConfig source"
             );
+            assert!(!request_id.is_empty(), "request_id must not be empty");
         }
         other => panic!("expected PermissionResolved(Deny), got {other:?}"),
     }

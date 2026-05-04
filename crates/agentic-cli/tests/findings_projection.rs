@@ -21,6 +21,7 @@ use agentic_core::{
 use tempfile::TempDir;
 use tokio::sync::broadcast::Sender;
 
+// Duplicated from agentic-core/tests/common/mod.rs - cross-crate test scope.
 fn passthrough_gate(bus: &EventBus) -> Arc<AsyncGate> {
     Arc::new(AsyncGate::new(
         PermissionsConfig {
