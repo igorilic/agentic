@@ -1,8 +1,24 @@
 import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { vi } from "vitest";
 import ActivityColumn from "../components/ActivityColumn";
 import type { EventEnvelope } from "../types/event";
 import type { PermissionRequest } from "../types/pipeline";
+
+// --- P.4.2 module-level mocks ---
+// Must be at the top level so Vitest hoists them before imports.
+vi.mock("../hooks/usePermissionRequests", () => ({
+  usePermissionRequests: vi.fn(),
+}));
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+}));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
+
+import { usePermissionRequests } from "../hooks/usePermissionRequests";
+import { invoke } from "@tauri-apps/api/core";
 
 function envelope(opts: {
   id: string;
@@ -741,5 +757,143 @@ describe("ActivityColumn — real backend event classifier", () => {
     expect(cards).toHaveLength(1);
     // The card's agent chip should contain "tdd-developer"
     expect(cards[0].textContent).toContain("tdd-developer");
+  });
+});
+
+// --- P.4.2: ActivityColumn consumes live usePermissionRequests + dispatches IPC ---
+
+const r1Perm: PermissionRequest = {
+  requestId: "r1",
+  agent: "developer",
+  tool: "shell",
+  arg: "redis-cli FLUSHDB",
+  scope: "shell.destructive",
+  risk: "high",
+  reason: "Reset Redis to validate cold-start.",
+};
+
+const permEvent: EventEnvelope = {
+  schema_version: 1,
+  event_id: "pe-r1",
+  run_id: "run-1",
+  step_id: "step-1",
+  timestamp_ms: 1_700_000_001_000,
+  event: { type: "PermissionRequest", data: { request_id: "r1" } },
+};
+
+function ControlledActivityColumnLive({
+  runId,
+  stepId,
+}: {
+  runId?: string;
+  stepId?: string;
+}) {
+  const [filter, setFilter] = useState<"all" | "tool" | "perm" | "error">("all");
+  return (
+    <ActivityColumn
+      events={[permEvent]}
+      filter={filter}
+      onFilterChange={setFilter}
+      runId={runId}
+      stepId={stepId}
+    />
+  );
+}
+
+describe("ActivityColumn — P.4.2 live hook + IPC wiring", () => {
+  const mockUsePermissionRequests = vi.mocked(usePermissionRequests);
+  const mockInvoke = vi.mocked(invoke);
+
+  beforeEach(() => {
+    mockUsePermissionRequests.mockReset();
+    mockInvoke.mockReset();
+    mockInvoke.mockResolvedValue(undefined);
+  });
+
+  it("renders_permission_card_from_live_hook", () => {
+    mockUsePermissionRequests.mockReturnValue([r1Perm]);
+    render(<ControlledActivityColumnLive runId="run-1" />);
+    expect(screen.getByTestId("permission-card")).toBeInTheDocument();
+    // Agent name should appear
+    expect(screen.getByTestId("permission-card").textContent).toContain("developer");
+  });
+
+  it("allow_once_click_fires_permission_decide_ipc", async () => {
+    mockUsePermissionRequests.mockReturnValue([r1Perm]);
+    render(<ControlledActivityColumnLive runId="run-1" />);
+    fireEvent.click(screen.getByTestId("permission-card-allow-once"));
+    // Allow async IPC call to settle
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("permission_decide", {
+        requestId: "r1",
+        decision: "once",
+        runId: "run-1",
+        stepId: undefined,
+      });
+    });
+  });
+
+  it("session_click_fires_permission_decide_with_session", async () => {
+    mockUsePermissionRequests.mockReturnValue([r1Perm]);
+    render(<ControlledActivityColumnLive runId="run-1" />);
+    fireEvent.click(screen.getByTestId("permission-card-allow-session"));
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("permission_decide", {
+        requestId: "r1",
+        decision: "session",
+        runId: "run-1",
+        stepId: undefined,
+      });
+    });
+  });
+
+  it("deny_click_fires_permission_decide_with_deny", async () => {
+    mockUsePermissionRequests.mockReturnValue([r1Perm]);
+    render(<ControlledActivityColumnLive runId="run-1" />);
+    fireEvent.click(screen.getByTestId("permission-card-deny"));
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("permission_decide", {
+        requestId: "r1",
+        decision: "deny",
+        runId: "run-1",
+        stepId: undefined,
+      });
+    });
+  });
+
+  it("card_stays_visible_after_click", async () => {
+    // No optimistic removal — card stays until the hook returns [] (Resolved envelope)
+    mockUsePermissionRequests.mockReturnValue([r1Perm]);
+    render(<ControlledActivityColumnLive runId="run-1" />);
+    fireEvent.click(screen.getByTestId("permission-card-allow-once"));
+    // Card is still in DOM after click (hook hasn't been updated yet)
+    expect(screen.getByTestId("permission-card")).toBeInTheDocument();
+  });
+
+  it("card_unmounts_when_resolved_arrives", () => {
+    // First render with the permission present
+    mockUsePermissionRequests.mockReturnValue([r1Perm]);
+    const { rerender } = render(<ControlledActivityColumnLive runId="run-1" />);
+    expect(screen.getByTestId("permission-card")).toBeInTheDocument();
+
+    // Simulate PermissionResolved arriving — hook now returns []
+    mockUsePermissionRequests.mockReturnValue([]);
+    rerender(<ControlledActivityColumnLive runId="run-1" />);
+    expect(screen.queryByTestId("permission-card")).toBeNull();
+  });
+
+  it("runId_undefined_skips_invoke", async () => {
+    // Defensive guard: P.4.3 hasn't shipped yet — runId not threaded from App.tsx
+    mockUsePermissionRequests.mockReturnValue([r1Perm]);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<ControlledActivityColumnLive runId={undefined} />);
+    fireEvent.click(screen.getByTestId("permission-card-allow-once"));
+    // Must NOT call invoke
+    expect(mockInvoke).not.toHaveBeenCalled();
+    // Must warn about missing runId
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("permission_decide called with no runId"),
+    );
+    warnSpy.mockRestore();
   });
 });
