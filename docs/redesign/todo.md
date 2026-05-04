@@ -3377,7 +3377,7 @@ Implementation contract:
   error message to `systemMessages` in `ChatPane`, matching the
   existing slash-error pattern.
 
-### [ ] Step F.1.1: `useBackend()` hook + localStorage persistence
+### [x] Step F.1.1: `useBackend()` hook + localStorage persistence
 
 **Goal**: Add a hook that owns the selected backend ID, persists it to
 `localStorage` under `agentic.backend`, and exposes
