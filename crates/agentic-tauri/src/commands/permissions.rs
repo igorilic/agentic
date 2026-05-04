@@ -7,13 +7,36 @@ use super::events::EventBusState;
 /// bus. Extracted from the Tauri command so tests can call it without needing
 /// a real `tauri::State`.
 async fn permission_decide_inner(
-    _bus: &EventBus,
-    _request_id: String,
-    _decision: String,
-    _run_id: String,
-    _step_id: Option<String>,
+    bus: &EventBus,
+    request_id: String,
+    decision: String,
+    run_id: String,
+    step_id: Option<String>,
 ) -> Result<(), String> {
-    unimplemented!("permission_decide_inner: not yet implemented")
+    // Validate run_id is a parseable ULID.
+    run_id
+        .parse::<ulid::Ulid>()
+        .map_err(|_| format!("invalid run_id: {run_id}"))?;
+
+    let parsed = match decision.as_str() {
+        "once" => PermissionDecision::AllowOnce,
+        "session" => PermissionDecision::AllowSession,
+        "deny" => PermissionDecision::Deny,
+        other => return Err(format!("invalid decision: {other}")),
+    };
+
+    let envelope = EventEnvelope::now(
+        run_id,
+        step_id,
+        Event::PermissionResolved {
+            request_id,
+            decision: parsed,
+            source: PermissionSource::User,
+        },
+    );
+
+    bus.publish(envelope);
+    Ok(())
 }
 
 /// Tauri command. Called by the web UI when the user clicks Allow /
@@ -62,14 +85,9 @@ mod tests {
         let mut rx = bus.subscribe();
         let run_id = valid_run_id();
 
-        let result = permission_decide_inner(
-            &bus,
-            "req-x".into(),
-            "once".into(),
-            run_id.clone(),
-            None,
-        )
-        .await;
+        let result =
+            permission_decide_inner(&bus, "req-x".into(), "once".into(), run_id.clone(), None)
+                .await;
 
         assert!(result.is_ok());
         let envelope = recv_one(&mut rx).await;
@@ -118,15 +136,9 @@ mod tests {
         let bus = EventBus::new();
         let mut rx = bus.subscribe();
 
-        permission_decide_inner(
-            &bus,
-            "req-deny".into(),
-            "deny".into(),
-            valid_run_id(),
-            None,
-        )
-        .await
-        .unwrap();
+        permission_decide_inner(&bus, "req-deny".into(), "deny".into(), valid_run_id(), None)
+            .await
+            .unwrap();
 
         let envelope = recv_one(&mut rx).await;
         match envelope.event {
@@ -172,13 +184,7 @@ mod tests {
 
         let result = tokio::time::timeout(
             std::time::Duration::from_millis(50),
-            permission_decide_inner(
-                &bus,
-                "req-fast".into(),
-                "once".into(),
-                valid_run_id(),
-                None,
-            ),
+            permission_decide_inner(&bus, "req-fast".into(), "once".into(), valid_run_id(), None),
         )
         .await;
 
