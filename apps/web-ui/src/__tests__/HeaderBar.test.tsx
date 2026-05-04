@@ -314,6 +314,30 @@ describe("HeaderBar", () => {
       const position = selector.compareDocumentPosition(runState);
       expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
+
+    it("click on already-active button is a no-op (no state flip, no localStorage write beyond mount)", () => {
+      // Clean slate — localStorage is empty before render.
+      localStorage.clear();
+      render(<HeaderBar {...defaultProps} />);
+
+      const claudeBtn = screen.getByTestId("header-backend-claude-code");
+      const copilotBtn = screen.getByTestId("header-backend-copilot-cli");
+
+      // Default: claude-code is active. The useEffect fires on mount and writes the
+      // default value, so localStorage now holds "claude-code".
+      expect(claudeBtn).toHaveAttribute("aria-pressed", "true");
+      expect(copilotBtn).toHaveAttribute("aria-pressed", "false");
+      expect(localStorage.getItem("agentic.backend")).toBe("claude-code");
+
+      fireEvent.click(claudeBtn);
+
+      // React bails on the identical setState call — no re-render, no useEffect.
+      // The segmented control state must not flip.
+      expect(claudeBtn).toHaveAttribute("aria-pressed", "true");
+      expect(copilotBtn).toHaveAttribute("aria-pressed", "false");
+      // localStorage value stays "claude-code" (written on mount, not overwritten again).
+      expect(localStorage.getItem("agentic.backend")).toBe("claude-code");
+    });
   });
 
   // W.1.2 — formatMmSs unit tests
