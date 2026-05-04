@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi, afterEach } from "vitest";
+import { vi, afterEach, beforeEach } from "vitest";
 import ChatColumn from "../components/ChatColumn";
 import type { ChatColumnProps } from "../components/ChatColumn";
 
@@ -199,6 +199,8 @@ describe("ChatColumn", () => {
   });
 
   describe("W.9.4 — New-spec affordance in ChatColumn", () => {
+    beforeEach(() => localStorage.clear());
+
     it("renders chat-composer-new-spec button inside ChatColumn", () => {
       render(<ChatColumn {...makeProps()} />);
       expect(screen.getByTestId("chat-composer-new-spec")).toBeInTheDocument();

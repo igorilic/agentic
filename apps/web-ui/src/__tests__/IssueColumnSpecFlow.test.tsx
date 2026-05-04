@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import IssueColumn from "../components/IssueColumn";
@@ -25,6 +25,8 @@ const actionItems: ActionItem[] = [
 afterEach(() => invokeMock.mockReset());
 
 describe("IssueColumn — Create spec flow (W.6.6)", () => {
+  beforeEach(() => localStorage.clear());
+
   it("Create spec button opens the SpecDialog", () => {
     render(
       <IssueColumn
