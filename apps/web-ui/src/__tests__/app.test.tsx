@@ -303,6 +303,30 @@ describe("App — P.4.3 runId/stepId threading into permission_decide", () => {
     });
   });
 
+  it("Run-pipeline button uses selected backend from useBackend()", async () => {
+    localStorage.setItem("agentic.backend", "copilot-cli");
+    mockInvoke.mockImplementation(async (cmd: string): Promise<unknown> => {
+      if (cmd === "start_ticket_run") return "run-btn-1";
+      if (cmd === "list_runs") return [];
+      if (cmd === "list_findings") return [];
+      if (cmd === "get_event_history") return [];
+      return undefined;
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    const runBtn = await vi.waitFor(() => screen.getByTestId("header-run"));
+    await user.click(runBtn);
+
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("start_ticket_run", {
+        ticket: "Untitled run",
+        backend: "copilot-cli",
+        model: null,
+      });
+    });
+  });
+
   it("latest_stepId_uses_most_recent_step_started", async () => {
     // Arrange: two StepStarted events — s1 then s2. s2 should win.
     const step1Env = makeEnvelope({

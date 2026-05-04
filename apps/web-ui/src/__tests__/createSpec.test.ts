@@ -15,7 +15,7 @@ describe("createSpec", () => {
   it("calls invoke with start_ticket_run and correct arg shape", async () => {
     invokeMock.mockResolvedValueOnce("run-42");
 
-    await createSpec("My new spec");
+    await createSpec("My new spec", "claude-code");
 
     expect(invokeMock).toHaveBeenCalledWith("start_ticket_run", {
       ticket: "My new spec",
@@ -24,10 +24,22 @@ describe("createSpec", () => {
     });
   });
 
+  it("threads the active backend into the IPC payload", async () => {
+    invokeMock.mockResolvedValueOnce("run-99");
+
+    await createSpec("My new spec", "copilot-cli");
+
+    expect(invokeMock).toHaveBeenCalledWith("start_ticket_run", {
+      ticket: "My new spec",
+      backend: "copilot-cli",
+      model: null,
+    });
+  });
+
   it("returns the run_id when invoke resolves with a string", async () => {
     invokeMock.mockResolvedValueOnce("run-123");
 
-    const result = await createSpec("Add rate limiting");
+    const result = await createSpec("Add rate limiting", "claude-code");
 
     expect(result).toBe("run-123");
   });
@@ -35,7 +47,7 @@ describe("createSpec", () => {
   it("returns undefined when invoke resolves with a non-string (object)", async () => {
     invokeMock.mockResolvedValueOnce({ unexpected: true });
 
-    const result = await createSpec("Add rate limiting");
+    const result = await createSpec("Add rate limiting", "claude-code");
 
     expect(result).toBeUndefined();
   });
@@ -43,7 +55,7 @@ describe("createSpec", () => {
   it("returns undefined when invoke resolves with null", async () => {
     invokeMock.mockResolvedValueOnce(null);
 
-    const result = await createSpec("Spec title");
+    const result = await createSpec("Spec title", "claude-code");
 
     expect(result).toBeUndefined();
   });
@@ -51,7 +63,7 @@ describe("createSpec", () => {
   it("returns undefined when invoke resolves with undefined", async () => {
     invokeMock.mockResolvedValueOnce(undefined);
 
-    const result = await createSpec("Spec title");
+    const result = await createSpec("Spec title", "claude-code");
 
     expect(result).toBeUndefined();
   });
@@ -59,6 +71,6 @@ describe("createSpec", () => {
   it("propagates IPC rejection (does not swallow errors)", async () => {
     invokeMock.mockRejectedValueOnce(new Error("ipc failure"));
 
-    await expect(createSpec("Spec title")).rejects.toThrow("ipc failure");
+    await expect(createSpec("Spec title", "claude-code")).rejects.toThrow("ipc failure");
   });
 });

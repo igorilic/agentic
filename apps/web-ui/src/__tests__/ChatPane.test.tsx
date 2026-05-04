@@ -160,6 +160,24 @@ describe("ChatPane", () => {
     });
   });
 
+  it("uses backend from useBackend() in /plan dispatch when no explicit flag", async () => {
+    localStorage.setItem("agentic.backend", "copilot-cli");
+    invokeMock.mockResolvedValueOnce("run-hook-1");
+    const user = userEvent.setup();
+    render(<ChatPane />);
+
+    await user.type(screen.getByTestId("chat-input"), "/plan #42 ticket text");
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("start_ticket_run", {
+        ticket: "#42 ticket text",
+        backend: "copilot-cli",
+        model: null,
+      });
+    });
+  });
+
   it("/plan --backend=copilot-cli forwards the parsed backend to the IPC", async () => {
     invokeMock.mockResolvedValueOnce("01def");
     const user = userEvent.setup();
