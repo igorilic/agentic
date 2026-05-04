@@ -31,4 +31,13 @@ describe("useBackend", () => {
     expect(result.current.backend).toBe("copilot-cli");
     expect(localStorage.getItem("agentic.backend")).toBe("copilot-cli");
   });
+
+  it("fresh hook instance reads persisted backend from localStorage", () => {
+    const { result: first } = renderHook(() => useBackend());
+    act(() => {
+      first.current.setBackend("copilot-cli");
+    });
+    const { result: second } = renderHook(() => useBackend());
+    expect(second.current.backend).toBe("copilot-cli");
+  });
 });
