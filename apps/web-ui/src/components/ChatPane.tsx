@@ -102,7 +102,11 @@ export default function ChatPane({
           const result = await dispatchSlashCommand(parsed.command, slashServices);
           setSystemMessages((prev) => [...prev, result.message]);
         } catch (err) {
-          setSystemMessages((prev) => [...prev, `Command failed: ${err}`]);
+          const errStr = String(err);
+          setSystemMessages((prev) => [
+            ...prev,
+            errStr.startsWith("pre-flight:") ? errStr : `Command failed: ${errStr}`,
+          ]);
         }
         return;
       }
