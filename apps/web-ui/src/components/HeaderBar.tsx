@@ -1,5 +1,7 @@
 import type { RunStateOverall } from "../types/pipeline";
 import { useTheme } from "../hooks/useTheme";
+import { useBackend } from "../hooks/useBackend";
+import type { BackendKind } from "../hooks/useBackend";
 
 export function formatMmSs(ms: number): string {
   if (ms < 0) ms = 0;
@@ -78,6 +80,60 @@ function RunStateBadge({ runState, elapsedMs, onRunPipeline, onStopRun, onRerun 
   return null;
 }
 
+type SegmentedButtonProps = {
+  label: string;
+  testid: string;
+  pressed: boolean;
+  onClick: () => void;
+};
+
+function SegmentedButton({ label, testid, pressed, onClick }: SegmentedButtonProps) {
+  return (
+    <button
+      type="button"
+      data-testid={testid}
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={
+        pressed
+          ? "rounded px-2 py-0.5 text-xs font-medium bg-bg-surface-2 text-fg"
+          : "rounded px-2 py-0.5 text-xs font-medium text-fg-muted hover:text-fg"
+      }
+    >
+      {label}
+    </button>
+  );
+}
+
+type BackendSelectorProps = {
+  backend: BackendKind;
+  setBackend: (b: BackendKind) => void;
+};
+
+function BackendSelector({ backend, setBackend }: BackendSelectorProps) {
+  return (
+    <div
+      role="group"
+      aria-label="Backend"
+      data-testid="header-backend-selector"
+      className="flex rounded-md border border-border-soft p-0.5"
+    >
+      <SegmentedButton
+        label="Claude"
+        testid="header-backend-claude-code"
+        pressed={backend === "claude-code"}
+        onClick={() => setBackend("claude-code")}
+      />
+      <SegmentedButton
+        label="Copilot"
+        testid="header-backend-copilot-cli"
+        pressed={backend === "copilot-cli"}
+        onClick={() => setBackend("copilot-cli")}
+      />
+    </div>
+  );
+}
+
 export type HeaderBarProps = {
   brand: string;
   ticketSlug: string | null;
@@ -100,6 +156,7 @@ export default function HeaderBar({
   onRerun,
 }: HeaderBarProps) {
   const { theme, toggle } = useTheme();
+  const { backend, setBackend } = useBackend();
   return (
     <header
       data-testid="header-bar"
@@ -129,6 +186,7 @@ export default function HeaderBar({
       </div>
 
       <div className="flex items-center gap-3.5">
+        <BackendSelector backend={backend} setBackend={setBackend} />
         <div role="status" aria-live="polite" data-testid="header-run-state">
           <RunStateBadge
             runState={runState}
