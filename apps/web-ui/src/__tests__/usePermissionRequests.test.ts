@@ -136,28 +136,22 @@ describe("usePermissionRequests", () => {
     expect(result.current[1].requestId).toBe("r2");
   });
 
-  it("clears_on_run_change", () => {
-    // First render: upstream has run-1's request
+  it("resolved_before_request_does_not_suppress_later_request", () => {
+    // History-replay race: a Resolved envelope can arrive before its
+    // matching Request (e.g. backend logs both, frontend reads via
+    // get_event_history out of strict order). The Resolved must
+    // no-op (no id to delete), and the later Request must insert
+    // normally — NOT be suppressed as a duplicate of an already-
+    // resolved id.
     mockUseTauriEvents.mockReturnValue({
-      events: [makeRequestEnvelope("r1", { run_id: "run-1" })],
+      events: [makeResolvedEnvelope("r1"), makeRequestEnvelope("r1")],
       historyError: null,
     });
 
-    const { result, rerender } = renderHook(() => usePermissionRequests());
+    const { result } = renderHook(() => usePermissionRequests());
 
     expect(result.current).toHaveLength(1);
     expect(result.current[0].requestId).toBe("r1");
-
-    // useTauriEvents clears on run change — simulate by returning empty events
-    mockUseTauriEvents.mockReturnValue({
-      events: [],
-      historyError: null,
-    });
-
-    rerender();
-
-    // Hook should reflect the empty upstream — no special code needed
-    expect(result.current).toHaveLength(0);
   });
 
   it("unrelated_events_are_ignored", () => {
