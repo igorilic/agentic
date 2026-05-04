@@ -156,10 +156,7 @@ export default function App() {
           events={events}
           filter={activityFilter}
           onFilterChange={setActivityFilter}
-          pendingPermissions={[]}
-          onPermissionDecision={() => {
-            /* parent will own this in a future step */
-          }}
+          runId={undefined} // TODO(P.4.3): thread activeRunId here
         />
         <IssueColumn
           ticket={ticket}

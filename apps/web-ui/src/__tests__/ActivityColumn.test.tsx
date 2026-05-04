@@ -42,17 +42,16 @@ function ControlledActivityColumn({ events }: { events: EventEnvelope[] }) {
   return <ActivityColumn events={events} filter={filter} onFilterChange={setFilter} />;
 }
 
+// W.7.2 helper: seeds usePermissionRequests via the mock (P.4.2 — props removed).
+// pendingPermissions is accepted here for readability but is applied via
+// vi.mocked(usePermissionRequests).mockReturnValue() in W.7.2 beforeEach.
 type ControlledWithPermsProps = {
   events: EventEnvelope[];
-  pendingPermissions?: PermissionRequest[];
-  onPermissionDecision?: (requestId: string, decision: "once" | "session" | "deny") => void;
   initialFilter?: "all" | "tool" | "perm" | "error";
 };
 
 function ControlledActivityColumnWithPerms({
   events,
-  pendingPermissions,
-  onPermissionDecision,
   initialFilter = "all",
 }: ControlledWithPermsProps) {
   const [filter, setFilter] = useState<"all" | "tool" | "perm" | "error">(initialFilter);
@@ -61,8 +60,7 @@ function ControlledActivityColumnWithPerms({
       events={events}
       filter={filter}
       onFilterChange={setFilter}
-      pendingPermissions={pendingPermissions}
-      onPermissionDecision={onPermissionDecision}
+      runId="run-1"
     />
   );
 }
@@ -114,6 +112,12 @@ const findingEvents: EventEnvelope[] = [
 ];
 
 describe("ActivityColumn", () => {
+  beforeEach(() => {
+    // These tests don't exercise permissions — default the hook to []
+    vi.mocked(usePermissionRequests).mockReturnValue([]);
+    vi.mocked(invoke).mockResolvedValue(undefined);
+  });
+
   it("renders outer data-testid='activity-column'", () => {
     render(<ControlledActivityColumn events={[]} />);
     expect(screen.getByTestId("activity-column")).toBeInTheDocument();
@@ -323,22 +327,34 @@ const permEnvelope = envelope({
 });
 
 describe("ActivityColumn — W.7.2 PermissionCard inline rendering", () => {
+  // P.4.2: pendingPermissions/onPermissionDecision props removed.
+  // Tests now seed permissions via mocked usePermissionRequests hook.
+  // Decision callbacks now verified via mocked invoke IPC.
+  const mockUsePermReqs = vi.mocked(usePermissionRequests);
+  const mockInvoke = vi.mocked(invoke);
+
+  beforeEach(() => {
+    mockUsePermReqs.mockReset();
+    mockInvoke.mockReset();
+    mockInvoke.mockResolvedValue(undefined);
+    // Default: no pending permissions unless overridden in the test
+    mockUsePermReqs.mockReturnValue([]);
+  });
+
   it("renders PermissionCard for a matched perm event", () => {
+    mockUsePermReqs.mockReturnValue([examplePerm]);
     render(
-      <ControlledActivityColumnWithPerms
-        events={[permEnvelope]}
-        pendingPermissions={[examplePerm]}
-      />,
+      <ControlledActivityColumnWithPerms events={[permEnvelope]} />,
     );
     expect(screen.getByTestId("permission-card")).toBeInTheDocument();
     expect(screen.getAllByTestId("event-row")).toHaveLength(1);
   });
 
   it("filter 'perm' shows permission cards", () => {
+    mockUsePermReqs.mockReturnValue([examplePerm]);
     render(
       <ControlledActivityColumnWithPerms
         events={[permEnvelope]}
-        pendingPermissions={[examplePerm]}
         initialFilter="perm"
       />,
     );
@@ -346,10 +362,10 @@ describe("ActivityColumn — W.7.2 PermissionCard inline rendering", () => {
   });
 
   it("filter 'tool' hides permission cards", () => {
+    mockUsePermReqs.mockReturnValue([examplePerm]);
     render(
       <ControlledActivityColumnWithPerms
         events={[permEnvelope]}
-        pendingPermissions={[examplePerm]}
         initialFilter="tool"
       />,
     );
@@ -357,10 +373,10 @@ describe("ActivityColumn — W.7.2 PermissionCard inline rendering", () => {
   });
 
   it("filter 'all' includes permission cards", () => {
+    mockUsePermReqs.mockReturnValue([examplePerm]);
     render(
       <ControlledActivityColumnWithPerms
         events={[permEnvelope]}
-        pendingPermissions={[examplePerm]}
         initialFilter="all"
       />,
     );
@@ -368,83 +384,89 @@ describe("ActivityColumn — W.7.2 PermissionCard inline rendering", () => {
   });
 
   it("header counts.perm reflects 1 when one matched perm event present", () => {
+    mockUsePermReqs.mockReturnValue([examplePerm]);
     render(
-      <ControlledActivityColumnWithPerms
-        events={[permEnvelope]}
-        pendingPermissions={[examplePerm]}
-      />,
+      <ControlledActivityColumnWithPerms events={[permEnvelope]} />,
     );
     expect(screen.getByTestId("activity-tab-perm-count")).toHaveTextContent("1");
   });
 
-  it("unmatched perm event (request_id not in pendingPermissions) drops out", () => {
+  it("unmatched perm event (request_id not in hook) drops out", () => {
+    // Hook returns [] — the PermissionRequest event has no matching entry
+    mockUsePermReqs.mockReturnValue([]);
     const unmatchedEnvelope = envelope({
       id: "pe2",
       type: "PermissionRequest",
       data: { request_id: "p999" },
     });
     render(
-      <ControlledActivityColumnWithPerms
-        events={[unmatchedEnvelope]}
-        pendingPermissions={[]}
-      />,
+      <ControlledActivityColumnWithPerms events={[unmatchedEnvelope]} />,
     );
     expect(screen.queryByTestId("permission-card")).toBeNull();
     expect(screen.queryAllByTestId("event-row")).toHaveLength(0);
     expect(screen.getByTestId("activity-tab-perm-count")).toHaveTextContent("0");
   });
 
-  it("omitting pendingPermissions prop causes perm events to drop entirely", () => {
+  it("hook returning [] causes perm events to drop entirely", () => {
+    // Mirrors the old "omitting pendingPermissions" test — hook is now the source of truth
+    mockUsePermReqs.mockReturnValue([]);
     render(
-      <ControlledActivityColumnWithPerms
-        events={[permEnvelope]}
-        // pendingPermissions omitted
-      />,
+      <ControlledActivityColumnWithPerms events={[permEnvelope]} />,
     );
     expect(screen.queryByTestId("permission-card")).toBeNull();
     expect(screen.queryAllByTestId("event-row")).toHaveLength(0);
   });
 
-  it("decision callback fires onPermissionDecision('p1', 'once') on Allow once", () => {
-    const onDecision = vi.fn();
+  it("decision fires invoke('permission_decide', ..., 'once') on Allow once", async () => {
+    mockUsePermReqs.mockReturnValue([examplePerm]);
     render(
-      <ControlledActivityColumnWithPerms
-        events={[permEnvelope]}
-        pendingPermissions={[examplePerm]}
-        onPermissionDecision={onDecision}
-      />,
+      <ControlledActivityColumnWithPerms events={[permEnvelope]} />,
     );
     fireEvent.click(screen.getByTestId("permission-card-allow-once"));
-    expect(onDecision).toHaveBeenCalledWith("p1", "once");
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("permission_decide", {
+        requestId: "p1",
+        decision: "once",
+        runId: "run-1",
+        stepId: undefined,
+      });
+    });
   });
 
-  it("decision callback fires onPermissionDecision('p1', 'session') on Allow for session", () => {
-    const onDecision = vi.fn();
+  it("decision fires invoke('permission_decide', ..., 'session') on Allow for session", async () => {
+    mockUsePermReqs.mockReturnValue([examplePerm]);
     render(
-      <ControlledActivityColumnWithPerms
-        events={[permEnvelope]}
-        pendingPermissions={[examplePerm]}
-        onPermissionDecision={onDecision}
-      />,
+      <ControlledActivityColumnWithPerms events={[permEnvelope]} />,
     );
     fireEvent.click(screen.getByTestId("permission-card-allow-session"));
-    expect(onDecision).toHaveBeenCalledWith("p1", "session");
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("permission_decide", {
+        requestId: "p1",
+        decision: "session",
+        runId: "run-1",
+        stepId: undefined,
+      });
+    });
   });
 
-  it("decision callback fires onPermissionDecision('p1', 'deny') on Deny", () => {
-    const onDecision = vi.fn();
+  it("decision fires invoke('permission_decide', ..., 'deny') on Deny", async () => {
+    mockUsePermReqs.mockReturnValue([examplePerm]);
     render(
-      <ControlledActivityColumnWithPerms
-        events={[permEnvelope]}
-        pendingPermissions={[examplePerm]}
-        onPermissionDecision={onDecision}
-      />,
+      <ControlledActivityColumnWithPerms events={[permEnvelope]} />,
     );
     fireEvent.click(screen.getByTestId("permission-card-deny"));
-    expect(onDecision).toHaveBeenCalledWith("p1", "deny");
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("permission_decide", {
+        requestId: "p1",
+        decision: "deny",
+        runId: "run-1",
+        stepId: undefined,
+      });
+    });
   });
 
   it("mixed event stream: RunStarted + PermissionRequest + ToolCall all visible under filter=all", () => {
+    mockUsePermReqs.mockReturnValue([examplePerm]);
     const mixedWithPerm: EventEnvelope[] = [
       envelope({ id: "m1", type: "RunStarted", t: 1_700_000_000_000 }),
       permEnvelope,
@@ -459,7 +481,6 @@ describe("ActivityColumn — W.7.2 PermissionCard inline rendering", () => {
     render(
       <ControlledActivityColumnWithPerms
         events={mixedWithPerm}
-        pendingPermissions={[examplePerm]}
         initialFilter="all"
       />,
     );
@@ -469,8 +490,9 @@ describe("ActivityColumn — W.7.2 PermissionCard inline rendering", () => {
     expect(rows[1].querySelector('[data-testid="permission-card"]')).not.toBeNull();
   });
 
-  it("W.5.4 backward compat: existing tests still pass without pendingPermissions (perm events drop, others show)", () => {
-    // existing ControlledActivityColumn never passes pendingPermissions — verify it still works
+  it("W.5.4 backward compat: ControlledActivityColumn (no perms) — perm events drop, others show", () => {
+    // ControlledActivityColumn uses usePermissionRequests mock returning []
+    mockUsePermReqs.mockReturnValue([]);
     render(<ControlledActivityColumn events={mixedEvents} />);
     expect(screen.getAllByTestId("event-row")).toHaveLength(5);
     expect(screen.queryByTestId("permission-card")).toBeNull();
@@ -483,6 +505,11 @@ const STEP_ULID = "01KQG1JPPHEE8RMVH3X4Y5Z6W7";
 const STEP_ULID_2 = "01KQG1M5RMVH3X4Y5Z6W7A8B9C";
 
 describe("ActivityColumn — real backend event classifier", () => {
+  beforeEach(() => {
+    vi.mocked(usePermissionRequests).mockReturnValue([]);
+    vi.mocked(invoke).mockResolvedValue(undefined);
+  });
+
   // A. step_id → agent resolution via StepStarted map
 
   it("StepStarted followed by StepComplete: StepComplete row shows resolved agent, not ULID", () => {

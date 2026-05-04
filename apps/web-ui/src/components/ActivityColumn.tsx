@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { EventEnvelope } from "../types/event";
 import { isPermissionRequestEvent } from "../types/event";
 import type { PermissionRequest } from "../types/pipeline";
@@ -8,16 +9,20 @@ import ActivityHeader, {
 import LogRow from "./LogRow";
 import ToolCallCard from "./ToolCallCard";
 import PermissionCard from "./PermissionCard";
+import { usePermissionRequests } from "../hooks/usePermissionRequests";
 
 export type ActivityColumnProps = {
   events: EventEnvelope[];
   filter: ActivityFilter;
   onFilterChange: (filter: ActivityFilter) => void;
-  pendingPermissions?: PermissionRequest[];
-  onPermissionDecision?: (
-    requestId: string,
-    decision: "once" | "session" | "deny",
-  ) => void;
+  /** Active run id; decisions are skipped (with a console.warn) when undefined.
+   * P.4.3 will thread the real activeRunId from App.tsx. */
+  runId?: string;
+  /** Active step id — optional; backend accepts Option<String>. */
+  stepId?: string;
+  // TODO(tech-debt): a dedicated permissionError slot on App.tsx would be
+  // cleaner than surfacing IPC errors via the same channel as history errors.
+  // Deferred: App.tsx has no error setter today; add in a future cleanup step.
 };
 
 type VisibleRow =
@@ -251,12 +256,30 @@ export default function ActivityColumn({
   events,
   filter,
   onFilterChange,
-  pendingPermissions,
-  onPermissionDecision,
+  runId,
+  stepId,
 }: ActivityColumnProps) {
+  const pendingPermissions = usePermissionRequests();
   const permsById = new Map(
-    (pendingPermissions ?? []).map((p) => [p.requestId, p]),
+    pendingPermissions.map((p) => [p.requestId, p]),
   );
+
+  async function handleDecision(
+    requestId: string,
+    decision: "once" | "session" | "deny",
+  ) {
+    if (!runId) {
+      console.warn("permission_decide called with no runId; skipping IPC");
+      return;
+    }
+    try {
+      await invoke("permission_decide", { requestId, decision, runId, stepId });
+    } catch (err) {
+      // Surface IPC errors to the console for now. Tech-debt: wire a dedicated
+      // permissionError setter when App.tsx gains an error state slot.
+      console.error("permission_decide failed:", err);
+    }
+  }
 
   // Build step_id → agent name map from StepStarted events before classifying.
   // Real backend uses ULIDs as step_id; agent name lives in StepStarted.event.data.agent.
@@ -301,7 +324,7 @@ export default function ActivityColumn({
                   <PermissionCard
                     permission={row.permission}
                     onDecision={(decision) =>
-                      onPermissionDecision?.(row.permission.requestId, decision)
+                      void handleDecision(row.permission.requestId, decision)
                     }
                   />
                 </li>
