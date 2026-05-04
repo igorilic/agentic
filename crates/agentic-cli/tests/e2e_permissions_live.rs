@@ -1,0 +1,358 @@
+//! Live E2E smoke test — real `ClaudeCodeBackend` + `AsyncGate` + sandbox Python project.
+//!
+//! This test is `#[ignore]`d and is NOT run by `cargo test` by default.
+//! It requires:
+//!   - `ANTHROPIC_API_KEY` set in the environment
+//!   - `claude` (Claude Code CLI) on `PATH`
+//!
+//! Run manually:
+//!   cargo test -p agentic-cli --test e2e_permissions_live -- --ignored --nocapture
+//!
+//! See docs/SMOKE.md §"Live permission gate smoke test" for prerequisites and
+//! interpretation guide.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use agentic_cli::ticket_run::{BackendFactory, PipelineRunContext, execute_pipeline};
+use agentic_core::permissions::config::PermissionsConfig;
+use agentic_core::permissions::gate_async::AsyncGate;
+use agentic_core::{
+    Backend, ClaudeCodeBackend, Db, Event, EventBus, EventPersister, ModelId, Paths, Pipeline,
+    PipelineOrchestrator, PipelineStep, Run, RunRepo, RunStatus, StepRepo, Workspace,
+    WorkspaceRepo,
+};
+
+// ---------------------------------------------------------------------------
+// The smoke test
+// ---------------------------------------------------------------------------
+
+#[ignore = "live: requires ANTHROPIC_API_KEY + claude-code on PATH; run via: cargo test -p agentic-cli --test e2e_permissions_live -- --ignored --nocapture"]
+#[tokio::test]
+async fn palindrome_run_exercises_permission_gate_against_real_claude_code() {
+    // 1. Skip immediately if the API key is absent.
+    if std::env::var("ANTHROPIC_API_KEY").is_err() {
+        eprintln!("skipping: ANTHROPIC_API_KEY not set");
+        return;
+    }
+
+    eprintln!("\n=== P.6.1.b live smoke test starting ===");
+
+    // 2. Sandbox setup — ephemeral tmpdir, auto-cleaned on drop.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let sandbox = dir.path();
+
+    eprintln!("sandbox: {}", sandbox.display());
+
+    // Seed placeholder Python files so Claude has something to work with.
+    std::fs::write(
+        sandbox.join("palindrome.py"),
+        "# placeholder — Claude will implement this\n",
+    )
+    .unwrap();
+    std::fs::write(
+        sandbox.join("test_palindrome.py"),
+        "# placeholder — Claude will implement tests here\n",
+    )
+    .unwrap();
+
+    // git init (Claude Code requires a git repo for safe-to-write checks).
+    for (args, desc) in &[
+        (vec!["init", "--quiet"], "git init"),
+        (
+            vec!["config", "user.email", "test@example.com"],
+            "git config email",
+        ),
+        (vec!["config", "user.name", "Test"], "git config name"),
+        (vec!["add", "-A"], "git add"),
+        (vec!["commit", "-m", "initial"], "git commit"),
+    ] {
+        let status = std::process::Command::new("git")
+            .current_dir(sandbox)
+            .args(args)
+            .status()
+            .unwrap_or_else(|e| panic!("{desc} failed: {e}"));
+        if !status.success() {
+            eprintln!("  warning: {desc} exited with {status}");
+        }
+    }
+
+    // 3. Plant a minimal tdd-developer agent file.
+    //    discovery order: .agentic/agents/ wins over .claude/agents/ and ~
+    let agents_dir = sandbox.join(".agentic").join("agents");
+    std::fs::create_dir_all(&agents_dir).unwrap();
+    std::fs::write(
+        agents_dir.join("tdd-developer.md"),
+        "+++\n\
+         name = \"tdd-developer\"\n\
+         description = \"Implements the feature described in the ticket.\"\n\
+         pipeline_role = \"step\"\n\
+         +++\n\
+         You are a skilled Python developer. Implement the feature described in the ticket.\n\
+         Use the Write or Edit tools to update files. Be concise.\n",
+    )
+    .unwrap();
+
+    // 4. Write permissions.toml — exercises allowlist (Read/Write/Edit) and
+    //    denylist (rm, sudo, curl).  The gate must resolve at least one call
+    //    via AllowlistConfig.
+    let perm_toml = r#"
+[allowlist]
+patterns = [
+  "Read(*)",
+  "LS(*)",
+  "Glob(*)",
+  "Grep(*)",
+  "Edit(*)",
+  "Write(*)",
+  "MultiEdit(*)",
+  "Bash(*)",
+]
+
+[denylist]
+patterns = [
+  "Bash(rm -rf /*)",
+  "Bash(sudo *)",
+]
+
+[settings]
+default_on_timeout = "deny"
+"#;
+    std::fs::write(sandbox.join("permissions.toml"), perm_toml).unwrap();
+
+    // 5. Bootstrap DB + paths.
+    let paths = Paths::for_tests(sandbox);
+    paths.ensure_dirs().unwrap();
+    let db = Db::open(&paths).unwrap();
+    let bus = EventBus::new();
+
+    // 6. Seed workspace + run rows (execute_pipeline requires them pre-existing).
+    let ws_id = "ws-palindrome-smoke";
+    let run_id = "run-palindrome-smoke";
+
+    WorkspaceRepo::new(&db)
+        .insert(Workspace {
+            id: ws_id.to_string(),
+            name: "palindrome-sandbox".to_string(),
+            root_path: sandbox.to_string_lossy().to_string(),
+            remote_url: None,
+            profile: "custom".to_string(),
+            created_at: 0,
+            last_opened: 0,
+        })
+        .unwrap();
+
+    RunRepo::new(&db)
+        .insert(Run {
+            id: run_id.to_string(),
+            workspace_id: ws_id.to_string(),
+            pipeline_name: "default".to_string(),
+            status: RunStatus::Pending,
+            ticket_type: None,
+            ticket_ref: None,
+            ticket_title: None,
+            ticket_body: None,
+            backend: "claude-code".to_string(),
+            model: "claude-haiku-4-5-20251001".to_string(),
+            started_at: 0,
+            completed_at: None,
+            duration_ms: None,
+            token_usage: None,
+            cost_usd: None,
+            summary: None,
+            subprocess_pid: None,
+        })
+        .unwrap();
+
+    // 7. Load permissions config and wire the AsyncGate.
+    let perms_config =
+        PermissionsConfig::load(&sandbox.join("permissions.toml")).expect("load permissions.toml");
+    eprintln!(
+        "permissions loaded: {} allowlist, {} denylist patterns",
+        perms_config.allowlist.len(),
+        perms_config.denylist.len()
+    );
+
+    let gate = Arc::new(AsyncGate::new(
+        perms_config,
+        bus.clone(),
+        Duration::from_secs(60),
+        "tdd-developer".to_string(),
+    ));
+
+    // 8. Spawn the orchestrator (handles RunStarted → Running transitions) and
+    //    event persister.
+    let _orch =
+        PipelineOrchestrator::spawn(bus.clone(), RunRepo::new(&db), StepRepo::new(&db), gate);
+    let _pers = EventPersister::spawn(bus.subscribe(), db.clone());
+
+    // 9. Subscribe to the bus BEFORE launching the pipeline so we don't miss
+    //    early envelopes.
+    let mut subscriber = bus.subscribe();
+
+    // 10. Build single-step pipeline (tdd-developer only — fast and exercises
+    //     file write tools which the allowlist covers).
+    let pipeline = Pipeline {
+        steps: vec![PipelineStep {
+            agent: "tdd-developer".to_string(),
+            stop_on_failure: false,
+            allowed_questions: None,
+            qa_fix_loop_cap: None,
+        }],
+    };
+
+    // 11. Ticket prompt — concise to minimise token cost.
+    let ticket_text = "Implement palindrome(s: str) -> bool in palindrome.py. \
+        A palindrome reads the same forwards and backwards (case-insensitive). \
+        Add 5 pytest tests in test_palindrome.py covering: empty string, single \
+        char, mixed case, 'racecar' (palindrome), 'hello' (non-palindrome).";
+
+    // 12. Spawn execute_pipeline in a task so we can concurrently drain the bus.
+    let sandbox_path = sandbox.to_path_buf();
+    let paths_clone = Paths::for_tests(sandbox);
+    let db_ref = db.clone();
+    let bus_ref = bus.clone();
+
+    let pipeline_handle = tokio::spawn(async move {
+        let factory: BackendFactory<'_> = Box::new(|_step: &PipelineStep| -> Box<dyn Backend> {
+            // Use the cheapest model to minimise cost during smoke tests.
+            // ClaudeCodeBackend::from_env() honours CLAUDE_CODE_BIN override.
+            Box::new(ClaudeCodeBackend::from_env())
+        });
+
+        execute_pipeline(
+            PipelineRunContext {
+                db: &db_ref,
+                bus: &bus_ref,
+                run_id,
+                ws_id,
+                ws_root: &sandbox_path,
+                ticket_text,
+                model_override: Some(ModelId("claude-haiku-4-5-20251001".to_string())),
+                paths: &paths_clone,
+                external_cancel: None,
+            },
+            &pipeline,
+            factory,
+        )
+        .await
+    });
+
+    // 13. Drain bus envelopes. Categorise permission-related events and count
+    //     tool calls. Break on RunComplete or outer 5-minute timeout.
+    let mut perm_requests: Vec<String> = Vec::new(); // tool name
+    let mut perm_resolveds: Vec<(String, String)> = Vec::new(); // (decision, source)
+    let mut tool_use_starts: usize = 0;
+    let mut run_complete_seen = false;
+
+    let drain_result = tokio::time::timeout(Duration::from_secs(300), async {
+        loop {
+            match subscriber.recv().await {
+                Ok(env) => {
+                    match &env.event {
+                        Event::ToolUseStart { tool_name, .. } => {
+                            tool_use_starts += 1;
+                            eprintln!("  ToolUseStart: {tool_name}");
+                        }
+                        Event::PermissionRequest {
+                            request_id, tool, ..
+                        } => {
+                            eprintln!("  PermissionRequest: tool={tool} id={request_id}");
+                            perm_requests.push(tool.clone());
+                        }
+                        Event::PermissionResolved {
+                            request_id,
+                            decision,
+                            source,
+                        } => {
+                            let d = format!("{decision:?}");
+                            let s = format!("{source:?}");
+                            eprintln!(
+                                "  PermissionResolved: id={request_id} decision={d} source={s}"
+                            );
+                            perm_resolveds.push((d, s));
+                        }
+                        Event::RunComplete { status, .. } => {
+                            eprintln!("  RunComplete: status={status:?}");
+                            run_complete_seen = true;
+                            break;
+                        }
+                        Event::TextDelta { .. } => {
+                            // Too noisy — suppress.
+                        }
+                        _ => {
+                            eprintln!("  event: {:?}", std::mem::discriminant(&env.event));
+                        }
+                    }
+                }
+                Err(_) => {
+                    // Channel closed — pipeline finished and bus was dropped.
+                    run_complete_seen = true;
+                    break;
+                }
+            }
+        }
+    })
+    .await;
+
+    // Wait for the pipeline task regardless.
+    let pipeline_result = pipeline_handle.await;
+
+    // 14. Summary.
+    eprintln!("\n=== SUMMARY ===");
+    eprintln!("ToolUseStart envelopes  : {tool_use_starts}");
+    eprintln!("PermissionRequest count : {}", perm_requests.len());
+    eprintln!("PermissionResolved count: {}", perm_resolveds.len());
+    eprintln!("RunComplete seen        : {run_complete_seen}");
+    eprintln!("Drain timeout           : {}", drain_result.is_err());
+
+    // Print permission details.
+    if !perm_resolveds.is_empty() {
+        eprintln!("PermissionResolved detail:");
+        for (d, s) in &perm_resolveds {
+            eprintln!("  decision={d} source={s}");
+        }
+    }
+
+    // 15. Assertions — flexible; Claude's exact tool sequence varies.
+
+    // The outer 5-min timeout must not have fired.
+    assert!(
+        drain_result.is_ok(),
+        "smoke test timed out after 300s — Claude Code subprocess hung or pipeline stalled"
+    );
+
+    // At least one tool call must have been observed on the bus.
+    assert!(
+        tool_use_starts > 0,
+        "expected ≥1 ToolUseStart from Claude Code; got 0 — \
+         check that the bus is wired correctly and ClaudeCodeBackend emits events"
+    );
+
+    // The gate must have resolved at least one permission (allowlist hit for Read/Write/Edit/Bash).
+    assert!(
+        !perm_resolveds.is_empty(),
+        "expected ≥1 PermissionResolved envelope; the gate did not fire — \
+         check that AsyncGate is wired into PipelineOrchestrator"
+    );
+
+    // At least one resolution should come from AllowlistConfig (Read/Edit/Write are in the allowlist).
+    let allowlist_count = perm_resolveds
+        .iter()
+        .filter(|(_, s)| s.contains("AllowlistConfig"))
+        .count();
+    assert!(
+        allowlist_count >= 1,
+        "expected ≥1 PermissionResolved with source=AllowlistConfig; \
+         got {allowlist_count} — allowlist patterns may not be matching"
+    );
+
+    // The pipeline must have completed without a panic.
+    match pipeline_result {
+        Ok(Ok(())) => eprintln!("pipeline completed successfully"),
+        Ok(Err(e)) => eprintln!("pipeline returned Err (non-fatal for smoke): {e}"),
+        Err(e) => panic!("pipeline task panicked: {e}"),
+    }
+
+    eprintln!("\nPASSED");
+}
