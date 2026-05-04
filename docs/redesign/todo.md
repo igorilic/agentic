@@ -3426,7 +3426,7 @@ the hook + tests.
 
 ---
 
-### [ ] Step F.1.2: Replace 3 hardcoded `"claude-code"` call sites
+### [x] Step F.1.2: Replace 3 hardcoded `"claude-code"` call sites
 
 **Goal**: Replace the literal `"claude-code"` strings in `App.tsx:101`,
 `ChatPane.tsx:41`, and `createSpec.ts:16` with values read from
