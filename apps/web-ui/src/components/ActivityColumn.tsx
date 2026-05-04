@@ -1,4 +1,5 @@
 import type { EventEnvelope } from "../types/event";
+import { isPermissionRequestEvent } from "../types/event";
 import type { PermissionRequest } from "../types/pipeline";
 import ActivityHeader, {
   type ActivityFilter,
@@ -14,7 +15,7 @@ export type ActivityColumnProps = {
   onFilterChange: (filter: ActivityFilter) => void;
   pendingPermissions?: PermissionRequest[];
   onPermissionDecision?: (
-    permId: string,
+    requestId: string,
     decision: "once" | "session" | "deny",
   ) => void;
 };
@@ -85,13 +86,11 @@ function classify(
 
   if (FILTERED_TYPES.has(type)) return { kind: "filtered" };
 
-  if (type === "PermissionRequest") {
-    const data = (env.event.data ?? {}) as { request_id?: unknown };
-    if (typeof data.request_id === "string") {
-      const perm = permsById.get(data.request_id);
-      if (perm !== undefined) {
-        return { kind: "permission", id: env.event_id, permission: perm };
-      }
+  if (isPermissionRequestEvent(env.event)) {
+    // Narrowed: env.event is PermissionRequestEvent; data.request_id is fully typed.
+    const perm = permsById.get(env.event.data.request_id);
+    if (perm !== undefined) {
+      return { kind: "permission", id: env.event_id, permission: perm };
     }
     return { kind: "filtered" };
   }

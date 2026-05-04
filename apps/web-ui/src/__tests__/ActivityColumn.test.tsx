@@ -29,7 +29,7 @@ function ControlledActivityColumn({ events }: { events: EventEnvelope[] }) {
 type ControlledWithPermsProps = {
   events: EventEnvelope[];
   pendingPermissions?: PermissionRequest[];
-  onPermissionDecision?: (permId: string, decision: "once" | "session" | "deny") => void;
+  onPermissionDecision?: (requestId: string, decision: "once" | "session" | "deny") => void;
   initialFilter?: "all" | "tool" | "perm" | "error";
 };
 

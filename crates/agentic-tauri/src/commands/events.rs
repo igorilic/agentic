@@ -216,4 +216,98 @@ mod tests {
         assert_eq!(data["decision"], "allow_once");
         assert_eq!(data["source"], "user");
     }
+
+    /// S-3: Covers all PermissionRisk variants — rename-fragile snake_case assertions.
+    #[test]
+    fn permission_risk_serializes_to_snake_case() {
+        fn risk_json(risk: PermissionRisk) -> serde_json::Value {
+            let env = EventEnvelope::now(
+                valid_run_id(),
+                None,
+                Event::PermissionRequest {
+                    request_id: "req-x".into(),
+                    agent: "developer".into(),
+                    tool: "Bash".into(),
+                    arg: "echo hi".into(),
+                    scope: "shell".into(),
+                    risk,
+                    reason: "test".into(),
+                },
+            );
+            let json = serde_json::to_value(&env).unwrap();
+            json["event"]["data"]["risk"].clone()
+        }
+
+        assert_eq!(risk_json(PermissionRisk::Low), "low");
+        assert_eq!(risk_json(PermissionRisk::Medium), "medium");
+        assert_eq!(risk_json(PermissionRisk::High), "high");
+    }
+
+    /// S-3: Covers all PermissionDecision and PermissionSource variants — rename-fragile assertions.
+    #[test]
+    fn permission_decision_and_source_serialize_to_snake_case() {
+        fn resolved_json(
+            decision: PermissionDecision,
+            source: PermissionSource,
+        ) -> serde_json::Value {
+            let env = EventEnvelope::now(
+                valid_run_id(),
+                None,
+                Event::PermissionResolved {
+                    request_id: "req-x".into(),
+                    decision,
+                    source,
+                },
+            );
+            serde_json::to_value(&env).unwrap()
+        }
+
+        // PermissionDecision variants
+        let data =
+            &resolved_json(PermissionDecision::AllowOnce, PermissionSource::User)["event"]["data"];
+        assert_eq!(data["decision"], "allow_once");
+
+        let data = &resolved_json(PermissionDecision::AllowSession, PermissionSource::User)["event"]
+            ["data"];
+        assert_eq!(data["decision"], "allow_session");
+
+        let data =
+            &resolved_json(PermissionDecision::Deny, PermissionSource::User)["event"]["data"];
+        assert_eq!(data["decision"], "deny");
+
+        let data =
+            &resolved_json(PermissionDecision::TimedOut, PermissionSource::User)["event"]["data"];
+        assert_eq!(data["decision"], "timed_out");
+
+        // PermissionSource variants
+        let data =
+            &resolved_json(PermissionDecision::AllowOnce, PermissionSource::User)["event"]["data"];
+        assert_eq!(data["source"], "user");
+
+        let data = &resolved_json(
+            PermissionDecision::AllowOnce,
+            PermissionSource::AllowlistConfig,
+        )["event"]["data"];
+        assert_eq!(data["source"], "allowlist_config");
+
+        let data = &resolved_json(
+            PermissionDecision::AllowOnce,
+            PermissionSource::DenylistConfig,
+        )["event"]["data"];
+        assert_eq!(data["source"], "denylist_config");
+
+        let data = &resolved_json(
+            PermissionDecision::AllowOnce,
+            PermissionSource::SessionAllowlist,
+        )["event"]["data"];
+        assert_eq!(data["source"], "session_allowlist");
+
+        let data = &resolved_json(PermissionDecision::AllowOnce, PermissionSource::Timeout)["event"]
+            ["data"];
+        assert_eq!(data["source"], "timeout");
+
+        let data = &resolved_json(PermissionDecision::AllowOnce, PermissionSource::Cancelled)["event"]
+            ["data"];
+        assert_eq!(data["source"], "cancelled");
+    }
 }
