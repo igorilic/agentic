@@ -2,8 +2,8 @@
 //!
 //! This test is `#[ignore]`d and is NOT run by `cargo test` by default.
 //! It requires:
-//!   - `ANTHROPIC_API_KEY` set in the environment
-//!   - `claude` (Claude Code CLI) on `PATH`
+//!   - `claude` (Claude Code CLI) on `PATH` — auth is the CLI's responsibility
+//!     (subscription via `claude /login`, ANTHROPIC_API_KEY, or other credential stores)
 //!
 //! Run manually:
 //!   cargo test -p agentic-cli --test e2e_permissions_live -- --ignored --nocapture
@@ -27,13 +27,32 @@ use agentic_core::{
 // The smoke test
 // ---------------------------------------------------------------------------
 
-#[ignore = "live: requires ANTHROPIC_API_KEY + claude-code on PATH; run via: cargo test -p agentic-cli --test e2e_permissions_live -- --ignored --nocapture"]
+#[ignore = "live: requires `claude` CLI on PATH (auth via claude /login or env); run via: cargo test -p agentic-cli --test e2e_permissions_live -- --ignored --nocapture"]
 #[tokio::test]
 async fn palindrome_run_exercises_permission_gate_against_real_claude_code() {
-    // 1. Skip immediately if the API key is absent.
-    if std::env::var("ANTHROPIC_API_KEY").is_err() {
-        eprintln!("skipping: ANTHROPIC_API_KEY not set");
-        return;
+    // 1. Skip immediately if the `claude` CLI is not available.
+    //    Auth (API key, subscription via `claude /login`, or other credential
+    //    stores) is the CLI's responsibility — we only check it exists and runs.
+    let claude_status = std::process::Command::new("claude")
+        .arg("--version")
+        .output();
+
+    match claude_status {
+        Ok(out) if out.status.success() => {
+            // CLI present and runnable — proceed.
+        }
+        Ok(out) => {
+            eprintln!(
+                "skipping: `claude --version` exited {:?}; stderr: {}",
+                out.status,
+                String::from_utf8_lossy(&out.stderr)
+            );
+            return;
+        }
+        Err(e) => {
+            eprintln!("skipping: `claude` CLI not on PATH ({})", e);
+            return;
+        }
     }
 
     eprintln!("\n=== P.6.1.b live smoke test starting ===");

@@ -12,8 +12,9 @@ a real Claude Code subprocess and a real `AsyncGate`.
 
 ### Prerequisites
 
-- `ANTHROPIC_API_KEY` set in your shell
 - `claude` (Claude Code CLI) on `PATH` — verify with `which claude`
+- Auth handled by the CLI itself: either `claude /login` (subscription) or
+  `ANTHROPIC_API_KEY` in your shell, or other credential storage the CLI supports
 - Internet access (the CLI calls the Anthropic API)
 
 ### Run
