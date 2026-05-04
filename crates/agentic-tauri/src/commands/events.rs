@@ -137,7 +137,9 @@ pub async fn get_event_history(
 
 #[cfg(test)]
 mod tests {
-    use agentic_core::events::{Event, EventEnvelope, PermissionDecision, PermissionRisk, PermissionSource};
+    use agentic_core::events::{
+        Event, EventEnvelope, PermissionDecision, PermissionRisk, PermissionSource,
+    };
 
     fn valid_run_id() -> String {
         ulid::Ulid::new().to_string()
@@ -167,7 +169,10 @@ mod tests {
 
         // Envelope-level fields
         assert!(json["event_id"].is_string(), "event_id must be a string");
-        assert!(json["timestamp_ms"].is_number(), "timestamp_ms must be a number");
+        assert!(
+            json["timestamp_ms"].is_number(),
+            "timestamp_ms must be a number"
+        );
 
         // Event discriminant: tag="type", content="data", rename_all="PascalCase"
         assert_eq!(json["event"]["type"], "PermissionRequest");

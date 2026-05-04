@@ -34,14 +34,13 @@ export interface AgentInstance {
 }
 
 export interface PermissionRequest {
-  id: string;
+  requestId: string;
   agent: string;
   tool: string;
   arg: string;
   scope: "shell.destructive" | "fs.write" | "network.outbound" | string;
   risk: "low" | "medium" | "high";
   reason: string;
-  t: number;
 }
 
 export interface ActionItem {

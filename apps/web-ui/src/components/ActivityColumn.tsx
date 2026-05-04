@@ -86,9 +86,9 @@ function classify(
   if (FILTERED_TYPES.has(type)) return { kind: "filtered" };
 
   if (type === "PermissionRequest") {
-    const data = (env.event.data ?? {}) as { permId?: unknown };
-    if (typeof data.permId === "string") {
-      const perm = permsById.get(data.permId);
+    const data = (env.event.data ?? {}) as { request_id?: unknown };
+    if (typeof data.request_id === "string") {
+      const perm = permsById.get(data.request_id);
       if (perm !== undefined) {
         return { kind: "permission", id: env.event_id, permission: perm };
       }
@@ -256,7 +256,7 @@ export default function ActivityColumn({
   onPermissionDecision,
 }: ActivityColumnProps) {
   const permsById = new Map(
-    (pendingPermissions ?? []).map((p) => [p.id, p]),
+    (pendingPermissions ?? []).map((p) => [p.requestId, p]),
   );
 
   // Build step_id → agent name map from StepStarted events before classifying.
@@ -302,7 +302,7 @@ export default function ActivityColumn({
                   <PermissionCard
                     permission={row.permission}
                     onDecision={(decision) =>
-                      onPermissionDecision?.(row.permission.id, decision)
+                      onPermissionDecision?.(row.permission.requestId, decision)
                     }
                   />
                 </li>

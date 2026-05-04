@@ -52,14 +52,13 @@ function ControlledActivityColumnWithPerms({
 }
 
 const examplePerm: PermissionRequest = {
-  id: "p1",
+  requestId: "p1",
   agent: "developer",
   tool: "shell",
   arg: "redis-cli FLUSHDB",
   scope: "shell.destructive",
   risk: "high",
   reason: "Reset Redis to validate cold-start.",
-  t: 1_700_000_001_000,
 };
 
 const mixedEvents: EventEnvelope[] = [
@@ -304,7 +303,7 @@ const permEnvelope = envelope({
   type: "PermissionRequest",
   t: 1_700_000_001_000,
   stepId: "developer",
-  data: { permId: "p1" },
+  data: { request_id: "p1" },
 });
 
 describe("ActivityColumn — W.7.2 PermissionCard inline rendering", () => {
@@ -362,11 +361,11 @@ describe("ActivityColumn — W.7.2 PermissionCard inline rendering", () => {
     expect(screen.getByTestId("activity-tab-perm-count")).toHaveTextContent("1");
   });
 
-  it("unmatched perm event (permId not in pendingPermissions) drops out", () => {
+  it("unmatched perm event (request_id not in pendingPermissions) drops out", () => {
     const unmatchedEnvelope = envelope({
       id: "pe2",
       type: "PermissionRequest",
-      data: { permId: "p999" },
+      data: { request_id: "p999" },
     });
     render(
       <ControlledActivityColumnWithPerms

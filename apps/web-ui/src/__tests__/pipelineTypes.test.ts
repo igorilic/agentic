@@ -38,9 +38,9 @@ describe("AgentInstance type shape", () => {
 });
 
 describe("PermissionRequest type shape", () => {
-  it("has id: string", () => {
+  it("has requestId: string (wire-format alignment with backend request_id)", () => {
     expectTypeOf<PermissionRequest>()
-      .toHaveProperty("id")
+      .toHaveProperty("requestId")
       .toEqualTypeOf<string>();
   });
 
@@ -78,12 +78,6 @@ describe("PermissionRequest type shape", () => {
     expectTypeOf<PermissionRequest>()
       .toHaveProperty("reason")
       .toEqualTypeOf<string>();
-  });
-
-  it("has t: number", () => {
-    expectTypeOf<PermissionRequest>()
-      .toHaveProperty("t")
-      .toEqualTypeOf<number>();
   });
 });
 

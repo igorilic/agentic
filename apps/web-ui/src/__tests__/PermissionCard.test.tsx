@@ -5,14 +5,13 @@ import { describe, it, expect, vi } from "vitest";
 
 function permission(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
   return {
-    id: "p2",
+    requestId: "p2",
     agent: "developer",
     tool: "shell",
     arg: "redis-cli FLUSHDB",
     scope: "shell.destructive",
     risk: "high",
     reason: "Reset local Redis to validate cold-start bucket behavior.",
-    t: 1_700_000_000_000,
     ...overrides,
   };
 }
@@ -176,11 +175,11 @@ describe("PermissionCard", () => {
     });
   });
 
-  describe("t field type check", () => {
-    it("fixture compiles and renders with t as a number", () => {
-      // This is a type-level smoke check. If t were typed as string, this would fail TypeScript.
-      const p = permission({ t: 1_700_000_000_000 });
-      expect(typeof p.t).toBe("number");
+  describe("requestId field type check", () => {
+    it("fixture compiles and renders with requestId as a string", () => {
+      // Type-level smoke check: ensures requestId is a string (aligns with backend wire format).
+      const p = permission({ requestId: "req-abc" });
+      expect(typeof p.requestId).toBe("string");
       render(<PermissionCard permission={p} onDecision={vi.fn()} />);
       expect(screen.getByTestId("permission-card")).toBeInTheDocument();
     });
