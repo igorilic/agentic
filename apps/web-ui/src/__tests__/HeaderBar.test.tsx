@@ -271,6 +271,51 @@ describe("HeaderBar", () => {
     });
   });
 
+  // F.1.3 — backend segmented control
+  describe("backend segmented control", () => {
+    it("renders the backend segmented control with two buttons", () => {
+      render(<HeaderBar {...defaultProps} />);
+      expect(screen.getByTestId("header-backend-claude-code")).toBeInTheDocument();
+      expect(screen.getByTestId("header-backend-copilot-cli")).toBeInTheDocument();
+    });
+
+    it("marks claude-code as pressed by default", () => {
+      render(<HeaderBar {...defaultProps} />);
+      expect(screen.getByTestId("header-backend-claude-code")).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("header-backend-copilot-cli")).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("clicking copilot-cli flips the active backend", async () => {
+      const user = userEvent.setup();
+      render(<HeaderBar {...defaultProps} />);
+      await user.click(screen.getByTestId("header-backend-copilot-cli"));
+      expect(screen.getByTestId("header-backend-copilot-cli")).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("header-backend-claude-code")).toHaveAttribute("aria-pressed", "false");
+      expect(localStorage.getItem("agentic.backend")).toBe("copilot-cli");
+    });
+
+    it("clicking claude-code flips back when copilot-cli was active", async () => {
+      const user = userEvent.setup();
+      localStorage.setItem("agentic.backend", "copilot-cli");
+      render(<HeaderBar {...defaultProps} />);
+      // copilot-cli should start as active
+      expect(screen.getByTestId("header-backend-copilot-cli")).toHaveAttribute("aria-pressed", "true");
+      await user.click(screen.getByTestId("header-backend-claude-code"));
+      expect(screen.getByTestId("header-backend-claude-code")).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("header-backend-copilot-cli")).toHaveAttribute("aria-pressed", "false");
+      expect(localStorage.getItem("agentic.backend")).toBe("claude-code");
+    });
+
+    it("backend selector container appears before header-run-state in the DOM", () => {
+      render(<HeaderBar {...defaultProps} />);
+      const selector = screen.getByTestId("header-backend-selector");
+      const runState = screen.getByTestId("header-run-state");
+      // DOCUMENT_POSITION_FOLLOWING = 4 means runState follows selector
+      const position = selector.compareDocumentPosition(runState);
+      expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
   // W.1.2 — formatMmSs unit tests
   describe("formatMmSs", () => {
     it("formats 0ms as 00:00", () => {
