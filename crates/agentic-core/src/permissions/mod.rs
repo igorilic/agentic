@@ -21,6 +21,7 @@ pub mod risk;
 pub mod session;
 pub use config::{
     OnTimeout, PermissionRule, PermissionsConfig, PermissionsConfigError, PermissionsSettings,
+    builtin_permissions_toml,
 };
 pub use gate::{ConfigGate, GateOutcome, PermissionGate};
 pub use gate_async::AsyncGate;

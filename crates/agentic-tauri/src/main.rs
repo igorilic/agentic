@@ -64,9 +64,36 @@ fn main() {
             // The handle is intentionally not stored: the orchestrator
             // exits when the bus is dropped, which happens at app shutdown.
             tauri::async_runtime::block_on(async {
-                // Load permissions config from the app data dir, falling back
-                // to the built-in default if the file does not exist.
+                // Load permissions config from the app data dir. If the
+                // file does not exist, write the built-in default to disk
+                // so users have a discoverable, editable starting point —
+                // and log where we loaded from so confused users can find
+                // it via the dev console.
                 let permissions_path = paths.data_dir().join("permissions.toml");
+                if !permissions_path.exists() {
+                    if let Some(parent) = permissions_path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    if let Err(e) = std::fs::write(
+                        &permissions_path,
+                        agentic_core::permissions::builtin_permissions_toml(),
+                    ) {
+                        tracing::warn!(
+                            "Could not write default permissions.toml at {}: {e}",
+                            permissions_path.display()
+                        );
+                    } else {
+                        tracing::info!(
+                            "Wrote default permissions.toml at {} — edit to customize",
+                            permissions_path.display()
+                        );
+                    }
+                } else {
+                    tracing::info!(
+                        "Loading permissions.toml from {}",
+                        permissions_path.display()
+                    );
+                }
                 let permissions_config = agentic_core::PermissionsConfig::load(&permissions_path)
                     .unwrap_or_else(|_| agentic_core::PermissionsConfig::builtin_default());
                 let gate = Arc::new(AsyncGate::new(

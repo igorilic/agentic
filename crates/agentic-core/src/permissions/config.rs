@@ -259,10 +259,6 @@ impl PermissionsConfig {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Validation
-    // -----------------------------------------------------------------------
-
     /// Validate all patterns by attempting to compile them with the real matcher.
     ///
     /// This replaces the P.1.2 heuristic (`pattern_has_regex_syntax`) which
@@ -281,6 +277,73 @@ fn rule(pattern: &str) -> PermissionRule {
     PermissionRule {
         pattern: pattern.to_string(),
     }
+}
+
+/// Annotated TOML for the builtin defaults — written to disk by callers
+/// (e.g. `agentic-tauri` on first run) so users have a discoverable,
+/// editable starting point. The pattern set must stay in lock-step
+/// with `PermissionsConfig::builtin_default()`.
+pub fn builtin_permissions_toml() -> &'static str {
+    r##"# Permissions config for the agentic permission gate.
+#
+# Tools listed in [allowlist] are auto-approved; tools listed in
+# [denylist] are auto-rejected with a tracing::warn (advisory in v1
+# per --dangerously-skip-permissions). Anything not matched prompts
+# the user via the PermissionCard.
+#
+# Pattern syntax:
+#   <tool>(<arg-glob>)   — shell-glob (* ? [abc]) on the full arg
+#   <tool>:*             — any arg for the named tool
+# No regex, no negation, no captures. Tool names are case-sensitive.
+#
+# To force prompts on common tools, comment out their lines below.
+# To prompt on every tool, comment out the entire [allowlist] section.
+
+[allowlist]
+patterns = [
+  # --- Claude Code: read-only / navigation tools (PascalCase) ---
+  "Read(*)",
+  "Edit(*)",
+  "Bash(*)",
+  "Write(*)",
+  "MultiEdit(*)",
+  "Glob(*)",
+  "Grep(*)",
+  "LS(*)",
+  # --- Copilot CLI: tools (lowercase) ---
+  "bash(*)",
+  "create(*)",
+  "str_replace(*)",
+  "view(*)",
+  "ls(*)",
+  "grep(*)",
+  "find(*)",
+]
+
+[denylist]
+patterns = [
+  # High-risk shell destructors — both casings
+  "Bash(rm -rf /*)",
+  "bash(rm -rf /*)",
+  "Bash(rm -rf ~*)",
+  "bash(rm -rf ~*)",
+  "Bash(sudo *)",
+  "bash(sudo *)",
+  # Kubernetes irreversible operations
+  "Bash(kubectl delete *)",
+  "bash(kubectl delete *)",
+  # Dangerous git operations
+  "Bash(git reset --hard *)",
+  "bash(git reset --hard *)",
+  "Bash(git push --force *)",
+  "bash(git push --force *)",
+]
+
+[settings]
+# What happens when the user takes longer than the gate's 60s timeout
+# to decide on a prompt. "deny" is the conservative default.
+default_on_timeout = "deny"
+"##
 }
 
 // ---------------------------------------------------------------------------
