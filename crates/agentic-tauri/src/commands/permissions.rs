@@ -35,7 +35,10 @@ async fn permission_decide_inner(
         },
     );
 
-    bus.publish(envelope);
+    let n = bus.publish(envelope);
+    if n == 0 {
+        return Err("no active subscriber — decision not delivered".to_string());
+    }
     Ok(())
 }
 
@@ -227,14 +230,9 @@ mod tests {
     async fn permission_decide_returns_err_when_no_subscriber() {
         let bus = EventBus::new();
         // Note: do NOT subscribe. The bus has zero active receivers.
-        let result = permission_decide_inner(
-            &bus,
-            "req-x".into(),
-            "once".into(),
-            valid_run_id(),
-            None,
-        )
-        .await;
+        let result =
+            permission_decide_inner(&bus, "req-x".into(), "once".into(), valid_run_id(), None)
+                .await;
 
         assert!(
             result.is_err(),
