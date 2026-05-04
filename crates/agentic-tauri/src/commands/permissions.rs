@@ -222,4 +222,28 @@ mod tests {
             "expected no envelope published on invalid run_id"
         );
     }
+
+    #[tokio::test]
+    async fn permission_decide_returns_err_when_no_subscriber() {
+        let bus = EventBus::new();
+        // Note: do NOT subscribe. The bus has zero active receivers.
+        let result = permission_decide_inner(
+            &bus,
+            "req-x".into(),
+            "once".into(),
+            valid_run_id(),
+            None,
+        )
+        .await;
+
+        assert!(
+            result.is_err(),
+            "publish with no subscribers must surface the failure as Err",
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("no active subscriber"),
+            "expected error to mention missing subscriber; got: {err}",
+        );
+    }
 }
