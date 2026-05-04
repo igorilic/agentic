@@ -15,8 +15,8 @@ export type ActivityColumnProps = {
   events: EventEnvelope[];
   filter: ActivityFilter;
   onFilterChange: (filter: ActivityFilter) => void;
-  /** Active run id; decisions are skipped (with a console.warn) when undefined.
-   * P.4.3 will thread the real activeRunId from App.tsx. */
+  /** Active run id, threaded from App.tsx. Decisions are skipped (with a
+   * console.warn) when undefined (e.g. before any run has started). */
   runId?: string;
   /** Active step id — optional; backend accepts Option<String>. */
   stepId?: string;
