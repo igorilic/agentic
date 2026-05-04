@@ -3572,7 +3572,7 @@ clean the JSX.
 
 ---
 
-### [ ] Step F.1.4: Surface "binary not found" pre-flight error in chat
+### [x] Step F.1.4: Surface "binary not found" pre-flight error in chat
 
 **Goal**: When `start_ticket_run` rejects with the pre-flight error
 message (e.g. `"pre-flight: \`copilot\` not found on PATH. Install …"`),
@@ -3660,7 +3660,7 @@ value, otherwise the error path isn't exercised distinctly).
 - [ ] F.1.1 useBackend() hook
 - [ ] F.1.2 Replace 3 hardcoded call sites
 - [ ] F.1.3 HeaderBar segmented control
-- [ ] F.1.4 Pre-flight error → systemMessages
+- [x] F.1.4 Pre-flight error → systemMessages
 
 ---
 

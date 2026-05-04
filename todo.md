@@ -2143,3 +2143,7 @@ context changes.
 
 - **Multi-finding stacking on same line** (GH [#84](https://github.com/igorilic/agentic/issues/84)) — only the last finding is visible when two findings land on the same line; hover should concatenate. Defer until user feedback confirms it's a problem.
 - **Persist findings across extension restarts** (GH [#85](https://github.com/igorilic/agentic/issues/85)) — findings are in-memory; restart clears them. Requires `listFindings(runId)` napi export and run-selection UX (CP-11+).
+
+### web-ui Run-pipeline button (F.1.4)
+
+- **App.handleRunPipeline silently swallows pre-flight errors** (GH [#106](https://github.com/igorilic/agentic/issues/106)) — surfacing the error requires hoisting `systemMessages` state from `ChatPane` to `App` or adding a callback prop (invasive restructuring). Trigger: Run-pipeline button graduates to SpecDialog-driven flow (W.8.x), or a global toast surface lands first.
