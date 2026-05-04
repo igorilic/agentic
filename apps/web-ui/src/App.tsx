@@ -50,6 +50,20 @@ export default function App() {
 
   const runState = useMemo(() => deriveRunState(events), [events]);
 
+  // Scan from the tail to find the most recent envelope with a non-null step_id
+  // that belongs to a StepStarted event. step_id lives on EventEnvelope (envelope-level
+  // field), not on the variant. We filter by StepStarted so that tool-call or
+  // permission envelopes sharing a step_id do not accidentally update the cursor.
+  const latestStepId = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const env = events[i];
+      if (env.event.type === "StepStarted" && env.step_id) {
+        return env.step_id;
+      }
+    }
+    return undefined;
+  }, [events]);
+
   const { overallRunState, elapsedMs } = useRunStateOverall(events, activeRunId);
   const { pipelineStatuses, activeIndex } = usePipelineFromRunState(runState);
 
@@ -156,7 +170,8 @@ export default function App() {
           events={events}
           filter={activityFilter}
           onFilterChange={setActivityFilter}
-          runId={undefined} // TODO(P.4.3): thread activeRunId here
+          runId={activeRunId}
+          stepId={latestStepId}
         />
         <IssueColumn
           ticket={ticket}
