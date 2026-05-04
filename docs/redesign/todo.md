@@ -2198,23 +2198,22 @@ pane**. The dual binding is the contract:
    - Why deferred: no backend `pipeline.toml` per-agent override API yet.
    - Trigger: when core ships a `set_agent_config` IPC.
 
-2. **Backend permission-request event** (GH #88 — in-progress, see Phase P).
-   - What's missing: real-time permission events from `agentic-core` —
-     `PermissionCard` currently renders against a fixture only and there
-     is no IPC channel to deliver live `PermissionRequest`/`PermissionDecision`
-     envelopes from the runner to the UI.
-   - Why deferred: redesign scope is visual / structural; backend events
-     are out of scope.
-   - Trigger: when the orchestrator gains a permission-gate hook in
-     `agentic-core`.
-   - Status: Phase P delivers an **observational** gate (annotates after
-     the fact under `--dangerously-skip-permissions`; session allowlist
-     blocks future prompts but cannot un-execute the call that produced
-     the prompt). A real **blocking** gate requires an MCP/proxy
-     interception architecture and is tracked in a follow-up tech-debt
-     issue (P.6.2 files: "Real blocking permission gate (MCP/proxy
-     intercept)"). Mark this entry "(GH #88 — closed by P.6.2)" once
-     Phase P lands and the follow-up issue is filed.
+2. **Backend permission-request event** (GH #88 — closed by Phase P).
+   - Shipped: observational permission gate per Q3.c. Backend emits
+     `Event::PermissionRequest` and `Event::PermissionResolved` envelopes
+     from the orchestrator's per-`ToolUseStart` hook. Web UI (Tauri) renders
+     live cards via `usePermissionRequests`; user clicks dispatch
+     `permission_decide` IPC; gate consumes `PermissionResolved` from the
+     bus. TUI applies the same envelopes into `state.pending_perms` (P.5.1).
+   - Limitations (v1, expected): tool calls already executed by the time
+     the gate sees them (`--dangerously-skip-permissions` constraint).
+     Session allowlist blocks future prompts but cannot un-execute the
+     call that produced the prompt.
+   - Follow-ups (filed):
+     - **GH #105** — Real blocking permission gate (MCP/proxy intercept).
+     - **GH #103** — TUI runner integration: y/s/n keys publish via bus.
+     - **GH #102** — SessionAllowlist memory leak on abnormal run exit.
+     - **GH #104** — Backend tracing::error logs not surfaced to Activity.
 
 3. **Real ticket-source body in Issue column** (GH #TBD).
    - What's missing: `IssueColumn.body` is always the placeholder `["No description available — …"]`.
@@ -3289,19 +3288,19 @@ Phase P — Permissions (GH #88)
 - [x] P.1.2 permissions.toml config loader
 - [x] P.1.3 Tool matcher (`<tool>(<arg-glob>)` and `<tool>:*`)
 - [x] P.1.4 Risk classifier table
-- [ ] P.2.1 PermissionGate trait + ConfigGate static
+- [x] P.2.1 PermissionGate trait + ConfigGate static
 - [x] P.2.2 Decision channel + async evaluate_async (60 s timeout)
 - [x] P.2.3 Per-run session allowlist
-- [ ] P.2.4 Wire gate into PipelineOrchestrator
+- [x] P.2.4 Wire gate into PipelineOrchestrator
 - [x] P.3.1 Tauri permission_decide command
-- [ ] P.3.2 Forwarder regression-test for Permission* envelopes
+- [x] P.3.2 Forwarder regression-test for Permission* envelopes
 - [x] P.4.1 usePermissionRequests hook with id-dedup
 - [x] P.4.2 ActivityColumn consumes live usePermissionRequests
 - [x] P.4.3 App.tsx wires runId/stepId into permission_decide
 - [x] P.5.1 TUI applies Permission envelopes to AppState (deferred runner integration)
 - [x] P.6.1 End-to-end web permission-flow integration test (Vitest portion)
 - [x] P.6.1.b Live-Rust complement test (palindrome sandbox + real AsyncGate)
-- [ ] P.6.2 File follow-up tech-debt issues + close GH #88
+- [x] P.6.2 File follow-up tech-debt issues + close GH #88
 
 ---
 
