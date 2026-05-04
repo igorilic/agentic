@@ -3873,7 +3873,7 @@ documented in CLAUDE.md as a checklist item.)
 
 ---
 
-### [ ] Step F.2.3: TS DTO type + `useJiraFetch()` IPC client hook
+### [x] Step F.2.3: TS DTO type + `useJiraFetch()` IPC client hook
 
 **Goal**: Add a TypeScript type that mirrors `JiraTicketDto` and a
 React hook `useJiraFetch()` that wraps `invoke('fetch_jira_ticket')`
