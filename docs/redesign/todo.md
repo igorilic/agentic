@@ -2913,7 +2913,7 @@ string` as the dedup key. Document the difference in
 
 ---
 
-### Step P.4.2: `ActivityColumn` consumes live `usePermissionRequests`
+### Step P.4.2: `ActivityColumn` consumes live `usePermissionRequests` ✅
 
 **Goal**: Replace the hard-coded fixture in `ActivityColumn` (W.7.2)
 with the live hook. When a real `PermissionCard` is rendered and the
@@ -3260,8 +3260,8 @@ Phase P — Permissions (GH #88)
 - [ ] P.2.4 Wire gate into PipelineOrchestrator
 - [x] P.3.1 Tauri permission_decide command
 - [ ] P.3.2 Forwarder regression-test for Permission* envelopes
-- [ ] P.4.1 usePermissionRequests hook with id-dedup
-- [ ] P.4.2 ActivityColumn consumes live usePermissionRequests
+- [x] P.4.1 usePermissionRequests hook with id-dedup
+- [x] P.4.2 ActivityColumn consumes live usePermissionRequests
 - [ ] P.4.3 App.tsx wires runId/stepId into permission_decide
 - [ ] P.5.1 TUI applies Permission envelopes to AppState (deferred runner integration)
 - [ ] P.6.1 End-to-end web permission-flow integration test
