@@ -2827,7 +2827,7 @@ bus, which the gate then consumes.
 
 ---
 
-### Step P.3.2: Bus forwarder transparently propagates Permission* envelopes
+### Step P.3.2: Bus forwarder transparently propagates Permission* envelopes ✓
 
 **Goal**: Verify that the existing Tauri event-forwarder
 (`subscribe_events` in `crates/agentic-tauri/src/commands/events.rs`)
