@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-jira-ticket"
+description = "Enables the fetch_jira_ticket command without any pre-configured scope."
+commands.allow = ["fetch_jira_ticket"]
+
+[[permission]]
+identifier = "deny-fetch-jira-ticket"
+description = "Denies the fetch_jira_ticket command without any pre-configured scope."
+commands.deny = ["fetch_jira_ticket"]

@@ -2,6 +2,7 @@ pub mod auth;
 pub mod chat;
 pub mod events;
 pub mod findings;
+pub mod jira;
 pub mod mention;
 pub mod permissions;
 pub mod runs;

@@ -155,6 +155,7 @@ fn main() {
             commands::ticket::start_ticket_run,
             commands::runs::list_runs,
             commands::permissions::permission_decide,
+            commands::jira::fetch_jira_ticket,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

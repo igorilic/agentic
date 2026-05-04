@@ -106,6 +106,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -4922,6 +4923,15 @@ dependencies = [
  "dunce",
  "embed-resource",
  "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "temp-env"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96374855068f47402c3121c6eed88d29cb1de8f3ab27090e273e420bdabcf050"
+dependencies = [
+ "parking_lot",
 ]
 
 [[package]]
