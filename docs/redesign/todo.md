@@ -3111,15 +3111,28 @@ confirmed correct). Live-Rust complement is P.6.1.b below.
 
 ### Step P.6.1.b: Live-Rust complement test (P.6.1 follow-up)
 
-**Goal**: Spawn a real Tauri backend (or use the agentic-tui integration harness)
-to exercise the permission flow end-to-end without any mocks at the Tauri boundary.
-Complements the Vitest jsdom test in P.6.1.
+**Goal**: A `#[ignore]`d Rust integration test in `agentic-cli` that exercises the
+full backend stack with a real `ClaudeCodeBackend` subprocess against a sandbox
+Python project (palindrome function), with `AsyncGate` intercepting tool calls and
+emitting `PermissionResolved` envelopes onto the bus.
 
 **Depends on**: P.6.1 (Vitest portion complete).
 
 **Deferred from**: P.6.1 dispatch — live backend infrastructure not needed for
 regression lock; the Vitest mock layer is sufficient for UI integration coverage.
-This step is the trigger when a real Tauri E2E harness is set up in the repo.
+
+**Test**: `crates/agentic-cli/tests/e2e_permissions_live.rs`
+- Single `#[ignore]` test requiring `ANTHROPIC_API_KEY` + `claude` on PATH.
+- Sandbox setup: tempdir, two placeholder Python files, git repo, permissions.toml.
+- Asserts: ≥1 `ToolUseStart`, ≥1 `PermissionResolved`, ≥1 `AllowlistConfig`
+  resolution, no panic, completes within 5 min.
+- Run: `cargo test -p agentic-cli --test e2e_permissions_live -- --ignored --nocapture`
+- Documented in `docs/SMOKE.md` § "Live permission gate smoke test".
+
+**Status**: Complete. Test compiles and is properly `#[ignore]`d (0 tests run in
+default `cargo test`). Clippy + fmt clean. Live run not verified (ANTHROPIC_API_KEY
+absent in the agent shell session); the test itself guards with an early-return on
+missing key. `claude` binary confirmed on PATH at `/Users/igorilic/.local/bin/claude`.
 
 ---
 
@@ -3286,7 +3299,8 @@ Phase P — Permissions (GH #88)
 - [x] P.4.2 ActivityColumn consumes live usePermissionRequests
 - [x] P.4.3 App.tsx wires runId/stepId into permission_decide
 - [x] P.5.1 TUI applies Permission envelopes to AppState (deferred runner integration)
-- [ ] P.6.1 End-to-end web permission-flow integration test
+- [x] P.6.1 End-to-end web permission-flow integration test (Vitest portion)
+- [x] P.6.1.b Live-Rust complement test (palindrome sandbox + real AsyncGate)
 - [ ] P.6.2 File follow-up tech-debt issues + close GH #88
 
 ---

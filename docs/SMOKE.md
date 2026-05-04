@@ -5,6 +5,51 @@ to the web-ui to catch regressions before they reach main.
 
 ---
 
+## Live permission gate smoke test (P.6.1.b)
+
+A `#[ignore]`d Rust integration test that exercises the full backend stack with
+a real Claude Code subprocess and a real `AsyncGate`.
+
+### Prerequisites
+
+- `ANTHROPIC_API_KEY` set in your shell
+- `claude` (Claude Code CLI) on `PATH` — verify with `which claude`
+- Internet access (the CLI calls the Anthropic API)
+
+### Run
+
+```bash
+cargo test -p agentic-cli --test e2e_permissions_live -- --ignored --nocapture
+```
+
+### What it does
+
+1. Creates a temporary sandbox directory with two placeholder Python files
+   (`palindrome.py`, `test_palindrome.py`) and a git repo.
+2. Writes a `permissions.toml` with `Read(*)`, `Write(*)`, `Edit(*)`, `Bash(*)`
+   on the allowlist and `Bash(rm -rf /*)`, `Bash(sudo *)` on the denylist.
+3. Wires a real `ClaudeCodeBackend` (via `ClaudeCodeBackend::from_env()`) through
+   a real `AsyncGate` backed by the bus.
+4. Runs a single `tdd-developer` step asking Claude to implement a palindrome
+   function in Python.
+5. Drains bus envelopes and asserts:
+   - At least one `ToolUseStart` was observed (Claude called a tool).
+   - At least one `PermissionResolved` arrived (the gate fired).
+   - At least one `PermissionResolved` has `source=AllowlistConfig` (the allow
+     patterns matched).
+   - The run completes within 5 minutes without a panic.
+
+### Cost
+
+Uses `claude-haiku-4-5-20251001` (cheapest Anthropic model) to minimise API
+spend. A typical palindrome task costs < $0.01.
+
+### Source
+
+`crates/agentic-cli/tests/e2e_permissions_live.rs`
+
+---
+
 ## Modes
 
 ### 1 — Browser dev (fast iteration)
