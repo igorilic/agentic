@@ -2287,6 +2287,11 @@ pane**. The dual binding is the contract:
     - Why deferred: v1-acceptable; entries are tiny and Tauri restarts naturally on shutdown. Premature mitigation muddies the v1 contract.
     - Trigger: when the gate is observed reused across many runs without restart in production, OR when memory profiling shows SessionAllowlist as a measurable retainer. Approach: TTL, run-count LRU, or hard cap.
 
+17. **TUI runner integration: y/s/n keys publish decisions to bus** (GH #103).
+    - What's missing: T.13.2's y/s/n keys mutate `state.flash` + `state.pending_perms` locally only. They do NOT publish `Event::PermissionResolved` back through the bus, so the orchestrator's AsyncGate (P.2.x) has no way to receive a decision from the TUI side. Additionally, `app::PermissionRisk` and `events::PermissionRisk` are structurally identical; the local enum should be dropped and the wire enum re-exported when egress lands.
+    - Why deferred: the TUI does not yet have a runtime that subscribes to / publishes on the agentic-core EventBus. P.5.1 ships envelope INGESTION (PermissionRequest → pending_perms; PermissionResolved → remove) but not egress.
+    - Trigger: when the TUI gains a runtime (TUI as standalone agent runner, or TUI subscribes to agentic-tauri's bus via IPC). What's needed: (1) a bus handle on AppState (Arc<EventBus> or similar), (2) handle_key for y/s/n constructs an EventEnvelope::PermissionResolved with the matching request_id and publishes to bus, (3) tests that mock the bus to verify the publish happens.
+
 ---
 
 ## Phase P — Backend permission stream (GH #88)
@@ -3263,7 +3268,7 @@ Phase P — Permissions (GH #88)
 - [x] P.4.1 usePermissionRequests hook with id-dedup
 - [x] P.4.2 ActivityColumn consumes live usePermissionRequests
 - [x] P.4.3 App.tsx wires runId/stepId into permission_decide
-- [ ] P.5.1 TUI applies Permission envelopes to AppState (deferred runner integration)
+- [x] P.5.1 TUI applies Permission envelopes to AppState (deferred runner integration)
 - [ ] P.6.1 End-to-end web permission-flow integration test
 - [ ] P.6.2 File follow-up tech-debt issues + close GH #88
 
