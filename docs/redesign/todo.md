@@ -3325,3 +3325,768 @@ historical reference:
    public release / WCAG 2.1 AA pass.
 6. **Cross-platform TUI traffic lights** — Decorative everywhere. No
    `cfg(target_os = "...")` gating; documented in spec §4.2.
+
+---
+
+## Open implementation questions (Phase F)
+
+Surfaced during planning; flag to user before tdd-developer dispatches:
+
+1. **HeaderBar grid layout**: the right cluster currently uses
+   `flex items-center gap-3.5`. The segmented control adds a 4th sibling
+   (selector → run-state → settings → theme → avatar). At narrow widths
+   the cluster may overflow. Acceptable tradeoff for F.1.3? (Suggested:
+   yes — `flex-wrap: nowrap` + `min-w-0` on left cluster keeps brand
+   truncating first.) **No code change needed unless reviewer flags.**
+2. **`JiraTicketSource::fetch` shape**: returns `Ticket { title, body,
+   comments, ac_field: Option<String>, url }`. Comments and `url` are
+   dropped at the IPC layer (DTO is `{ key, title, body, ac }`). User
+   confirmed scope; documenting here so reviewer doesn't flag as an
+   omission.
+3. **Env-var freshness**: F.2.1 reads `JIRA_URL` / `JIRA_EMAIL` /
+   `JIRA_API_TOKEN` / `JIRA_AC_FIELD_ID` **per IPC call** (not at app
+   startup). Rationale: user can `export JIRA_URL=…` in shell and re-
+   click "Pull" without restarting Tauri. Negligible cost; documented
+   in F.2.1 step body.
+4. **`useBackend()` localStorage key**: `agentic.backend` (mirrors
+   `agentic.theme`). Default value: `"claude-code"` (matches every
+   existing hardcoded site).
+5. **Segmented control a11y**: use `role="group"` wrapping two
+   `<button aria-pressed={selected}>` elements rather than radio
+   inputs — matches existing theme-toggle pattern in HeaderBar
+   (`aria-pressed`).
+
+---
+
+## Phase F.1 — Backend selector
+
+User-visible selector for the runtime backend (`claude-code` or
+`copilot-cli`). Replaces three hardcoded `"claude-code"` call sites
+with a hook-driven value. Surfaces "binary not found" pre-flight
+errors as system messages in the chat column.
+
+Implementation contract:
+- `useBackend()` hook with same shape as `useTheme()` (state + setter
+  + localStorage persistence under key `agentic.backend`).
+- Segmented 2-button toggle in HeaderBar's right cluster, **left of
+  the run-state pill**. 1-click swap; no popover.
+- Default: `"claude-code"`. Persisted across reloads.
+- All three call sites (`App.tsx:101`, `ChatPane.tsx:41`,
+  `createSpec.ts:16`) read from the hook.
+- "Binary not found" pre-flight failure is surfaced by appending the
+  error message to `systemMessages` in `ChatPane`, matching the
+  existing slash-error pattern.
+
+### [ ] Step F.1.1: `useBackend()` hook + localStorage persistence
+
+**Goal**: Add a hook that owns the selected backend ID, persists it to
+`localStorage` under `agentic.backend`, and exposes
+`{ backend, setBackend }`. Mirrors `useTheme.ts` for consistency.
+
+**Depends on**: none.
+
+**Test first** (RED):
+- New file `apps/web-ui/src/__tests__/useBackend.test.ts`:
+  - `it("defaults to 'claude-code' when no value persisted")`: render
+    via `renderHook`, assert `result.current.backend === "claude-code"`.
+  - `it("reads persisted value from localStorage on mount")`: pre-seed
+    `localStorage.setItem("agentic.backend", "copilot-cli")`, render,
+    assert `result.current.backend === "copilot-cli"`.
+  - `it("ignores invalid persisted values")`: pre-seed
+    `localStorage.setItem("agentic.backend", "garbage")`, render,
+    assert default `"claude-code"`.
+  - `it("setBackend updates state and persists")`: render, call
+    `act(() => result.current.setBackend("copilot-cli"))`, assert
+    `result.current.backend === "copilot-cli"` and
+    `localStorage.getItem("agentic.backend") === "copilot-cli"`.
+  - Use `beforeEach(() => localStorage.clear())`.
+
+**Implement** (GREEN):
+- New file `apps/web-ui/src/hooks/useBackend.ts`:
+  - `export type BackendKind = "claude-code" | "copilot-cli";`
+    (re-export from `slash/types.ts` to avoid duplication; or import
+    and re-export). Inspect import paths first — keep one canonical
+    definition.
+  - Hook signature:
+    `export function useBackend(): { backend: BackendKind; setBackend: (b: BackendKind) => void }`.
+  - Internal state initializer reads `localStorage.getItem("agentic.backend")`,
+    validates against the union, defaults to `"claude-code"`.
+  - `useEffect` writes to `localStorage` on `backend` change (mirrors
+    `useTheme` pattern).
+
+**Refactor**: None.
+
+**Commit**: `feat(web): add useBackend() hook for backend selection state`
+
+**Verification**: `pnpm -F @agentic/web-ui test useBackend`
+
+**Notes**: Do **not** wire the hook into any component yet — F.1.2
+handles call-site replacement, F.1.3 handles UI. This step ships only
+the hook + tests.
+
+---
+
+### [ ] Step F.1.2: Replace 3 hardcoded `"claude-code"` call sites
+
+**Goal**: Replace the literal `"claude-code"` strings in `App.tsx:101`,
+`ChatPane.tsx:41`, and `createSpec.ts:16` with values read from
+`useBackend()`. The IPC payload to `start_ticket_run` must reflect the
+hook's current state.
+
+**Depends on**: F.1.1.
+
+**Test first** (RED):
+- Extend `apps/web-ui/src/__tests__/ChatPane.test.tsx` (or add a
+  dedicated test there):
+  - `it("uses backend from useBackend() in /plan dispatch")`: pre-seed
+    `localStorage.setItem("agentic.backend", "copilot-cli")` in
+    `beforeEach`. Render `ChatPane`, type `/plan #42 ticket text`, send.
+    Assert the `invoke` mock was called with `start_ticket_run` and
+    `{ ticket: "#42 ticket text", backend: "copilot-cli", model: null }`
+    (use existing invoke mock pattern in this test file).
+- New test `apps/web-ui/src/__tests__/createSpec.test.ts` (extend
+  existing) or add a new case:
+  - `it("threads the active backend into the IPC payload")`: pre-seed
+    `localStorage`, call `createSpec("title")`, assert mock was called
+    with `backend: "copilot-cli"`. **Caveat**: `createSpec` is a plain
+    function — it cannot read a React hook directly. Solution: change
+    its signature to accept `backend: BackendKind` as a parameter
+    (callers pass `useBackend()`'s value). Update existing call sites
+    in `IssueColumn.tsx` and `ChatColumn.tsx` accordingly. Update the
+    existing `createSpec.test.ts` cases to pass `backend` explicitly.
+- Extend `apps/web-ui/src/__tests__/app.test.tsx` to cover
+  `App.tsx:101` (the `handleRunPipeline` "Untitled run" path):
+  - `it("Run-pipeline button uses selected backend")`: pre-seed
+    localStorage to `copilot-cli`, render `<App />`, click
+    `header-run`, assert `invoke('start_ticket_run', …)` was called
+    with `backend: "copilot-cli"`.
+
+**Implement** (GREEN):
+- `apps/web-ui/src/utils/createSpec.ts`: change signature to
+  `createSpec(title: string, backend: BackendKind): Promise<string | undefined>`.
+  Pass `backend` through to `invoke`.
+- Update both `createSpec` call sites (search via
+  `rg "createSpec\\(" apps/web-ui/src`):
+  - `IssueColumn.tsx`, `ChatColumn.tsx` — both should call
+    `useBackend()` at the component top and pass `backend` into
+    `createSpec(title, backend)`.
+- `apps/web-ui/src/components/ChatPane.tsx`: import `useBackend`, call
+  it at the top of the component, replace the inline
+  `backend ?? "claude-code"` fallback in the `slashServices.plan`
+  closure with `backend ?? selectedBackend` where `selectedBackend`
+  comes from the hook. (`backend` here is the explicit
+  `--backend=…` flag from a `/plan` command.)
+- `apps/web-ui/src/App.tsx:101`: import `useBackend`, call it, pass
+  hook value into the `start_ticket_run` invoke for the
+  `handleRunPipeline` path.
+- Confirm no other files contain the literal `"claude-code"` outside
+  of test fixtures and `slash/types.ts` (the canonical union literal)
+  with `rg '"claude-code"' apps/web-ui/src`.
+
+**Refactor**: None — all three sites should now read from a single
+source of truth.
+
+**Commit**: `refactor(web): thread useBackend() through start_ticket_run call sites`
+
+**Verification**:
+- `pnpm -F @agentic/web-ui test ChatPane createSpec app`
+- `pnpm -F @agentic/web-ui typecheck`
+
+**Notes**:
+- Do **not** alter `slash/types.ts`'s `BACKENDS` union — it's the
+  canonical type definition and must stay literal.
+- Existing fixture-only `"claude-code"` strings in test files
+  (`devInvokeMock.test.ts`, `slashParser.test.ts`, etc.) stay as-is —
+  they assert exact IPC payloads.
+
+---
+
+### [ ] Step F.1.3: HeaderBar segmented control wired to the hook
+
+**Goal**: Add a 2-button segmented control (`Claude Code` |
+`Copilot CLI`) to HeaderBar's right cluster, **left of the run-state
+pill**. Clicking a segment immediately swaps the active backend via
+`useBackend().setBackend`. The active segment shows pressed state via
+`aria-pressed="true"` and a darker background, mirroring the
+theme-toggle button's a11y pattern.
+
+**Depends on**: F.1.1, F.1.2.
+
+**Test first** (RED):
+- New test `apps/web-ui/src/__tests__/HeaderBar.test.tsx` (or extend
+  if exists):
+  - `it("renders the backend segmented control with two buttons")`:
+    render `<HeaderBar …minimal props… />` with localStorage default,
+    assert `getByTestId("header-backend-claude-code")` and
+    `getByTestId("header-backend-copilot-cli")` exist.
+  - `it("marks claude-code as pressed by default")`: assert
+    `header-backend-claude-code` has `aria-pressed="true"` and
+    `header-backend-copilot-cli` has `aria-pressed="false"`.
+  - `it("clicking copilot-cli flips the active backend")`: click,
+    assert `header-backend-copilot-cli` becomes `aria-pressed="true"`,
+    `header-backend-claude-code` becomes `aria-pressed="false"`, and
+    `localStorage.getItem("agentic.backend") === "copilot-cli"`.
+  - `it("clicking claude-code flips back")`: pre-seed copilot-cli,
+    click claude-code, assert pressed flips back.
+  - DOM-order assertion: assert the segmented control's container
+    appears **before** `header-run-state` in the rendered DOM (use
+    `compareDocumentPosition` or `Array.from(container.children)`
+    indexing).
+
+**Implement** (GREEN):
+- `apps/web-ui/src/components/HeaderBar.tsx`: import `useBackend`,
+  call it inside the component. Add a new wrapping `<div role="group"
+  aria-label="Backend">` containing two `<button type="button">`
+  elements with `data-testid="header-backend-claude-code"` and
+  `header-backend-copilot-cli`. Each button:
+  - `aria-pressed={backend === "claude-code"}` (resp. copilot).
+  - `onClick={() => setBackend("claude-code")}` (resp. copilot).
+  - Visual: pressed state uses `bg-bg-surface-2 text-fg`; unpressed
+    uses `text-fg-muted hover:text-fg`. Container uses
+    `rounded-md border border-border-soft p-0.5 flex` to give the
+    segmented look.
+  - Label: `Claude` and `Copilot` (compact — full names crowd the
+    header; testids carry the canonical IDs).
+- Insert the new `<div>` as the **first child** of the right-cluster
+  flex container (before `<div role="status" data-testid="header-run-state">`).
+
+**Refactor**: If button styling repeats, extract a small
+`<SegmentedButton pressed onClick label testid />` local component
+inside the same file (do not export). Skip if it doesn't materially
+clean the JSX.
+
+**Commit**: `feat(web): add backend segmented control to HeaderBar`
+
+**Verification**:
+- `pnpm -F @agentic/web-ui test HeaderBar`
+- Manual smoke (deferred to F.1.4 reviewer triage if required):
+  open the app, click each segment, observe the pill toggles.
+
+**Notes**:
+- No new dependencies. Pure Tailwind + existing tokens.
+- Segmented control uses `aria-pressed` over `role="radio"` to match
+  the theme-toggle pattern; lighter a11y surface.
+- Snapshot test of HeaderBar exists somewhere (P.4.x era?) — re-run
+  full HeaderBar suite to catch any DOM-shape change. Update snapshot
+  if reviewer green-lights.
+
+---
+
+### [ ] Step F.1.4: Surface "binary not found" pre-flight error in chat
+
+**Goal**: When `start_ticket_run` rejects with the pre-flight error
+message (e.g. `"pre-flight: \`copilot\` not found on PATH. Install …"`),
+append that message to `systemMessages` in `ChatPane` so the user sees
+*why* the run didn't start. Matches the existing slash-error /
+mention-error pattern.
+
+**Depends on**: F.1.2 (call sites must already be threading the hook
+value, otherwise the error path isn't exercised distinctly).
+
+**Test first** (RED):
+- Extend `apps/web-ui/src/__tests__/ChatPane.test.tsx`:
+  - `it("surfaces start_ticket_run pre-flight errors as system messages")`:
+    mock `invoke('start_ticket_run', …)` to reject with `"pre-flight:
+    \`copilot\` not found on PATH. Install …"`. Render `ChatPane`,
+    type `/plan #42 do thing`, send. Assert the system-messages list
+    rendered in `ChatColumn` contains a string starting with
+    `"pre-flight:"` (or `"Command failed: pre-flight:"` depending on
+    where in `dispatchSlashCommand` the error percolates — check
+    actual flow first).
+  - `it("does NOT swallow non-pre-flight errors")`: same setup but
+    reject with `"Some other error"` — assert system-messages
+    contains `"Some other error"` (regression guard for the existing
+    error path).
+- Audit `apps/web-ui/src/__tests__/app.test.tsx` for the
+  `handleRunPipeline` path: it currently silently swallows errors via
+  `.catch(() => {})`. Decision: do we surface there too? **Yes** —
+  add a `it("Run-pipeline button surfaces pre-flight errors")` test
+  that asserts a system message bubbles through `ChatPane`'s prop
+  channel. May require routing the error from `App.handleRunPipeline`
+  into a callback that ChatPane consumes (similar to
+  `onTicketRunStarted`). If the wiring inflates scope > 30 min,
+  defer the App-level handler to a tech-debt note and ship only the
+  `/plan`-path coverage.
+
+**Implement** (GREEN):
+- `apps/web-ui/src/components/ChatPane.tsx`: the slash-dispatcher
+  catch block already runs (`Command failed: …`). Confirm the
+  pre-flight error string surfaces verbatim (the `${err}` template
+  serializes the rejection reason). If the message gets swallowed by
+  a generic "Command failed" prefix, refine to:
+  ```
+  setSystemMessages((prev) => [
+    ...prev,
+    String(err).startsWith("pre-flight:") ? String(err) : `Command failed: ${err}`,
+  ]);
+  ```
+  This preserves the actionable hint without losing the prefix for
+  non-pre-flight errors.
+- `App.tsx:handleRunPipeline`: replace the silent `.catch(() => {})`
+  with a callback that lifts the error string up to `ChatPane`'s
+  `systemMessages`. Add a new prop on `ChatPane`:
+  `onSystemMessage?: (msg: string) => void` — but this requires
+  inverted flow. Simpler: hoist `systemMessages` state into `App` and
+  pass it as a prop. **Defer this restructuring to tech-debt** if
+  it costs > 30 min; instead, in F.1.4 ship the `/plan`-path
+  coverage only and log a tech-debt entry for the
+  `handleRunPipeline` path with the trigger "when the Run-pipeline
+  button graduates from placeholder to a SpecDialog-driven flow
+  (W.8.x successor)".
+
+**Refactor**: None.
+
+**Commit**: `feat(web): surface pre-flight errors in chat system-messages`
+
+**Verification**: `pnpm -F @agentic/web-ui test ChatPane app`
+
+**Notes**:
+- This step may merge into F.1.2 if the existing
+  `dispatchSlashCommand` already preserves the error string verbatim
+  (run the new test against current `main` before committing F.1.4 —
+  if it passes red→green with no change, fold into F.1.2's
+  Refactor and skip the standalone commit). The judgment call is
+  the tdd-developer's; document either way in the F.1.4 status
+  checklist.
+- Tech-debt note (if filed): "App.handleRunPipeline silently swallows
+  pre-flight errors. Lift systemMessages state from ChatPane to App
+  to share the surface, OR fold the Run-pipeline button into
+  SpecDialog (W.8.x). Trigger: SpecDialog-driven Run flow lands."
+
+---
+
+### Phase F.1 status checklist
+
+- [ ] F.1.1 useBackend() hook
+- [ ] F.1.2 Replace 3 hardcoded call sites
+- [ ] F.1.3 HeaderBar segmented control
+- [ ] F.1.4 Pre-flight error → systemMessages
+
+---
+
+## Phase F.2 — Jira ticket pull
+
+Adds a "Pull from Jira" affordance to `SpecDialog` that fetches a
+Jira ticket by key and pre-fills the title and body fields. Uses the
+existing `JiraTicketSource` in `agentic-core`; new IPC layer wraps it
+with env-var resolution and DTO mapping.
+
+Implementation contract:
+- New Tauri IPC `fetch_jira_ticket(key: String) -> Result<JiraTicketDto, String>`.
+- Env vars (read **per-call**): `JIRA_URL` (bare host, e.g.
+  `https://yourorg.atlassian.net`), `JIRA_EMAIL`, `JIRA_API_TOKEN`,
+  optional `JIRA_AC_FIELD_ID`.
+- IPC layer appends `/rest/api/3` to the `JIRA_URL` host before
+  passing it to `JiraTicketSource::new`.
+- DTO: `{ key: String, title: String, body: String, ac: Option<String> }`.
+  Comments and `url` from the inner `Ticket` are dropped.
+- Client-side regex `^[A-Z][A-Z0-9]+-\d+$` gates the button-enabled
+  state (instant feedback). Server-side `parse_ref` provides
+  defense-in-depth.
+- Button **always visible** in SpecDialog. Disabled with tooltip
+  listing missing env-var names when env is incomplete.
+- On success: title field populated with ticket title; body field
+  populated with `body + "\n\n## Acceptance Criteria\n" + ac` when
+  `ac.is_some()`, else just `body`. **No new SpecDialog field** —
+  AC is appended to the existing body textarea.
+- No cache; button disables while fetch is in flight.
+
+**Note on `body` IPC drop (GH #92)**: The body parameter is currently
+captured by SpecDialog but dropped at the `start_ticket_run` IPC
+boundary (see `createSpec.ts` comment). That's a separate
+pre-existing bug tracked in GH #92 and NOT a Phase F.2 deliverable.
+F.2's success criterion is "title + body fields are populated"; what
+happens at the next IPC hop is GH #92's concern.
+
+### [ ] Step F.2.1: `fetch_jira_ticket` Tauri IPC + DTO + per-call env resolution
+
+**Goal**: Add a new Tauri command that reads the four `JIRA_*` env
+vars at call time, validates presence, constructs `JiraTicketSource`
+with `${JIRA_URL}/rest/api/3` as the base URL, fetches the ticket,
+and returns a flat DTO. Errors are user-facing strings.
+
+**Depends on**: none (in-tree dependency on `agentic-core::ticket_sources::jira`).
+
+**Test first** (RED):
+- New file `crates/agentic-tauri/src/commands/jira.rs` (testable inner
+  helper, IPC entry calls helper):
+  - `fn missing_env_vars() -> Vec<&'static str>`: returns names of any
+    of `["JIRA_URL", "JIRA_EMAIL", "JIRA_API_TOKEN"]` not set in
+    process env. Exclude `JIRA_AC_FIELD_ID` (optional).
+  - `fn build_base_url(jira_url: &str) -> String`: trims any trailing
+    slash, appends `/rest/api/3`. Idempotent — if input already ends
+    in `/rest/api/3` (or 2), don't double-append; trim and re-append
+    to canonicalize on v3.
+  - `fn validate_key(key: &str) -> Result<(), String>`: regex
+    `^[A-Z][A-Z0-9]+-\d+$`. Error: `"invalid ticket key: \"{key}\""`.
+- New test file
+  `crates/agentic-tauri/src/commands/jira_tests.rs` (or `#[cfg(test)] mod tests` in `jira.rs`):
+  - `missing_env_vars_returns_unset_names`: scrub the 3 vars via
+    `temp_env::with_vars` (or manual save/restore), assert returns
+    all 3.
+  - `missing_env_vars_returns_empty_when_all_set`: set all 3, assert
+    empty vec.
+  - `build_base_url_appends_v3`:
+    `build_base_url("https://acme.atlassian.net") == "https://acme.atlassian.net/rest/api/3"`.
+  - `build_base_url_strips_trailing_slash`:
+    `build_base_url("https://acme.atlassian.net/") == "https://acme.atlassian.net/rest/api/3"`.
+  - `build_base_url_canonicalizes_v2_to_v3`: input ending in
+    `/rest/api/2` returns `/rest/api/3`. (Document this behavior
+    explicitly — `JiraTicketSource` only speaks v3.)
+  - `build_base_url_idempotent_on_v3`: input ending in `/rest/api/3`
+    returns same.
+  - `validate_key_accepts_valid`: `PROJ-1`, `ABC-999`, `XY1-42`.
+  - `validate_key_rejects_invalid`: `""`, `"proj-1"`, `"PROJ-"`,
+    `"-1"`, `"PROJ-abc"`, `"PROJ"`.
+- IPC integration test (using existing scripted-test harness pattern,
+  see `permission_decide` tests for shape — `crates/agentic-tauri/tests/`
+  if a Tauri integration harness exists). If a real HTTP server stub
+  is too heavy for this step, **skip the network-level test** and
+  rely on `JiraTicketSource`'s own `crates/agentic-core/tests/ticket_jira.rs`
+  for the fetch path. Document the trade-off in the step body. The
+  IPC's contract surface that the test must cover is:
+  - `fetch_jira_ticket("PROJ-1")` with no env returns
+    `Err("missing environment variables: JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN")`.
+  - `fetch_jira_ticket("invalid")` with env set returns
+    `Err("invalid ticket key: \"invalid\"")`.
+
+**Implement** (GREEN):
+- New file `crates/agentic-tauri/src/commands/jira.rs`:
+  - `#[derive(serde::Serialize, Clone, Debug)] pub struct JiraTicketDto { key: String, title: String, body: String, ac: Option<String> }`.
+  - Helpers `missing_env_vars`, `build_base_url`, `validate_key` per
+    test contracts.
+  - `#[tauri::command] pub async fn fetch_jira_ticket(key: String) -> Result<JiraTicketDto, String>`:
+    1. Trim `key`. Call `validate_key`.
+    2. Call `missing_env_vars`; if non-empty, return
+       `Err(format!("missing environment variables: {}", missing.join(", ")))`.
+    3. Read `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`,
+       `JIRA_AC_FIELD_ID` (last one optional via `ok()`).
+    4. Construct
+       `JiraTicketSource::new(build_base_url(&jira_url), email, token, ac_field_id)`.
+    5. Build `TicketRef { kind: TicketKind::Jira, reference: key.clone(), … }`.
+       (Inspect `TicketRef`'s actual shape — see
+       `agentic-core::events::TicketRef`. Likely also has `url`/`title`
+       fields; populate minimally.)
+    6. Call `source.fetch(&ticket_ref).await`. Map error to user
+       string (use `format!("{e}")` — `TicketSourceError`'s Display
+       impl is already user-readable; verify by reading
+       `agentic-core::ticket_sources::TicketSourceError`).
+    7. Return `JiraTicketDto { key, title: t.title, body: t.body, ac: t.ac_field }`.
+- `crates/agentic-tauri/src/commands/mod.rs`: add `pub mod jira;`.
+- `crates/agentic-tauri/src/main.rs` (or wherever `tauri::Builder::default().invoke_handler(…)` lives):
+  register `commands::jira::fetch_jira_ticket` in the invoke handler
+  list.
+
+**Refactor**: If `validate_key` duplicates `agentic-core::ticket_sources::jira::parse_ref` exactly, prefer:
+re-export `parse_ref` (or wrap a public version) from `agentic-core`
+and call from the IPC. Reduces drift. If `parse_ref` is private and
+extracting feels like scope creep, keep the local copy and file a
+tech-debt note ("Unify Jira key validation between `agentic-core` and
+`agentic-tauri`. Trigger: when a third caller appears.").
+
+**Commit**: `feat(tauri): add fetch_jira_ticket IPC for Jira ticket pull`
+
+**Verification**:
+- `cargo test -p agentic-tauri commands::jira`
+- `cargo clippy -p agentic-tauri --all-features --all-targets -- -D warnings`
+
+**Notes**:
+- Per-call env resolution chosen so the user can `export JIRA_URL=…`
+  in their shell and re-click "Pull" without restarting the Tauri
+  binary. Cost: 4 `std::env::var` calls per click — negligible.
+- `JIRA_AC_FIELD_ID` (e.g. `customfield_10100`) when absent triggers
+  `JiraTicketSource`'s description-parse fallback (already
+  implemented). Document in a doc-comment on `fetch_jira_ticket`.
+- Do **not** register the command in the capability list yet — that's
+  F.2.2. The IPC will be inert until the capability is granted.
+
+---
+
+### [ ] Step F.2.2: Tauri permission file + capability registration
+
+**Goal**: Generate the autogenerated permission TOML and add
+`allow-fetch-jira-ticket` to `capabilities/default.json`. Without
+this, the webview's `invoke('fetch_jira_ticket', …)` call is rejected
+by Tauri's permission gate at runtime — even though the command is
+registered in the invoke handler. (P.3.1 hit this exact issue live;
+documented in CLAUDE.md as a checklist item.)
+
+**Depends on**: F.2.1.
+
+**Test first** (RED):
+- Tauri permissions are file-based and don't have a unit-test surface
+  per se. The "test" is a deterministic file presence + capability
+  registration check:
+- New test or reused test file `crates/agentic-tauri/tests/capabilities.rs`
+  (extend if exists; mirror P.3.1's coverage if it added one):
+  - `it_includes_fetch_jira_ticket_capability`: parse
+    `capabilities/default.json`, assert
+    `permissions` array contains `"allow-fetch-jira-ticket"`.
+  - `it_has_autogenerated_jira_permission_file`: assert
+    `permissions/autogenerated/fetch_jira_ticket.toml` exists and
+    parses as TOML containing
+    `[[permission]] identifier = "allow-fetch-jira-ticket"`.
+- If no such test file exists, create it. Use `std::fs::read_to_string`
+  + `serde_json` / `toml::from_str`.
+
+**Implement** (GREEN):
+- New file
+  `crates/agentic-tauri/permissions/autogenerated/fetch_jira_ticket.toml`,
+  modeled on `start_ticket_run.toml`:
+  ```toml
+  # Automatically generated - DO NOT EDIT!
+
+  [[permission]]
+  identifier = "allow-fetch-jira-ticket"
+  description = "Enables the fetch_jira_ticket command without any pre-configured scope."
+  commands.allow = ["fetch_jira_ticket"]
+
+  [[permission]]
+  identifier = "deny-fetch-jira-ticket"
+  description = "Denies the fetch_jira_ticket command without any pre-configured scope."
+  commands.deny = ["fetch_jira_ticket"]
+  ```
+- Edit `crates/agentic-tauri/capabilities/default.json`: append
+  `"allow-fetch-jira-ticket"` to the `permissions` array. Keep
+  trailing comma rules consistent with the existing JSON.
+
+**Refactor**: None.
+
+**Commit**: `feat(tauri): grant fetch_jira_ticket capability in default window`
+
+**Verification**:
+- `cargo test -p agentic-tauri capabilities`
+- `cargo build -p agentic-tauri` (catches Tauri permission-schema
+  validation at compile time via `tauri-build`).
+
+**Notes**:
+- The autogenerated file's `# Automatically generated - DO NOT EDIT!`
+  banner is preserved by Tauri's permission codegen; we hand-write it
+  to seed the file but Tauri may regenerate it during
+  `cargo build`. That's expected and fine — the content is
+  deterministic.
+
+---
+
+### [ ] Step F.2.3: TS DTO type + `useJiraFetch()` IPC client hook
+
+**Goal**: Add a TypeScript type that mirrors `JiraTicketDto` and a
+React hook `useJiraFetch()` that wraps `invoke('fetch_jira_ticket')`
+with `{ fetch, isLoading, error, isAvailable }` ergonomics. The
+`isAvailable` flag is a static `true` for now (env-var sniffing
+happens server-side); SpecDialog will compute its own
+`disabledReason` from a separate IPC introspection in F.2.4 — see
+that step's "Open question" callout.
+
+**Depends on**: F.2.2 (capability must exist before the hook can
+successfully invoke).
+
+**Test first** (RED):
+- New file `apps/web-ui/src/__tests__/useJiraFetch.test.ts`:
+  - `it("returns fetch, isLoading, error in initial state")`: render,
+    assert `result.current.isLoading === false`, `result.current.error === null`,
+    `typeof result.current.fetch === "function"`.
+  - `it("invokes fetch_jira_ticket with the key and returns the DTO")`:
+    mock `invoke('fetch_jira_ticket', { key: 'PROJ-1' })` to resolve
+    with `{ key: "PROJ-1", title: "T", body: "B", ac: null }`. Call
+    `await result.current.fetch("PROJ-1")`, assert returned value
+    matches.
+  - `it("sets isLoading=true while in flight")`: use a deferred
+    promise to keep `invoke` pending; assert `isLoading === true`
+    after `act` advances. Resolve the promise, assert `isLoading === false`.
+  - `it("captures error message on rejection")`: mock invoke to
+    reject with `"missing environment variables: JIRA_URL"`, call
+    fetch, assert `result.current.error === "missing environment variables: JIRA_URL"`.
+  - `it("clears error on subsequent successful fetch")`: reject
+    once, then resolve; assert error transitions null → string → null.
+
+**Implement** (GREEN):
+- New file `apps/web-ui/src/types/jira.ts`:
+  ```ts
+  export type JiraTicketDto = {
+    key: string;
+    title: string;
+    body: string;
+    ac: string | null;
+  };
+  ```
+- New file `apps/web-ui/src/hooks/useJiraFetch.ts`:
+  ```ts
+  // pseudocode for the planner — tdd-developer writes the actual code
+  export function useJiraFetch(): {
+    fetch: (key: string) => Promise<JiraTicketDto>;
+    isLoading: boolean;
+    error: string | null;
+  } {
+    // useState for isLoading + error
+    // fetch wraps invoke<JiraTicketDto>('fetch_jira_ticket', { key })
+    //   try/catch sets/clears error and toggles isLoading
+  }
+  ```
+  Re-throw on error so callers can chain `.catch` for UI feedback,
+  but also store the error string in state for display.
+
+**Refactor**: None.
+
+**Commit**: `feat(web): add useJiraFetch() hook + JiraTicketDto type`
+
+**Verification**: `pnpm -F @agentic/web-ui test useJiraFetch`
+
+**Notes**:
+- The `isAvailable` flag was originally proposed but **omitted** here
+  — env-var presence is a server-side concern, surfaced via the
+  error message ("missing environment variables: …"). SpecDialog
+  parses that error to populate the disabled-tooltip in F.2.4.
+- This avoids adding a second IPC just to introspect env vars.
+
+---
+
+### [ ] Step F.2.4: SpecDialog Jira-pull row + tooltip + validation
+
+**Goal**: Add a new row **above the title input** in `SpecDialog`
+containing a key input + "Pull from Jira" button. Wire to
+`useJiraFetch()`. Behavior:
+- Client-side regex `^[A-Z][A-Z0-9]+-\d+$` gates the button-enabled
+  state (button is disabled until a valid key is typed).
+- On click: invoke `fetch_jira_ticket(key)`. While in flight,
+  disable the button.
+- On success: populate `title` state with `dto.title`; populate
+  `body` state with `dto.body + (dto.ac ? "\n\n## Acceptance Criteria\n" + dto.ac : "")`.
+- On error: append the error string to a local `pullError` state and
+  render below the row. Pre-flight "missing environment variables: X, Y"
+  errors are surfaced verbatim so the user knows what to set.
+- Button is **always visible**. When the latest fetch failed with
+  "missing environment variables: …", show that string as the
+  button's `title` attribute (tooltip). Once the user fixes env vars
+  and the next call succeeds (or returns a different error), the
+  tooltip clears.
+
+**Depends on**: F.2.3.
+
+**Test first** (RED):
+- Extend `apps/web-ui/src/__tests__/SpecDialog.test.tsx` (or create if
+  absent — check first):
+  - `it("renders the jira-pull row above the title input")`: open
+    dialog, assert DOM order: `spec-dialog-jira-key-input`,
+    `spec-dialog-jira-pull-button`, then `spec-dialog-title-input`.
+  - `it("disables the pull button for invalid keys")`: type
+    `"proj-1"` (lowercase) into key input, assert
+    `spec-dialog-jira-pull-button` has `disabled` attribute.
+  - `it("enables the pull button for valid keys")`: type `"PROJ-1"`,
+    assert button is not disabled.
+  - `it("populates title and body on successful pull")`: mock invoke
+    to resolve with `{ key: "PROJ-1", title: "Fix bug", body: "Steps:\n1. …", ac: "Given X, when Y, then Z" }`.
+    Type valid key, click button. Assert
+    `spec-dialog-title-input` has value `"Fix bug"` and
+    `spec-dialog-body-textarea` has value
+    `"Steps:\n1. …\n\n## Acceptance Criteria\nGiven X, when Y, then Z"`.
+  - `it("appends only body when ac is null")`: same setup but
+    `ac: null`. Body textarea has value `"Steps:\n1. …"` (no AC
+    section).
+  - `it("renders the missing-env error inline")`: mock invoke to
+    reject with `"missing environment variables: JIRA_URL, JIRA_EMAIL"`.
+    Click pull button. Assert dialog renders an element with
+    text matching `/missing environment variables: JIRA_URL, JIRA_EMAIL/`
+    (use a `data-testid="spec-dialog-jira-pull-error"`).
+  - `it("disables the button while fetch is in flight")`: deferred
+    promise mock; click button; assert disabled state during
+    flight; resolve; assert re-enabled.
+
+**Implement** (GREEN):
+- Edit `apps/web-ui/src/components/SpecDialog.tsx`:
+  - Add `import { useJiraFetch } from "../hooks/useJiraFetch";`.
+  - Add local state:
+    `const [jiraKey, setJiraKey] = useState("")`,
+    `const [pullError, setPullError] = useState<string | null>(null)`.
+  - Call `const { fetch: fetchJira, isLoading: pulling } = useJiraFetch();`.
+  - Compute `const keyValid = /^[A-Z][A-Z0-9]+-\d+$/.test(jiraKey);`.
+  - New JSX block at the top of the body div (before the title
+    input), with two siblings: `<input data-testid="spec-dialog-jira-key-input">`
+    and `<button data-testid="spec-dialog-jira-pull-button">`.
+    Button:
+    `disabled={!keyValid || pulling}`,
+    `title={pullError?.startsWith("missing environment variables") ? pullError : undefined}`,
+    `onClick` handler that calls `fetchJira(jiraKey).then(dto => { setTitle(dto.title); setBody(dto.body + (dto.ac ? '\\n\\n## Acceptance Criteria\\n' + dto.ac : '')); setPullError(null); }).catch(e => setPullError(String(e)))`.
+  - Render `pullError` inline below the row (only when truthy):
+    `<p data-testid="spec-dialog-jira-pull-error" className="text-[11px] text-red-600">{pullError}</p>`.
+
+**Refactor**: If the new row's classNames bloat the JSX, extract a
+small inline component within the file. Skip if cosmetic.
+
+**Commit**: `feat(web): add Jira ticket pull to SpecDialog`
+
+**Verification**:
+- `pnpm -F @agentic/web-ui test SpecDialog`
+- `pnpm -F @agentic/web-ui typecheck`
+
+**Notes**:
+- Body field is shipped to the backend; per CLAUDE.md note, the
+  body-drop bug at the IPC layer is GH #92's concern and explicitly
+  out of scope for F.2.
+- The button's `title` attribute is a basic browser tooltip — no
+  custom popover library. Sufficient for the disabled-state hint.
+- Pull-error rendering is intentionally simple (single `<p>`); a
+  styled banner can be a follow-up tech-debt if reviewer flags.
+- AC field formatting: literal `\n\n## Acceptance Criteria\n` prefix
+  matches the body markdown convention in the existing AC fixtures.
+
+---
+
+### [ ] Step F.2.5: SpecDialog → IPC integration smoke test
+
+**Goal**: An end-to-end-flavored test that renders the full
+SpecDialog flow from "user types a Jira key" → "title and body
+populated" → "user clicks Create & run" with a mocked `invoke` that
+returns realistic shapes for both `fetch_jira_ticket` and (the
+existing) `start_ticket_run`. Acts as a regression guard for
+F.2.1–F.2.4 wiring.
+
+**Depends on**: F.2.4.
+
+**Test first** (RED):
+- New test file (or section in `SpecDialog.test.tsx`)
+  `apps/web-ui/src/__tests__/SpecDialogJiraIntegration.test.tsx`:
+  - `it("end-to-end: user pulls from Jira, edits, submits")`:
+    1. Mount `<SpecDialog open onClose={…} onSubmit={onSubmit} />`.
+    2. Mock `invoke('fetch_jira_ticket', { key: 'PROJ-42' })` →
+       `{ key: "PROJ-42", title: "Refactor X", body: "Why\n…", ac: "AC text" }`.
+    3. Type `PROJ-42` into key input. Click pull button.
+    4. Wait for title input value === `"Refactor X"`.
+    5. Append text to body via additional typing.
+    6. Click `spec-dialog-submit`.
+    7. Assert `onSubmit` was called once with the populated title and
+       the augmented body containing `"## Acceptance Criteria"`.
+  - `it("end-to-end: pull error does not block manual entry")`:
+    1. Mock `invoke('fetch_jira_ticket', …)` → reject with
+       `"missing environment variables: JIRA_URL"`.
+    2. Type invalid env path; click pull. Assert pull-error rendered.
+    3. Type a title manually. Click submit. Assert `onSubmit`
+       received the manually-typed title (i.e., pull failure does not
+       leave the dialog in a stuck state).
+
+**Implement** (GREEN): No production code changes expected — F.2.4
+already wired the flow. If the integration test exposes a missed
+edge case, the fix lands here as a small refinement to
+`SpecDialog.tsx`.
+
+**Refactor**: None.
+
+**Commit**: `test(web): integration test for SpecDialog jira-pull flow`
+
+**Verification**: `pnpm -F @agentic/web-ui test SpecDialogJiraIntegration`
+
+**Notes**:
+- Keep this test fast (< 200ms). If the deferred promise pattern
+  introduces flake, prefer `await waitFor(...)` over fixed timeouts.
+- This step intentionally shipped as `test(web): …` not `feat(web): …`
+  — it's a regression guard, not new functionality.
+
+---
+
+### Phase F.2 status checklist
+
+- [ ] F.2.1 fetch_jira_ticket IPC + DTO + helpers
+- [ ] F.2.2 Permission TOML + capability registration
+- [ ] F.2.3 useJiraFetch() hook + JiraTicketDto type
+- [ ] F.2.4 SpecDialog jira-pull row + validation
+- [ ] F.2.5 SpecDialog → IPC integration smoke test
