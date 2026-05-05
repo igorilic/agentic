@@ -188,18 +188,34 @@ Findings flow into a typed `findings` table. You triage each one (currently via 
 
 ## 5. Agent files
 
-The pipeline looks for agent definitions in priority order — first match wins. The search reuses existing conventions where possible, so Claude Code subagents and Copilot agents work as-is:
+The pipeline looks for agent definitions in priority order — first match wins.
+The search paths are **backend-scoped**: which backend you pass via `--backend`
+determines which project-local and global directories are searched. The
+`.agentic/agents/` override is universal (checked first by both backends).
 
-| # | Path | Purpose |
+**ClaudeCode** (`--backend claude-code`, the default):
+
+| Priority | Path | Purpose |
 |---|---|---|
-| 1 | `<repo>/.agentic/agents/<name>.md` | Explicit project override (Agentic-only — won't bleed into other tools) |
-| 2 | `<repo>/.claude/agents/<name>.md` | **Claude Code's project-local convention** — shared with the `claude` CLI |
-| 3 | `<repo>/.github/agents/<name>.md` | Copilot project-local (Agentic-defined) |
-| 4 | `<repo>/agents/<name>.md` | Legacy / unscoped |
-| 5 | `$HOME/.claude/agents/<name>.md` | **Claude Code's global subagents** — shared with `claude` |
-| 6 | `$HOME/.copilot/agents/<name>.md` | Copilot global (Agentic-defined) |
+| 1 | `<repo>/.agentic/agents/<name>.md` | Universal project override (Agentic-only) |
+| 2 | `<repo>/.claude/agents/<name>.md` | Claude Code project-local — shared with the `claude` CLI |
+| 3 | `$HOME/.claude/agents/<name>.md` | Claude Code global subagents — shared with `claude` |
 
-Practical implication: if you've already curated subagents under `~/.claude/agents/` for use with Claude Code itself, **the pipeline will pick them up with no extra setup** as long as the names match (`architect.md`, `tdd-developer.md`, `qa.md`, `reviewer.md`).
+**CopilotCli** (`--backend copilot-cli`):
+
+| Priority | Path | Purpose |
+|---|---|---|
+| 1 | `<repo>/.agentic/agents/<name>.md` | Universal project override (Agentic-only) |
+| 2 | `<repo>/.github/agents/<name>.md` | Copilot project-local |
+| 3 | `$HOME/.copilot/agents/<name>.md` | Copilot global |
+
+The legacy `<repo>/agents/` path is no longer searched. Agents placed there
+will not be found; move them to one of the backend-scoped locations above.
+
+Practical implication: if you've already curated subagents under
+`~/.claude/agents/` for use with Claude Code itself, **the pipeline will
+pick them up with no extra setup** as long as the names match
+(`architect.md`, `tdd-developer.md`, `qa.md`, `reviewer.md`).
 
 Each file is a markdown file with TOML frontmatter between `+++` fences, e.g. `~/.claude/agents/architect.md`:
 

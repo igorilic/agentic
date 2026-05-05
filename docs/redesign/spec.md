@@ -731,6 +731,44 @@ backend permission stream in this scope. The wiring is:
 
 See §4.11.
 
+### 6.8 Agent discovery (backend-scoped)
+
+The pipeline locates each agent file at runtime by walking a short list of
+candidate paths. The search is **backend-scoped**: which paths are checked
+depends on which backend drives the run.
+
+**Universal first-priority override (both backends):**
+
+1. `<repo_root>/.agentic/agents/<name>.md`
+
+**ClaudeCode:**
+
+2. `<repo_root>/.claude/agents/<name>.md`
+3. `$HOME/.claude/agents/<name>.md`
+
+**CopilotCli:**
+
+2. `<repo_root>/.github/agents/<name>.md`
+3. `$HOME/.copilot/agents/<name>.md`
+
+First match wins. If no path resolves to an existing file, the pre-flight
+check surfaces a `CoreError::AgentNotFound` that lists all three searched
+paths — the error message is actionable (run `agentic-cli init` or
+`agentic-cli init --copilot` to scaffold the files).
+
+The legacy `<repo_root>/agents/` path is no longer in the search list.
+Files placed there are invisible to the pipeline.
+
+**init flag pairing:**
+
+| Flag | Backend | Destination |
+|---|---|---|
+| (none) | claude-code | `<repo>/.claude/agents/` |
+| `--copilot` | copilot-cli | `<repo>/.github/agents/` |
+| `--global` | claude-code | `$HOME/.claude/agents/` |
+| `--copilot --global` | copilot-cli | `$HOME/.copilot/agents/` |
+| `--agentic` | either | `<repo>/.agentic/agents/` (universal override) |
+
 ---
 
 ## 7. Out of scope (this redesign)

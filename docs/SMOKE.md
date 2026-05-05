@@ -51,6 +51,91 @@ spend. A typical palindrome task costs < $0.01.
 
 ---
 
+## Backend-scoped agent paths
+
+Agentic's pipeline needs four agent files (`architect`, `tdd-developer`, `qa`,
+`reviewer`) to run. Where it looks depends on the active backend.
+
+### Search order (first match wins)
+
+| Priority | ClaudeCode | CopilotCli |
+|---|---|---|
+| 1 (universal) | `<repo>/.agentic/agents/<name>.md` | `<repo>/.agentic/agents/<name>.md` |
+| 2 (backend-local) | `<repo>/.claude/agents/<name>.md` | `<repo>/.github/agents/<name>.md` |
+| 3 (global) | `$HOME/.claude/agents/<name>.md` | `$HOME/.copilot/agents/<name>.md` |
+
+The legacy bare `<repo>/agents/` path is no longer searched. Agents there
+will not be found.
+
+### Scaffold with `agentic-cli init`
+
+Run `init` once per repo to write starter agent files:
+
+```bash
+# Default (Claude Code project-local convention):
+agentic-cli init
+# → writes to <cwd>/.claude/agents/
+
+# Copilot project-local convention:
+agentic-cli init --copilot
+# → writes to <cwd>/.github/agents/
+
+# Claude Code global (applies to every repo):
+agentic-cli init --global
+# → writes to $HOME/.claude/agents/
+
+# Copilot global:
+agentic-cli init --copilot --global
+# → writes to $HOME/.copilot/agents/
+
+# Explicit Agentic override (only Agentic sees these, not Claude/Copilot):
+agentic-cli init --agentic
+# → writes to <cwd>/.agentic/agents/
+```
+
+`--force` overwrites existing files; without it, `init` refuses to clobber
+hand-edited agents.
+
+---
+
+## Live Copilot smoke test (G.4)
+
+A `#[ignore]`d Rust integration test that exercises the full backend stack with
+a real Copilot CLI subprocess and a real `AsyncGate`.
+
+### Prerequisites
+
+- `copilot` (GitHub Copilot CLI) on `PATH` — verify with `which copilot`
+- Auth handled by the CLI itself: authenticate via `gh auth login` or other
+  credential stores the CLI supports
+- Internet access (the CLI calls the GitHub Copilot API)
+
+### Run
+
+```bash
+cargo test -p agentic-cli --test e2e_copilot_live -- --ignored --nocapture
+```
+
+### What it does
+
+1. Creates a temporary sandbox directory with two placeholder Python files
+   and a git repo.
+2. Writes a `permissions.toml` with standard allow/deny patterns.
+3. Wires a real `CopilotCliBackend` through a real `AsyncGate` backed by
+   the bus.
+4. Runs a single `tdd-developer` step asking Copilot to implement a
+   palindrome function in Python.
+5. Drains bus envelopes and asserts:
+   - At least one `ToolUseStart` was observed (Copilot called a tool).
+   - At least one `PermissionResolved` arrived (the gate fired).
+   - The run completes within 5 minutes without a panic.
+
+### Source
+
+`crates/agentic-cli/tests/e2e_copilot_live.rs`
+
+---
+
 ## Modes
 
 ### 1 — Browser dev (fast iteration)
