@@ -21,6 +21,7 @@
     "allow-start-ticket-run",
     "allow-list-runs",
     "allow-permission-decide",
-    "allow-fetch-jira-ticket"
+    "allow-fetch-jira-ticket",
+    "allow-list-agents"
   ]
 }

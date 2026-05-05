@@ -5304,7 +5304,7 @@ cargo clippy --workspace --all-features --all-targets -- -D warnings
 
 ---
 
-### Step I.6: New `list_agents` IPC + Tauri DTO (no path leakage)
+### [x] Step I.6: New `list_agents` IPC + Tauri DTO (no path leakage)
 
 **Goal**: Expose the agent inventory to the webview via a new IPC
 `list_agents(backend: String) -> Result<Vec<AgentInfoDto>, String>`.
@@ -5695,7 +5695,7 @@ cargo fmt --all -- --check
 - [ ] I.3 execute_pipeline accepts arbitrary list, drop qa-fix-loop
 - [ ] I.4 CLI `--agents` flag (no implicit fallback)
 - [ ] I.5 `start_ticket_run` IPC adds `agents` (breaking)
-- [ ] I.6 `list_agents` IPC + `useDiscoverableAgents` hook
+- [x] I.6 `list_agents` IPC + `useDiscoverableAgents` hook
 - [ ] I.7 per-project pipeline persistence in localStorage
 - [ ] I.8 AgentPicker consumes `useDiscoverableAgents`
 - [ ] I.9 drop `RunStep.role` everywhere

@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod auth;
 pub mod chat;
 pub mod events;
@@ -8,3 +9,4 @@ pub mod permissions;
 pub mod runs;
 pub mod scripted;
 pub mod ticket;
+pub mod workspace;

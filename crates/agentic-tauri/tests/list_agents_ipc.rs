@@ -89,7 +89,10 @@ fn list_agents_strips_path_field() {
     };
     // Verify serialization excludes `path`
     let json = serde_json::to_value(&dto).unwrap();
-    assert!(json.get("path").is_none(), "DTO must not expose a path field");
+    assert!(
+        json.get("path").is_none(),
+        "DTO must not expose a path field"
+    );
     assert!(json.get("name").is_some());
     assert!(json.get("description").is_some());
     assert!(json.get("source").is_some());

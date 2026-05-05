@@ -38,6 +38,7 @@ use tauri::State;
 use ulid::Ulid;
 
 use super::events::EventBusState;
+use super::workspace::resolve_workspace_root;
 
 // BackendKind is the canonical `agentic_core::BackendKind`. It serialises
 // as kebab-case strings (e.g. "claude-code") which matches the Tauri IPC
@@ -60,20 +61,9 @@ pub async fn start_ticket_run(
         return Err("ticket text is empty".to_string());
     }
 
-    // Workspace root resolution:
-    //   1. AGENTIC_WORKSPACE_ROOT env var (override for `cargo tauri dev`,
-    //      where cwd is the tauri crate dir, not the user's target repo).
-    //   2. process cwd at IPC time.
-    let ws_root = match std::env::var_os("AGENTIC_WORKSPACE_ROOT") {
-        Some(p) => std::path::PathBuf::from(p),
-        None => std::env::current_dir().map_err(|e| format!("cwd: {e}"))?,
-    };
-    if !ws_root.is_dir() {
-        return Err(format!(
-            "workspace root is not a directory: {}",
-            ws_root.display()
-        ));
-    }
+    // Workspace root resolution: honours AGENTIC_WORKSPACE_ROOT env var
+    // (for `cargo tauri dev`), then falls back to process cwd.
+    let ws_root = resolve_workspace_root()?;
 
     // Pre-flight: fail fast with an actionable message if the backend
     // binary or any required agent file is missing. Without this, the
