@@ -2,6 +2,7 @@ import { useState } from "react";
 import AgentIcon from "./AgentIcon";
 import { getAgentAccent } from "../utils/agentAccents";
 import { useDiscoverableAgents } from "../hooks/useDiscoverableAgents";
+import type { AgentInfoDto } from "../types/agents";
 
 export type AgentPickerProps = {
   excludeIds: string[];
@@ -11,17 +12,28 @@ export type AgentPickerProps = {
   initialQuery?: string;
 };
 
-export default function AgentPicker({ excludeIds, onPick, onClose, width = "default", initialQuery = "" }: AgentPickerProps) {
+function matchesQuery(agent: AgentInfoDto, q: string): boolean {
+  if (q === "") return true;
+  return (
+    agent.name.toLowerCase().includes(q) ||
+    (agent.description ?? "").toLowerCase().includes(q)
+  );
+}
+
+export default function AgentPicker({
+  excludeIds,
+  onPick,
+  onClose,
+  width = "default",
+  initialQuery = "",
+}: AgentPickerProps) {
   const [query, setQuery] = useState(initialQuery);
   const { agents, isLoading, error } = useDiscoverableAgents();
 
+  const q = query.trim().toLowerCase();
   const visible = agents
     .filter((a) => !excludeIds.includes(a.name))
-    .filter((a) => {
-      const q = query.trim().toLowerCase();
-      if (q === "") return true;
-      return a.name.toLowerCase().includes(q) || (a.description ?? "").toLowerCase().includes(q);
-    });
+    .filter((a) => matchesQuery(a, q));
 
   return (
     <div
@@ -62,38 +74,41 @@ export default function AgentPicker({ excludeIds, onPick, onClose, width = "defa
             No agents discovered. Run `agentic-cli init` or `agentic-cli init --copilot`.
           </li>
         )}
-        {!isLoading && !error && visible.map((agent) => (
-          <li key={agent.name}>
-            <button
-              type="button"
-              data-testid={`agent-picker-row-${agent.name}`}
-              onClick={() => onPick(agent.name)}
-              className="flex w-full items-center gap-3 px-3 py-2 hover:bg-[rgb(0_0_0_/_0.04)] focus:bg-[rgb(0_0_0_/_0.04)] focus:outline-none text-left"
-            >
-              <span
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
-                style={{ backgroundColor: getAgentAccent(agent.name).bg, color: getAgentAccent(agent.name).fg }}
-                aria-hidden="true"
+        {!isLoading && !error && visible.map((agent) => {
+          const accent = getAgentAccent(agent.name);
+          return (
+            <li key={agent.name}>
+              <button
+                type="button"
+                data-testid={`agent-picker-row-${agent.name}`}
+                onClick={() => onPick(agent.name)}
+                className="flex w-full items-center gap-3 px-3 py-2 hover:bg-[rgb(0_0_0_/_0.04)] focus:bg-[rgb(0_0_0_/_0.04)] focus:outline-none text-left"
               >
-                <AgentIcon agent={agent.name} size={16} />
-              </span>
-              <span className="flex flex-col leading-tight flex-1 min-w-0">
-                <span className="flex items-center gap-2">
-                  <span className="text-[13px] font-semibold text-fg">{agent.name}</span>
-                  <span
-                    data-testid={`agent-source-chip-${agent.name}`}
-                    className={`text-[10px] border rounded px-1 py-0.5 leading-none ${agent.source === "project" ? "border-border" : "border-border-soft"} text-fg-muted`}
-                  >
-                    {agent.source}
-                  </span>
+                <span
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
+                  style={{ backgroundColor: accent.bg, color: accent.fg }}
+                  aria-hidden="true"
+                >
+                  <AgentIcon agent={agent.name} size={16} />
                 </span>
-                {agent.description && (
-                  <span className="text-[11px] text-fg-muted">{agent.description}</span>
-                )}
-              </span>
-            </button>
-          </li>
-        ))}
+                <span className="flex flex-col leading-tight flex-1 min-w-0">
+                  <span className="flex items-center gap-2">
+                    <span className="text-[13px] font-semibold text-fg">{agent.name}</span>
+                    <span
+                      data-testid={`agent-source-chip-${agent.name}`}
+                      className={`text-[10px] border rounded px-1 py-0.5 leading-none ${agent.source === "project" ? "border-border" : "border-border-soft"} text-fg-muted`}
+                    >
+                      {agent.source}
+                    </span>
+                  </span>
+                  {agent.description && (
+                    <span className="text-[11px] text-fg-muted">{agent.description}</span>
+                  )}
+                </span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
