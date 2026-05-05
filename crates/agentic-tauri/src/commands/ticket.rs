@@ -221,6 +221,20 @@ pub async fn start_ticket_run(
 ///
 /// Errors are short, actionable strings the chat surfaces verbatim.
 fn pre_flight_check(ws_root: &std::path::Path, backend_kind: &BackendKind) -> Result<(), String> {
+    // Resolve the home directory once and delegate to the injectable variant.
+    let base = directories::BaseDirs::new();
+    let home = base.as_ref().map(|b| b.home_dir());
+    pre_flight_check_with_home(ws_root, backend_kind, home)
+}
+
+/// Same as [`pre_flight_check`] but accepts an injectable home directory so
+/// tests can avoid seeing real agent files installed in `~/.claude/` or
+/// `~/.copilot/`.
+pub fn pre_flight_check_with_home(
+    ws_root: &std::path::Path,
+    backend_kind: &BackendKind,
+    home: Option<&std::path::Path>,
+) -> Result<(), String> {
     // 1. Backend binary on PATH.
     let (binary_env, binary_default, install_hint) = match backend_kind {
         BackendKind::ClaudeCode => (
@@ -243,17 +257,53 @@ fn pre_flight_check(ws_root: &std::path::Path, backend_kind: &BackendKind) -> Re
 
     // 2. Agent files. Use the same discovery the pipeline does.
     for name in ["architect", "tdd-developer", "qa", "reviewer"] {
-        if agentic_core::discover_agent(*backend_kind, ws_root, name).is_err() {
-            return Err(format!(
-                "pre-flight: agent `{name}` not found under {}. \
-                 Run `agentic-cli init` from the workspace to scaffold the four \
-                 required agents (or place them under `.claude/agents/` yourself).",
-                ws_root.display()
-            ));
+        match agentic_core::discover_agent_with_home(*backend_kind, ws_root, home, name) {
+            Ok(_) => {}
+            Err(agentic_core::CoreError::AgentNotFound { name, searched }) => {
+                return Err(format_agent_not_found_error(
+                    &name,
+                    *backend_kind,
+                    &searched,
+                ));
+            }
+            Err(e) => {
+                return Err(format!(
+                    "pre-flight: agent '{name}' in agents/ could not be parsed: {e}. \
+                     Run `agentic-cli init` to re-scaffold the required agents."
+                ));
+            }
         }
     }
 
     Ok(())
+}
+
+/// Format a user-facing error string for a missing agent.
+///
+/// Lists each searched path as a bullet so the user knows exactly where to
+/// place the file. Includes a backend-specific `agentic-cli init` hint.
+fn format_agent_not_found_error(
+    name: &str,
+    backend: BackendKind,
+    searched: &[std::path::PathBuf],
+) -> String {
+    let bullets: String = searched
+        .iter()
+        .map(|p| format!("  - {}\n", p.display()))
+        .collect();
+    let flag = match backend {
+        BackendKind::CopilotCli => " --copilot",
+        BackendKind::ClaudeCode => "",
+    };
+    let backend_label = match backend {
+        BackendKind::ClaudeCode => "claude-code",
+        BackendKind::CopilotCli => "copilot-cli",
+    };
+    format!(
+        "pre-flight: agent '{name}' not found for backend '{backend_label}'. Searched:\n\
+         {bullets}\
+         Run `agentic-cli init{flag}` to scaffold the four required agents."
+    )
 }
 
 /// Return `true` if `binary` is either an absolute/relative path that exists

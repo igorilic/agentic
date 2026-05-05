@@ -44,8 +44,7 @@ fn error_message_for_missing_claude_code_agent_lists_three_claude_paths() {
         std::env::set_var("CLAUDE_CODE_BIN", &bin_path);
     }
 
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()));
+    let result = pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()));
 
     unsafe {
         std::env::remove_var("CLAUDE_CODE_BIN");
@@ -111,8 +110,7 @@ fn error_message_for_missing_copilot_cli_agent_lists_three_copilot_paths() {
         std::env::set_var("COPILOT_CLI_BIN", &bin_path);
     }
 
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::CopilotCli, Some(home.path()));
+    let result = pre_flight_check_with_home(ws.path(), &BackendKind::CopilotCli, Some(home.path()));
 
     unsafe {
         std::env::remove_var("COPILOT_CLI_BIN");
@@ -173,8 +171,7 @@ fn error_message_includes_install_hint_when_binary_missing() {
         );
     }
 
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()));
+    let result = pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()));
 
     unsafe {
         std::env::remove_var("CLAUDE_CODE_BIN");
