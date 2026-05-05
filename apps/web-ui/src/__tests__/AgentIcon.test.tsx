@@ -146,21 +146,26 @@ describe("AgentIcon", () => {
     }
   });
 
-  describe("unknown agent — fallback rect", () => {
+  describe("unknown agent — initial fallback (div with letter)", () => {
     it("renders without crash for unknown agent", () => {
       expect(() => render(<AgentIcon agent="unknown-agent" />)).not.toThrow();
     });
 
-    it("renders svg with data-testid agent-icon-unknown-agent", () => {
+    it("renders element with data-testid agent-icon-unknown-agent", () => {
       render(<AgentIcon agent="unknown-agent" />);
       expect(screen.getByTestId("agent-icon-unknown-agent")).toBeInTheDocument();
     });
 
-    it("fallback svg contains a <rect> element", () => {
+    it("fallback element shows letter 'U' (first letter of unknown-agent)", () => {
       render(<AgentIcon agent="unknown-agent" />);
-      const svg = screen.getByTestId("agent-icon-unknown-agent");
-      const rect = svg.querySelector("rect");
-      expect(rect).not.toBeNull();
+      const el = screen.getByTestId("agent-icon-unknown-agent");
+      expect(el.textContent).toBe("U");
+    });
+
+    it("fallback element is a div not an svg", () => {
+      render(<AgentIcon agent="unknown-agent" />);
+      const el = screen.getByTestId("agent-icon-unknown-agent");
+      expect(el.tagName.toLowerCase()).toBe("div");
     });
   });
 
@@ -202,6 +207,63 @@ describe("AgentIcon", () => {
       const svg = screen.getByTestId("agent-icon-a11y");
       expect(svg.querySelector("g")).not.toBeNull();
       expect(svg.querySelector("circle")).not.toBeNull();
+    });
+  });
+
+  describe("keyword-resolved agents — component renders correct icon", () => {
+    it("requirements-engineer renders the book svg (path with M4 4h5)", () => {
+      render(<AgentIcon agent="requirements-engineer" />);
+      const svg = screen.getByTestId("agent-icon-requirements-engineer");
+      expect(svg.tagName.toLowerCase()).toBe("svg");
+      const path = svg.querySelector("path");
+      expect(path).not.toBeNull();
+      // book glyph path starts with M4 4h5
+      expect(path!.getAttribute("d")).toContain("M4 4h5");
+    });
+
+    it("system-architect renders the blueprint svg", () => {
+      render(<AgentIcon agent="system-architect" />);
+      const svg = screen.getByTestId("agent-icon-system-architect");
+      const path = svg.querySelector("path");
+      expect(path).not.toBeNull();
+      expect(path!.getAttribute("d")).toContain("M3 4h14v12H3z");
+    });
+
+    it("ui-ux-designer renders svg with palette (circle children)", () => {
+      render(<AgentIcon agent="ui-ux-designer" />);
+      const svg = screen.getByTestId("agent-icon-ui-ux-designer");
+      expect(svg.querySelector("circle")).not.toBeNull();
+    });
+  });
+
+  describe("initial-fallback — unknown agent renders div not svg", () => {
+    it("xyzzy renders a div with data-testid agent-icon-xyzzy", () => {
+      render(<AgentIcon agent="xyzzy" />);
+      expect(screen.getByTestId("agent-icon-xyzzy")).toBeInTheDocument();
+    });
+
+    it("xyzzy fallback shows letter 'X'", () => {
+      render(<AgentIcon agent="xyzzy" />);
+      const el = screen.getByTestId("agent-icon-xyzzy");
+      expect(el.textContent).toBe("X");
+    });
+
+    it("xyzzy fallback element is a div not an svg", () => {
+      render(<AgentIcon agent="xyzzy" />);
+      const el = screen.getByTestId("agent-icon-xyzzy");
+      expect(el.tagName.toLowerCase()).toBe("div");
+    });
+
+    it("foo-bar fallback shows letter 'F'", () => {
+      render(<AgentIcon agent="foo-bar" />);
+      const el = screen.getByTestId("agent-icon-foo-bar");
+      expect(el.textContent).toBe("F");
+    });
+  });
+
+  describe("backward-compat — existing 'unknown-agent' test still expects rect OR div", () => {
+    it("renders without crash for unknown-agent", () => {
+      expect(() => render(<AgentIcon agent="unknown-agent" />)).not.toThrow();
     });
   });
 });
