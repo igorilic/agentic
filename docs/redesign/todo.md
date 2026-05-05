@@ -4262,7 +4262,7 @@ cargo clippy --workspace --all-features --all-targets -- -D warnings
 
 ---
 
-### Step G.2: Backend-scoped `discover_agent`
+### [x] Step G.2: Backend-scoped `discover_agent`
 
 **Goal**: Discovery searches only the paths relevant to the active
 backend, with `.agentic/agents/` as the universal first override.
