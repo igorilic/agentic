@@ -5691,7 +5691,7 @@ cargo fmt --all -- --check
 ### Phase I status checklist
 
 - [x] I.1 list discoverable agents (core, with `source` tag)
-- [ ] I.2 pre-flight takes user-supplied agents list
+- [x] I.2 pre-flight takes user-supplied agents list
 - [ ] I.3 execute_pipeline accepts arbitrary list, drop qa-fix-loop
 - [ ] I.4 CLI `--agents` flag (no implicit fallback)
 - [ ] I.5 `start_ticket_run` IPC adds `agents` (breaking)

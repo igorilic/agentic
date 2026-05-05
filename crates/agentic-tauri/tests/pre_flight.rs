@@ -63,8 +63,12 @@ fn error_message_for_missing_claude_code_agent_lists_three_claude_paths() {
     }
 
     let agents = canonical_agents();
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()), &agents);
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::ClaudeCode,
+        Some(home.path()),
+        &agents,
+    );
 
     unsafe {
         std::env::remove_var("CLAUDE_CODE_BIN");
@@ -127,8 +131,12 @@ fn error_message_for_missing_copilot_cli_agent_lists_three_copilot_paths() {
     }
 
     let agents = canonical_agents();
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::CopilotCli, Some(home.path()), &agents);
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::CopilotCli,
+        Some(home.path()),
+        &agents,
+    );
 
     unsafe {
         std::env::remove_var("COPILOT_CLI_BIN");
@@ -186,8 +194,12 @@ fn error_message_includes_install_hint_when_binary_missing() {
     }
 
     let agents = canonical_agents();
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()), &agents);
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::ClaudeCode,
+        Some(home.path()),
+        &agents,
+    );
 
     unsafe {
         std::env::remove_var("CLAUDE_CODE_BIN");
@@ -229,14 +241,22 @@ fn pre_flight_succeeds_with_user_selected_agents() {
     }
 
     let agents: Vec<String> = vec!["architect".to_string(), "qa".to_string()];
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()), &agents);
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::ClaudeCode,
+        Some(home.path()),
+        &agents,
+    );
 
     unsafe {
         std::env::remove_var("CLAUDE_CODE_BIN");
     }
 
-    assert!(result.is_ok(), "should succeed when all selected agents exist; got: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "should succeed when all selected agents exist; got: {:?}",
+        result
+    );
 }
 
 /// Empty agents slice must return an error containing "agents list is empty".
@@ -250,8 +270,12 @@ fn pre_flight_errors_on_empty_agent_list() {
     }
 
     let agents: Vec<String> = vec![];
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()), &agents);
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::ClaudeCode,
+        Some(home.path()),
+        &agents,
+    );
 
     unsafe {
         std::env::remove_var("CLAUDE_CODE_BIN");
@@ -285,8 +309,12 @@ fn pre_flight_lists_first_missing_agent() {
         "designer".to_string(),
         "qa".to_string(),
     ];
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()), &agents);
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::ClaudeCode,
+        Some(home.path()),
+        &agents,
+    );
 
     unsafe {
         std::env::remove_var("CLAUDE_CODE_BIN");
@@ -321,8 +349,12 @@ fn pre_flight_does_not_require_canonical_4_agents() {
     }
 
     let agents: Vec<String> = vec!["foo".to_string(), "bar".to_string()];
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()), &agents);
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::ClaudeCode,
+        Some(home.path()),
+        &agents,
+    );
 
     unsafe {
         std::env::remove_var("CLAUDE_CODE_BIN");
@@ -350,8 +382,12 @@ fn pre_flight_works_with_single_agent() {
     }
 
     let agents: Vec<String> = vec!["just-one".to_string()];
-    let result =
-        pre_flight_check_with_home(ws.path(), &BackendKind::ClaudeCode, Some(home.path()), &agents);
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::ClaudeCode,
+        Some(home.path()),
+        &agents,
+    );
 
     unsafe {
         std::env::remove_var("CLAUDE_CODE_BIN");
