@@ -5,7 +5,7 @@
 /// home directory so the developer's real `~/.claude/` never bleeds in.
 use std::path::Path;
 
-use agentic_core::{AgentInfo, AgentSource, BackendKind, list_discoverable};
+use agentic_core::{AgentSource, BackendKind, list_discoverable};
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -13,9 +13,8 @@ use agentic_core::{AgentInfo, AgentSource, BackendKind, list_discoverable};
 fn write_agent(root: &Path, subdir: &str, filename: &str, name: &str, description: &str) {
     let dir = root.join(subdir);
     std::fs::create_dir_all(&dir).expect("create_dir_all");
-    let content = format!(
-        "+++\nname = \"{name}\"\ndescription = \"{description}\"\n+++\nSystem prompt.\n"
-    );
+    let content =
+        format!("+++\nname = \"{name}\"\ndescription = \"{description}\"\n+++\nSystem prompt.\n");
     std::fs::write(dir.join(filename), content).expect("write agent file");
 }
 
@@ -257,13 +256,7 @@ fn list_discoverable_copilot_cli_cannot_see_claude_agents() {
     let tmp = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
 
-    write_agent(
-        tmp.path(),
-        ".claude/agents",
-        "qa.md",
-        "qa",
-        "Claude only",
-    );
+    write_agent(tmp.path(), ".claude/agents", "qa.md", "qa", "Claude only");
 
     let result = list_discoverable(BackendKind::CopilotCli, tmp.path(), Some(home.path()))
         .expect("list_discoverable");
@@ -314,8 +307,8 @@ fn list_discoverable_agentic_dir_visible_to_both_backends() {
     );
 
     for backend in [BackendKind::ClaudeCode, BackendKind::CopilotCli] {
-        let result = list_discoverable(backend, tmp.path(), Some(home.path()))
-            .expect("list_discoverable");
+        let result =
+            list_discoverable(backend, tmp.path(), Some(home.path())).expect("list_discoverable");
 
         assert_eq!(
             result.len(),
@@ -359,7 +352,10 @@ fn list_discoverable_returns_empty_when_no_home_and_no_project_agents() {
     let result =
         list_discoverable(BackendKind::ClaudeCode, tmp.path(), None).expect("list_discoverable");
 
-    assert!(result.is_empty(), "Should be empty with no agents: {result:?}");
+    assert!(
+        result.is_empty(),
+        "Should be empty with no agents: {result:?}"
+    );
 }
 
 // ─── 13. Mixed project + home agents, all appear in alphabetical order ────────

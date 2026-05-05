@@ -1,5 +1,7 @@
 mod discovery;
+mod list;
 pub use discovery::{discover_agent, discover_agent_with_home};
+pub use list::list_discoverable;
 
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +50,36 @@ struct AgentFrontmatter {
     pipeline_role: PipelineRole,
     #[serde(default)]
     timeout_seconds: Option<u64>,
+}
+
+/// Whether an agent was found in a project-local directory or in the
+/// user's home directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentSource {
+    /// Agent file lives in a project-local directory (`.agentic/agents/`,
+    /// `.claude/agents/`, or `.github/agents/`).
+    Project,
+    /// Agent file lives in the user's home directory (`~/.claude/agents/`
+    /// or `~/.copilot/agents/`).
+    Home,
+}
+
+/// Lightweight descriptor returned by [`list_discoverable`]. Contains only
+/// the fields needed for display / selection UIs; the full [`Agent`] (with
+/// system prompt) is loaded on demand via [`discover_agent`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentInfo {
+    /// File basename without the `.md` extension. Matches the `name` field
+    /// in the TOML frontmatter.
+    pub name: String,
+    /// Optional description extracted from the TOML frontmatter `description`
+    /// field. `None` if the field was absent or the file was only partially
+    /// parsed.
+    pub description: Option<String>,
+    /// Whether this agent was found in a project directory or the home
+    /// directory.
+    pub source: AgentSource,
 }
 
 /// Parse an agent markdown file. `filename_stem` is the file stem (no

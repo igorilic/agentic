@@ -1,7 +1,10 @@
 #![deny(unsafe_code)]
 
 pub mod agents;
-pub use agents::{Agent, PipelineRole, discover_agent, discover_agent_with_home, parse_agent};
+pub use agents::{
+    Agent, AgentInfo, AgentSource, PipelineRole, discover_agent, discover_agent_with_home,
+    list_discoverable, parse_agent,
+};
 pub mod backends;
 pub mod events;
 pub mod findings;
