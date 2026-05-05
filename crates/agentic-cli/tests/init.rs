@@ -146,3 +146,86 @@ fn destination_home_variants_error_when_home_is_none() {
     assert!(AgentDestination::ClaudeHome.resolve(repo, None).is_err());
     assert!(AgentDestination::CopilotHome.resolve(repo, None).is_err());
 }
+
+// ─── G.5 regression guards ────────────────────────────────────────────────────
+// These three tests guard against regressions in backend-scoped init paths.
+// The legacy `<repo>/agents/` directory must never be written; each backend
+// convention maps to its canonical location only.
+
+/// `agentic-cli init` (default, no flags) must write agent files into
+/// `<repo>/.claude/agents/` — the Claude Code project-local convention.
+#[test]
+fn init_default_writes_to_claude_agents() {
+    let tmp = make_target();
+    let repo_root = tmp.path();
+    let destination = AgentDestination::ClaudeRepo
+        .resolve(repo_root, None)
+        .expect("resolve ClaudeRepo");
+
+    write_agent_scaffolding(&destination, false).expect("init default");
+
+    for name in AGENT_NAMES {
+        let path = repo_root
+            .join(".claude")
+            .join("agents")
+            .join(format!("{name}.md"));
+        assert!(
+            path.exists(),
+            "default init must create {name}.md at {}",
+            path.display()
+        );
+    }
+}
+
+/// `agentic-cli init --copilot` must write agent files into
+/// `<repo>/.github/agents/` — the Copilot project-local convention.
+#[test]
+fn init_copilot_writes_to_github_agents() {
+    let tmp = make_target();
+    let repo_root = tmp.path();
+    let destination = AgentDestination::CopilotRepo
+        .resolve(repo_root, None)
+        .expect("resolve CopilotRepo");
+
+    write_agent_scaffolding(&destination, false).expect("init --copilot");
+
+    for name in AGENT_NAMES {
+        let path = repo_root
+            .join(".github")
+            .join("agents")
+            .join(format!("{name}.md"));
+        assert!(
+            path.exists(),
+            "--copilot must create {name}.md at {}",
+            path.display()
+        );
+    }
+}
+
+/// The legacy `<repo>/agents/` path must never be written by any `init`
+/// invocation. This is a dropped convention; writing there would confuse
+/// users who expect agents at the backend-specific locations.
+#[test]
+fn init_does_not_write_to_legacy_agents_dir() {
+    let tmp = make_target();
+    let repo_root = tmp.path();
+
+    // Run both the default (claude) and the --copilot variant.
+    let claude_dest = AgentDestination::ClaudeRepo
+        .resolve(repo_root, None)
+        .expect("resolve ClaudeRepo");
+    write_agent_scaffolding(&claude_dest, false).expect("init default");
+
+    let copilot_dest = AgentDestination::CopilotRepo
+        .resolve(repo_root, None)
+        .expect("resolve CopilotRepo");
+    write_agent_scaffolding(&copilot_dest, false).expect("init --copilot");
+
+    // The legacy bare `<repo>/agents/` directory must not exist.
+    let legacy_dir = repo_root.join("agents");
+    assert!(
+        !legacy_dir.exists(),
+        "init must not create the legacy <repo>/agents/ directory (found {})",
+        legacy_dir.display()
+    );
+}
