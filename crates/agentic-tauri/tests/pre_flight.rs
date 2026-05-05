@@ -82,21 +82,25 @@ fn error_message_for_missing_claude_code_agent_lists_three_claude_paths() {
         "error must start with 'pre-flight:'; got: {err}"
     );
 
-    // Must contain the three ClaudeCode-specific paths for architect.
+    // Must contain both ClaudeCode-specific path variants for architect.
     let ws_str = ws.path().to_string_lossy();
     let home_str = home.path().to_string_lossy();
 
     assert!(
-        err.contains(&format!("{ws_str}/.agentic/agents/architect.md")),
-        "error should list .agentic/agents path; got:\n{err}"
+        err.contains(&format!("{ws_str}/.claude/agents/architect.md")),
+        "error should list project .claude/agents .md path; got:\n{err}"
     );
     assert!(
-        err.contains(&format!("{ws_str}/.claude/agents/architect.md")),
-        "error should list .claude/agents path; got:\n{err}"
+        err.contains(&format!("{ws_str}/.claude/agents/architect.agent.md")),
+        "error should list project .claude/agents .agent.md path; got:\n{err}"
     );
     assert!(
         err.contains(&format!("{home_str}/.claude/agents/architect.md")),
-        "error should list $HOME/.claude/agents path; got:\n{err}"
+        "error should list $HOME/.claude/agents .md path; got:\n{err}"
+    );
+    assert!(
+        err.contains(&format!("{home_str}/.claude/agents/architect.agent.md")),
+        "error should list $HOME/.claude/agents .agent.md path; got:\n{err}"
     );
 
     // Must NOT mention copilot paths.
@@ -109,14 +113,15 @@ fn error_message_for_missing_claude_code_agent_lists_three_claude_paths() {
         "claude-code error must not list .copilot/; got:\n{err}"
     );
 
-    // Must suggest `agentic-cli init` (without --copilot flag).
+    // Must NOT suggest the retired `agentic-cli init` hint.
     assert!(
-        err.contains("agentic-cli init"),
-        "error should suggest agentic-cli init; got:\n{err}"
+        !err.contains("agentic-cli init"),
+        "error must not suggest retired agentic-cli init; got:\n{err}"
     );
+    // Must suggest placing a file at one of the listed paths.
     assert!(
-        !err.contains("--copilot"),
-        "claude-code error must not suggest --copilot flag; got:\n{err}"
+        err.contains("Place an agent file"),
+        "error should say 'Place an agent file'; got:\n{err}"
     );
 }
 
@@ -150,21 +155,25 @@ fn error_message_for_missing_copilot_cli_agent_lists_three_copilot_paths() {
         "error must start with 'pre-flight:'; got: {err}"
     );
 
-    // Must contain the three CopilotCli-specific paths for architect.
+    // Must contain both CopilotCli-specific path variants for architect.
     let ws_str = ws.path().to_string_lossy();
     let home_str = home.path().to_string_lossy();
 
     assert!(
-        err.contains(&format!("{ws_str}/.agentic/agents/architect.md")),
-        "error should list .agentic/agents path; got:\n{err}"
+        err.contains(&format!("{ws_str}/.github/agents/architect.md")),
+        "error should list project .github/agents .md path; got:\n{err}"
     );
     assert!(
-        err.contains(&format!("{ws_str}/.github/agents/architect.md")),
-        "error should list .github/agents path; got:\n{err}"
+        err.contains(&format!("{ws_str}/.github/agents/architect.agent.md")),
+        "error should list project .github/agents .agent.md path; got:\n{err}"
     );
     assert!(
         err.contains(&format!("{home_str}/.copilot/agents/architect.md")),
-        "error should list $HOME/.copilot/agents path; got:\n{err}"
+        "error should list $HOME/.copilot/agents .md path; got:\n{err}"
+    );
+    assert!(
+        err.contains(&format!("{home_str}/.copilot/agents/architect.agent.md")),
+        "error should list $HOME/.copilot/agents .agent.md path; got:\n{err}"
     );
 
     // Must NOT mention claude paths.
@@ -173,10 +182,55 @@ fn error_message_for_missing_copilot_cli_agent_lists_three_copilot_paths() {
         "copilot-cli error must not list .claude/agents/; got:\n{err}"
     );
 
-    // Must suggest `agentic-cli init --copilot`.
+    // Must NOT suggest the retired `agentic-cli init --copilot` hint.
     assert!(
-        err.contains("agentic-cli init --copilot"),
-        "error should suggest agentic-cli init --copilot; got:\n{err}"
+        !err.contains("agentic-cli init"),
+        "error must not suggest retired agentic-cli init; got:\n{err}"
+    );
+    // Must suggest placing a file at one of the listed paths.
+    assert!(
+        err.contains("Place an agent file"),
+        "error should say 'Place an agent file'; got:\n{err}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Smoke regression: mirrors user's actual setup (.agent.md extension)
+// ---------------------------------------------------------------------------
+
+/// Mirrors the user's actual workspace: `spec-writer.agent.md` (not
+/// `spec-writer.md`) at `.github/agents/`. The pre-flight must resolve it.
+#[test]
+fn smoke_agent_dot_agent_md_resolves_for_copilot_cli() {
+    let (ws, bin_path) = workspace_with_binary("copilot");
+    let home = empty_home();
+
+    let agents_dir = ws.path().join(".github").join("agents");
+    std::fs::create_dir_all(&agents_dir).unwrap();
+    // Write the .agent.md variant only — no plain .md file.
+    let content = "+++\nname = \"spec-writer\"\ndescription = \"stub\"\npipeline_role = \"step\"\n+++\nbody";
+    std::fs::write(agents_dir.join("spec-writer.agent.md"), content).unwrap();
+
+    unsafe {
+        std::env::set_var("COPILOT_CLI_BIN", &bin_path);
+    }
+
+    let agents = vec!["spec-writer".to_string()];
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::CopilotCli,
+        Some(home.path()),
+        &agents,
+    );
+
+    unsafe {
+        std::env::remove_var("COPILOT_CLI_BIN");
+    }
+
+    assert!(
+        result.is_ok(),
+        "spec-writer.agent.md in .github/agents/ must resolve; got: {:?}",
+        result
     );
 }
 
