@@ -187,6 +187,7 @@ pub async fn start_ticket_run(
                 ticket_text: &ticket_owned,
                 model_override: model_id,
                 paths: &paths,
+                backend_kind,
                 external_cancel: Some(cancel_token.clone()),
             },
             &pipeline,
@@ -242,7 +243,7 @@ fn pre_flight_check(ws_root: &std::path::Path, backend_kind: &BackendKind) -> Re
 
     // 2. Agent files. Use the same discovery the pipeline does.
     for name in ["architect", "tdd-developer", "qa", "reviewer"] {
-        if agentic_core::discover_agent(ws_root, name).is_err() {
+        if agentic_core::discover_agent(*backend_kind, ws_root, name).is_err() {
             return Err(format!(
                 "pre-flight: agent `{name}` not found under {}. \
                  Run `agentic-cli init` from the workspace to scaffold the four \

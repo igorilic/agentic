@@ -249,6 +249,7 @@ default_on_timeout = "deny"
                 ticket_text,
                 model_override: Some(ModelId("claude-haiku-4-5-20251001".to_string())),
                 paths: &paths_clone,
+                backend_kind: agentic_core::BackendKind::ClaudeCode,
                 external_cancel: None,
             },
             &pipeline,
@@ -291,16 +292,33 @@ default_on_timeout = "deny"
                             );
                             perm_resolveds.push((d, s));
                         }
+                        Event::RunStarted { ticket, .. } => {
+                            eprintln!("  RunStarted: ticket={}", ticket.reference);
+                        }
+                        Event::StepStarted { agent, .. } => {
+                            eprintln!("  StepStarted: agent={agent}");
+                        }
+                        Event::StepComplete { status, .. } => {
+                            eprintln!("  StepComplete: status={status:?}");
+                        }
+                        Event::Finding {
+                            severity, message, ..
+                        } => {
+                            eprintln!("  Finding: severity={severity:?} message={message}");
+                        }
                         Event::RunComplete { status, .. } => {
                             eprintln!("  RunComplete: status={status:?}");
                             run_complete_seen = true;
                             break;
                         }
-                        Event::TextDelta { .. } => {
-                            // Too noisy — suppress.
-                        }
+                        // High-volume / low-signal variants — suppress silently.
+                        Event::TextDelta { .. }
+                        | Event::ThinkingDelta { .. }
+                        | Event::ToolUseDelta { .. }
+                        | Event::ToolUseEnd { .. } => {}
                         _ => {
-                            eprintln!("  event: {:?}", std::mem::discriminant(&env.event));
+                            // Other variants (FileChange, RetryStarted, Error, etc.)
+                            // are uncommon; suppress to avoid noise.
                         }
                     }
                 }

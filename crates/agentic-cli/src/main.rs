@@ -434,6 +434,7 @@ async fn cmd_run_ticket(
             ticket_text: &ticket_text,
             model_override: model_id,
             paths,
+            backend_kind: agentic_core::BackendKind::from(backend_kind),
             external_cancel: None,
         },
         &pipeline,

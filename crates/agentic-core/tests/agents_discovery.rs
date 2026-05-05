@@ -21,12 +21,28 @@ fn agentic_dir_wins_for_claude_code() {
     let root = tmp.path();
     let home = tempfile::tempdir().unwrap(); // empty — no global agents
 
-    write_agent(root, ".agentic/agents", "architect.md", "architect", "AGENTIC");
-    write_agent(root, ".claude/agents", "architect.md", "architect", "CLAUDE");
+    write_agent(
+        root,
+        ".agentic/agents",
+        "architect.md",
+        "architect",
+        "AGENTIC",
+    );
+    write_agent(
+        root,
+        ".claude/agents",
+        "architect.md",
+        "architect",
+        "CLAUDE",
+    );
 
-    let agent =
-        discover_agent_with_home(BackendKind::ClaudeCode, root, Some(home.path()), "architect")
-            .expect("discover");
+    let agent = discover_agent_with_home(
+        BackendKind::ClaudeCode,
+        root,
+        Some(home.path()),
+        "architect",
+    )
+    .expect("discover");
     assert!(
         agent.description.contains("AGENTIC"),
         ".agentic/agents/ should win for ClaudeCode; got: {}",
@@ -40,12 +56,28 @@ fn agentic_dir_wins_for_copilot_cli() {
     let root = tmp.path();
     let home = tempfile::tempdir().unwrap();
 
-    write_agent(root, ".agentic/agents", "architect.md", "architect", "AGENTIC");
-    write_agent(root, ".github/agents", "architect.md", "architect", "GITHUB");
+    write_agent(
+        root,
+        ".agentic/agents",
+        "architect.md",
+        "architect",
+        "AGENTIC",
+    );
+    write_agent(
+        root,
+        ".github/agents",
+        "architect.md",
+        "architect",
+        "GITHUB",
+    );
 
-    let agent =
-        discover_agent_with_home(BackendKind::CopilotCli, root, Some(home.path()), "architect")
-            .expect("discover");
+    let agent = discover_agent_with_home(
+        BackendKind::CopilotCli,
+        root,
+        Some(home.path()),
+        "architect",
+    )
+    .expect("discover");
     assert!(
         agent.description.contains("AGENTIC"),
         ".agentic/agents/ should win for CopilotCli; got: {}",
@@ -61,11 +93,21 @@ fn claude_backend_finds_project_claude_agent() {
     let root = tmp.path();
     let home = tempfile::tempdir().unwrap();
 
-    write_agent(root, ".claude/agents", "architect.md", "architect", "CLAUDE");
+    write_agent(
+        root,
+        ".claude/agents",
+        "architect.md",
+        "architect",
+        "CLAUDE",
+    );
 
-    let agent =
-        discover_agent_with_home(BackendKind::ClaudeCode, root, Some(home.path()), "architect")
-            .expect("discover");
+    let agent = discover_agent_with_home(
+        BackendKind::ClaudeCode,
+        root,
+        Some(home.path()),
+        "architect",
+    )
+    .expect("discover");
     assert!(
         agent.description.contains("CLAUDE"),
         ".claude/agents/ should be found for ClaudeCode; got: {}",
@@ -80,10 +122,20 @@ fn claude_backend_does_not_find_github_agent() {
     let home = tempfile::tempdir().unwrap();
 
     // Only place the agent in .github — ClaudeCode should NOT see it.
-    write_agent(root, ".github/agents", "architect.md", "architect", "GITHUB");
+    write_agent(
+        root,
+        ".github/agents",
+        "architect.md",
+        "architect",
+        "GITHUB",
+    );
 
-    let result =
-        discover_agent_with_home(BackendKind::ClaudeCode, root, Some(home.path()), "architect");
+    let result = discover_agent_with_home(
+        BackendKind::ClaudeCode,
+        root,
+        Some(home.path()),
+        "architect",
+    );
     match result {
         Err(CoreError::AgentNotFound { name, searched }) => {
             assert_eq!(name, "architect");
@@ -114,11 +166,21 @@ fn copilot_backend_finds_project_github_agent() {
     let root = tmp.path();
     let home = tempfile::tempdir().unwrap();
 
-    write_agent(root, ".github/agents", "architect.md", "architect", "GITHUB");
+    write_agent(
+        root,
+        ".github/agents",
+        "architect.md",
+        "architect",
+        "GITHUB",
+    );
 
-    let agent =
-        discover_agent_with_home(BackendKind::CopilotCli, root, Some(home.path()), "architect")
-            .expect("discover");
+    let agent = discover_agent_with_home(
+        BackendKind::CopilotCli,
+        root,
+        Some(home.path()),
+        "architect",
+    )
+    .expect("discover");
     assert!(
         agent.description.contains("GITHUB"),
         ".github/agents/ should be found for CopilotCli; got: {}",
@@ -133,10 +195,20 @@ fn copilot_backend_does_not_find_claude_agent() {
     let home = tempfile::tempdir().unwrap();
 
     // Only place the agent in .claude — CopilotCli should NOT see it.
-    write_agent(root, ".claude/agents", "architect.md", "architect", "CLAUDE");
+    write_agent(
+        root,
+        ".claude/agents",
+        "architect.md",
+        "architect",
+        "CLAUDE",
+    );
 
-    let result =
-        discover_agent_with_home(BackendKind::CopilotCli, root, Some(home.path()), "architect");
+    let result = discover_agent_with_home(
+        BackendKind::CopilotCli,
+        root,
+        Some(home.path()),
+        "architect",
+    );
     match result {
         Err(CoreError::AgentNotFound { name, searched }) => {
             assert_eq!(name, "architect");
@@ -167,14 +239,28 @@ fn agentic_override_works_for_both_backends() {
     let root = tmp.path();
     let home = tempfile::tempdir().unwrap();
 
-    write_agent(root, ".agentic/agents", "architect.md", "architect", "AGENTIC");
+    write_agent(
+        root,
+        ".agentic/agents",
+        "architect.md",
+        "architect",
+        "AGENTIC",
+    );
 
-    let claude_agent =
-        discover_agent_with_home(BackendKind::ClaudeCode, root, Some(home.path()), "architect")
-            .expect("ClaudeCode discover");
-    let copilot_agent =
-        discover_agent_with_home(BackendKind::CopilotCli, root, Some(home.path()), "architect")
-            .expect("CopilotCli discover");
+    let claude_agent = discover_agent_with_home(
+        BackendKind::ClaudeCode,
+        root,
+        Some(home.path()),
+        "architect",
+    )
+    .expect("ClaudeCode discover");
+    let copilot_agent = discover_agent_with_home(
+        BackendKind::CopilotCli,
+        root,
+        Some(home.path()),
+        "architect",
+    )
+    .expect("CopilotCli discover");
 
     assert!(
         claude_agent.description.contains("AGENTIC"),
@@ -195,11 +281,21 @@ fn claude_backend_falls_through_to_home_claude() {
     let tmp = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
 
-    write_agent(home.path(), ".claude/agents", "architect.md", "architect", "HOME_CLAUDE");
+    write_agent(
+        home.path(),
+        ".claude/agents",
+        "architect.md",
+        "architect",
+        "HOME_CLAUDE",
+    );
 
-    let agent =
-        discover_agent_with_home(BackendKind::ClaudeCode, tmp.path(), Some(home.path()), "architect")
-            .expect("discover");
+    let agent = discover_agent_with_home(
+        BackendKind::ClaudeCode,
+        tmp.path(),
+        Some(home.path()),
+        "architect",
+    )
+    .expect("discover");
     assert!(
         agent.description.contains("HOME_CLAUDE"),
         "$HOME/.claude/agents/ should be found as ClaudeCode fallback; got: {}",
@@ -212,11 +308,21 @@ fn copilot_backend_falls_through_to_home_copilot() {
     let tmp = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
 
-    write_agent(home.path(), ".copilot/agents", "architect.md", "architect", "HOME_COPILOT");
+    write_agent(
+        home.path(),
+        ".copilot/agents",
+        "architect.md",
+        "architect",
+        "HOME_COPILOT",
+    );
 
-    let agent =
-        discover_agent_with_home(BackendKind::CopilotCli, tmp.path(), Some(home.path()), "architect")
-            .expect("discover");
+    let agent = discover_agent_with_home(
+        BackendKind::CopilotCli,
+        tmp.path(),
+        Some(home.path()),
+        "architect",
+    )
+    .expect("discover");
     assert!(
         agent.description.contains("HOME_COPILOT"),
         "$HOME/.copilot/agents/ should be found as CopilotCli fallback; got: {}",
@@ -230,10 +336,20 @@ fn claude_backend_does_not_find_home_copilot_agent() {
     let home = tempfile::tempdir().unwrap();
 
     // Only place the agent in $HOME/.copilot — ClaudeCode should NOT see it.
-    write_agent(home.path(), ".copilot/agents", "architect.md", "architect", "HOME_COPILOT");
+    write_agent(
+        home.path(),
+        ".copilot/agents",
+        "architect.md",
+        "architect",
+        "HOME_COPILOT",
+    );
 
-    let result =
-        discover_agent_with_home(BackendKind::ClaudeCode, tmp.path(), Some(home.path()), "architect");
+    let result = discover_agent_with_home(
+        BackendKind::ClaudeCode,
+        tmp.path(),
+        Some(home.path()),
+        "architect",
+    );
     match result {
         Err(CoreError::AgentNotFound { .. }) => {
             // Correct: ClaudeCode does not search $HOME/.copilot/
@@ -251,7 +367,13 @@ fn claude_project_agent_invisible_to_copilot_cli() {
     let root = tmp.path();
     let home = tempfile::tempdir().unwrap();
 
-    write_agent(root, ".claude/agents", "tdd-developer.md", "tdd-developer", "CLAUDE");
+    write_agent(
+        root,
+        ".claude/agents",
+        "tdd-developer.md",
+        "tdd-developer",
+        "CLAUDE",
+    );
 
     let result = discover_agent_with_home(
         BackendKind::CopilotCli,
@@ -274,8 +396,7 @@ fn github_project_agent_invisible_to_claude_code() {
 
     write_agent(root, ".github/agents", "qa.md", "qa", "GITHUB");
 
-    let result =
-        discover_agent_with_home(BackendKind::ClaudeCode, root, Some(home.path()), "qa");
+    let result = discover_agent_with_home(BackendKind::ClaudeCode, root, Some(home.path()), "qa");
     match result {
         Err(CoreError::AgentNotFound { .. }) => {}
         Ok(_) => panic!("ClaudeCode should not see .github/agents/"),
@@ -296,8 +417,7 @@ fn legacy_repo_agents_dir_is_ignored() {
 
     // Both backends should return AgentNotFound.
     for backend in [BackendKind::ClaudeCode, BackendKind::CopilotCli] {
-        let result =
-            discover_agent_with_home(backend, root, Some(home.path()), "architect");
+        let result = discover_agent_with_home(backend, root, Some(home.path()), "architect");
         match result {
             Err(CoreError::AgentNotFound { .. }) => {}
             Ok(_) => panic!("{backend:?}: legacy <repo>/agents/ should be ignored"),
@@ -314,12 +434,28 @@ fn repo_claude_beats_home_claude() {
     let root = tmp.path();
     let home = tempfile::tempdir().unwrap();
 
-    write_agent(root, ".claude/agents", "architect.md", "architect", "REPO_CLAUDE");
-    write_agent(home.path(), ".claude/agents", "architect.md", "architect", "HOME_CLAUDE");
+    write_agent(
+        root,
+        ".claude/agents",
+        "architect.md",
+        "architect",
+        "REPO_CLAUDE",
+    );
+    write_agent(
+        home.path(),
+        ".claude/agents",
+        "architect.md",
+        "architect",
+        "HOME_CLAUDE",
+    );
 
-    let agent =
-        discover_agent_with_home(BackendKind::ClaudeCode, root, Some(home.path()), "architect")
-            .expect("discover");
+    let agent = discover_agent_with_home(
+        BackendKind::ClaudeCode,
+        root,
+        Some(home.path()),
+        "architect",
+    )
+    .expect("discover");
     assert!(
         agent.description.contains("REPO_CLAUDE"),
         "repo-local .claude/agents/ should beat $HOME; got: {}",
@@ -332,7 +468,13 @@ fn repo_claude_beats_home_claude() {
 #[test]
 fn default_discover_agent_resolves_real_home_without_panicking_claude() {
     let tmp = tempfile::tempdir().unwrap();
-    write_agent(tmp.path(), ".agentic/agents", "architect.md", "architect", "REPO");
+    write_agent(
+        tmp.path(),
+        ".agentic/agents",
+        "architect.md",
+        "architect",
+        "REPO",
+    );
     let agent = discover_agent(BackendKind::ClaudeCode, tmp.path(), "architect").expect("discover");
     assert_eq!(agent.name, "architect");
 }
@@ -340,9 +482,14 @@ fn default_discover_agent_resolves_real_home_without_panicking_claude() {
 #[test]
 fn default_discover_agent_resolves_real_home_without_panicking_copilot() {
     let tmp = tempfile::tempdir().unwrap();
-    write_agent(tmp.path(), ".agentic/agents", "architect.md", "architect", "REPO");
-    let agent =
-        discover_agent(BackendKind::CopilotCli, tmp.path(), "architect").expect("discover");
+    write_agent(
+        tmp.path(),
+        ".agentic/agents",
+        "architect.md",
+        "architect",
+        "REPO",
+    );
+    let agent = discover_agent(BackendKind::CopilotCli, tmp.path(), "architect").expect("discover");
     assert_eq!(agent.name, "architect");
 }
 
@@ -373,7 +520,11 @@ fn error_lists_all_searched_paths_for_claude_backend() {
                 .collect();
             assert!(paths[0].contains(".agentic/agents"), "1st: {}", paths[0]);
             assert!(paths[1].contains(".claude/agents"), "2nd: {}", paths[1]);
-            assert!(paths[2].contains(".claude/agents"), "3rd (home): {}", paths[2]);
+            assert!(
+                paths[2].contains(".claude/agents"),
+                "3rd (home): {}",
+                paths[2]
+            );
             // Must NOT contain .github or .copilot paths
             assert!(
                 !paths.iter().any(|p| p.contains(".github")),
@@ -414,7 +565,11 @@ fn error_lists_all_searched_paths_for_copilot_backend() {
                 .collect();
             assert!(paths[0].contains(".agentic/agents"), "1st: {}", paths[0]);
             assert!(paths[1].contains(".github/agents"), "2nd: {}", paths[1]);
-            assert!(paths[2].contains(".copilot/agents"), "3rd (home): {}", paths[2]);
+            assert!(
+                paths[2].contains(".copilot/agents"),
+                "3rd (home): {}",
+                paths[2]
+            );
             // Must NOT contain .claude paths
             assert!(
                 !paths.iter().any(|p| p.contains(".claude")),

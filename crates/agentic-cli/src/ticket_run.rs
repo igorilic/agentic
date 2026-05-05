@@ -10,9 +10,9 @@ use agentic_core::db::findings::{FindingRow, FindingsRepo};
 use agentic_core::events::Severity;
 use agentic_core::findings::extractor::extract_findings;
 use agentic_core::{
-    Backend, Db, Event, EventBus, EventEnvelope, ExecuteRequest, ModelId, Paths, Pipeline,
-    PipelineStep, RunId, RunRepo, RunStatus, Step, StepId, StepRepo, StepStatus, ToolUseObserver,
-    WorkspaceRef, discover_agent,
+    Backend, BackendKind, Db, Event, EventBus, EventEnvelope, ExecuteRequest, ModelId, Paths,
+    Pipeline, PipelineStep, RunId, RunRepo, RunStatus, Step, StepId, StepRepo, StepStatus,
+    ToolUseObserver, WorkspaceRef, discover_agent,
 };
 
 /// Injectable factory: given a `PipelineStep`, produce a backend for that step.
@@ -31,6 +31,9 @@ pub struct PipelineRunContext<'a> {
     pub ticket_text: &'a str,
     pub model_override: Option<ModelId>,
     pub paths: &'a Paths,
+    /// Which backend drives this run. Used by [`discover_agent`] to search
+    /// only the paths relevant to the active backend.
+    pub backend_kind: BackendKind,
     /// External cancellation token. When fired, every running step's
     /// ExecuteRequest.cancel (a child token) is also cancelled, which the
     /// Claude/Copilot backends use to send SIGTERM+SIGKILL to the
@@ -64,6 +67,7 @@ struct SingleStepCtx<'a> {
     ticket_text: &'a str,
     model_override: Option<ModelId>,
     paths: &'a Paths,
+    backend_kind: BackendKind,
     steps: &'a StepRepo,
     external_cancel: Option<&'a CancellationToken>,
 }
@@ -92,6 +96,7 @@ pub async fn execute_pipeline<'a>(
         ticket_text,
         model_override,
         paths,
+        backend_kind,
         external_cancel,
     } = ctx;
     let runs = RunRepo::new(db);
@@ -128,6 +133,7 @@ pub async fn execute_pipeline<'a>(
                 ticket_text,
                 model_override: model_override.clone(),
                 paths,
+                backend_kind,
                 steps: &steps,
                 external_cancel: external_cancel.as_ref(),
             };
@@ -187,6 +193,7 @@ async fn execute_single_step<'a>(
         ticket_text,
         model_override,
         paths,
+        backend_kind,
         steps,
         external_cancel,
     } = ctx;
@@ -232,7 +239,7 @@ async fn execute_single_step<'a>(
     );
 
     // Discover agent file.
-    let agent = match discover_agent(ws_root, &pipeline_step.agent) {
+    let agent = match discover_agent(backend_kind, ws_root, &pipeline_step.agent) {
         Ok(a) => a,
         Err(e) => {
             observer_stop.cancel();
@@ -586,7 +593,7 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
-
+                backend_kind: BackendKind::ClaudeCode,
                 external_cancel: None,
             },
             pipeline,
@@ -733,7 +740,7 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
-
+                backend_kind: BackendKind::ClaudeCode,
                 external_cancel: None,
             },
             pipeline,
@@ -812,7 +819,7 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
-
+                backend_kind: BackendKind::ClaudeCode,
                 external_cancel: None,
             },
             pipeline,
@@ -1004,7 +1011,7 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
-
+                backend_kind: BackendKind::ClaudeCode,
                 external_cancel: None,
             },
             &single_step_pipeline,
@@ -1127,7 +1134,7 @@ mod tests {
                 // CLI override: opus wins over agent's sonnet
                 model_override: Some(ModelId("claude-opus-4-7".to_string())),
                 paths: &paths,
-
+                backend_kind: BackendKind::ClaudeCode,
                 external_cancel: None,
             },
             &single_step_pipeline,
@@ -1207,7 +1214,7 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
-
+                backend_kind: BackendKind::ClaudeCode,
                 external_cancel: None,
             },
             pipeline,
@@ -1295,7 +1302,7 @@ mod tests {
                 ticket_text: "implement feature X",
                 model_override: None,
                 paths: &paths,
-
+                backend_kind: BackendKind::ClaudeCode,
                 external_cancel: None,
             },
             pipeline,

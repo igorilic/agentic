@@ -179,6 +179,7 @@ async fn reviewer_findings_block_is_projected_into_findings_table() {
             ticket_text: "ticket",
             model_override: None,
             paths: &paths,
+            backend_kind: agentic_core::BackendKind::ClaudeCode,
             external_cancel: None,
         },
         &reviewer_only,

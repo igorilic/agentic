@@ -283,7 +283,7 @@ async fn execute_pipeline_writes_per_step_diff_file() {
             ticket_text: "create greet.txt",
             model_override: None,
             paths: &paths,
-
+            backend_kind: agentic_core::BackendKind::ClaudeCode,
             external_cancel: None,
         },
         &pipeline,
