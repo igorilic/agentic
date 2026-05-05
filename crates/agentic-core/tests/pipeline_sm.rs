@@ -65,38 +65,39 @@ fn happy_path_pending_to_completed() {
     )));
 }
 
+/// I.3: qa failure with stop_on_failure=false advances to reviewer — no retry loop.
 #[test]
-fn qa_fails_three_times_then_tech_debt_and_reviewer_completes_with_tech_debt() {
+fn qa_failure_with_stop_false_advances_linearly_no_retry() {
+    // The builtin default has qa with stop_on_failure=false.
     let mut sm = default_sm();
     sm.handle(start_input()).expect("start");
     sm.handle(SmInput::StepPassed).expect("architect passed"); // → tdd-developer
-    sm.handle(SmInput::StepPassed)
-        .expect("tdd-developer passed 1st time"); // → qa
+    sm.handle(SmInput::StepPassed).expect("tdd-developer passed"); // → qa
 
-    // QA fails 3 times, bouncing back to tdd-developer each time.
-    for retry in 1..=3 {
-        let events = sm.handle(SmInput::StepFailed).expect("qa failed");
-        assert!(
-            events.iter().any(
-                |e| matches!(e, Event::RetryStarted { attempt, .. } if *attempt == retry as u32)
-            ),
-            "expected RetryStarted(attempt={retry})"
-        );
-        // Now current step is tdd-developer again
-        sm.handle(SmInput::StepPassed)
-            .expect("tdd-developer retry passed"); // → qa
-    }
-
-    // 4th qa failure: moves to tech-debt, advances to reviewer
-    sm.handle(SmInput::StepFailed).expect("qa failed 4th");
-    assert_eq!(sm.state(), RunStatus::Running); // still running reviewer
-    // Reviewer passes → CompletedWithTechDebt
+    // qa fails — must advance directly to reviewer, no RetryStarted, no rollback.
+    let events = sm.handle(SmInput::StepFailed).expect("qa failed");
+    assert_eq!(
+        sm.state(),
+        RunStatus::Running,
+        "run must still be Running after qa fails with stop_on_failure=false"
+    );
+    assert!(
+        !events.iter().any(|e| matches!(e, Event::RetryStarted { .. })),
+        "qa failure must NOT emit RetryStarted under the new linear contract"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, Event::StepStarted { agent, .. } if agent == "reviewer")),
+        "expected StepStarted for reviewer after qa failure"
+    );
+    // reviewer passes → Completed (not CompletedWithTechDebt)
     let events = sm.handle(SmInput::StepPassed).expect("reviewer passed");
-    assert_eq!(sm.state(), RunStatus::CompletedWithTechDebt);
+    assert_eq!(sm.state(), RunStatus::Completed);
     assert!(events.iter().any(|e| matches!(
         e,
         Event::RunComplete {
-            status: RunStatus::CompletedWithTechDebt,
+            status: RunStatus::Completed,
             ..
         }
     )));
