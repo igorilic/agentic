@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AGENT_LIBRARY } from "../types/pipeline";
+import { resolveAgentIcon } from "../utils/agentIcon";
 
 // Icons transcribed verbatim from design handoff agents.jsx lines 5-18.
 // The map is Record<string, ReactNode> because several glyphs (eye, gauge,
@@ -20,22 +20,32 @@ const AGENT_ICONS: Record<string, ReactNode> = {
   a11y:      (<g stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"><circle cx="10" cy="4" r="1.5" fill="currentColor" stroke="none" /><path d="M4 8h12M10 8v3m-3 5l3-5 3 5" /></g>),
 };
 
-const FALLBACK_GLYPH: ReactNode = (
-  <rect x="4" y="4" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" fill="none" />
-);
-
 export type AgentIconProps = {
   agent: string;
   size?: number;
 };
 
 export default function AgentIcon({ agent, size = 18 }: AgentIconProps) {
-  const lib = AGENT_LIBRARY.find((a) => a.id === agent);
-  const iconKey = lib?.icon;
+  const resolved = resolveAgentIcon(agent);
+
+  if (resolved.kind === "initial") {
+    return (
+      <div
+        data-testid={`agent-icon-${agent}`}
+        className={`inline-flex items-center justify-center rounded-full text-white font-semibold select-none ${resolved.bgClass}`}
+        style={{ width: size, height: size, fontSize: Math.round(size * 0.55) }}
+        aria-hidden="true"
+      >
+        {resolved.initial}
+      </div>
+    );
+  }
+
   const inner =
-    iconKey !== undefined && iconKey in AGENT_ICONS
-      ? AGENT_ICONS[iconKey]
-      : FALLBACK_GLYPH;
+    resolved.iconKey in AGENT_ICONS
+      ? AGENT_ICONS[resolved.iconKey]
+      : null;
+
   return (
     <svg
       data-testid={`agent-icon-${agent}`}
