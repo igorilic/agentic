@@ -16,7 +16,7 @@ pub enum SmInput {
     },
     /// Current step passed.
     StepPassed,
-    /// Current step failed. For qa, may trigger a retry loop.
+    /// Current step failed. Routes via `stop_on_failure`: true → Failed, false → advance.
     StepFailed,
     /// Reviewer-specific: step produced findings requiring triage.
     StepNeedsTriage,
@@ -29,10 +29,14 @@ pub enum SmInput {
 }
 
 /// Pure state machine. No IO, no backends — produces `Event`s that the
-/// orchestrator (Step 3.5) will wrap in envelopes and publish.
+/// orchestrator will wrap in envelopes and publish.
+///
+/// The SM is a linear N-step advancer. Each step runs once. Failure
+/// routing is controlled by `PipelineStep.stop_on_failure` only — no
+/// name-based retry logic exists.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PipelineSm {
-    /// Stored for use by the orchestrator (Step 3.5); unused in the SM itself.
+    /// Stored for use by the orchestrator; unused in the SM itself.
     #[allow(dead_code)]
     run_id: String,
     pipeline: Pipeline,
@@ -42,33 +46,17 @@ pub struct PipelineSm {
     step_index: usize,
     /// Per-step status, parallel to `pipeline.steps`.
     step_statuses: Vec<StepStatus>,
-    /// Number of times the qa fix-loop has been triggered.
-    qa_retries: u32,
-    /// Cap from `PipelineStep.qa_fix_loop_cap` on tdd-developer, or default 3.
-    qa_fix_loop_cap: u32,
-    /// Set to true when QA has exhausted retries; affects RunComplete status.
-    has_tech_debt: bool,
 }
 
 impl PipelineSm {
     pub fn new(run_id: String, pipeline: Pipeline) -> Self {
         let step_count = pipeline.steps.len();
-        // Default qa cap comes from tdd-developer's config, fallback 3.
-        let qa_fix_loop_cap = pipeline
-            .steps
-            .iter()
-            .find(|s| s.agent == "tdd-developer")
-            .and_then(|s| s.qa_fix_loop_cap)
-            .unwrap_or(3);
         Self {
             run_id,
             pipeline,
             state: RunStatus::Pending,
             step_index: 0,
             step_statuses: vec![StepStatus::Pending; step_count],
-            qa_retries: 0,
-            qa_fix_loop_cap,
-            has_tech_debt: false,
         }
     }
 
@@ -186,53 +174,9 @@ impl PipelineSm {
             duration_ms: 0,
         }];
 
-        let agent = self.pipeline.steps[idx].agent.clone();
         let stop_on_failure = self.pipeline.steps[idx].stop_on_failure;
 
-        if agent == "qa" {
-            if self.qa_retries < self.qa_fix_loop_cap {
-                // Retry: bounce back to the tdd-developer step (index - 1 before qa).
-                // Reset QA to Pending — it's not definitively failed, it's waiting for
-                // tdd-developer to re-run. The event stream already records the Failed
-                // attempt via StepComplete{Failed} above (audit trail preserved).
-                self.step_statuses[idx] = StepStatus::Pending;
-                self.qa_retries += 1;
-                let tdd_idx = self.find_tdd_developer_before_qa(idx);
-                self.step_index = tdd_idx;
-                self.step_statuses[tdd_idx] = StepStatus::Running;
-                let retry_attempt = self.qa_retries;
-                let tdd_agent = self.pipeline.steps[tdd_idx].agent.clone();
-                events.push(Event::RetryStarted {
-                    attempt: retry_attempt,
-                    reason: "qa failed".to_string(),
-                });
-                events.push(Event::StepStarted {
-                    agent: tdd_agent,
-                    model: ModelId(String::new()),
-                });
-            } else {
-                // Cap exhausted: tech-debt path, advance to reviewer
-                self.has_tech_debt = true;
-                // Try to advance past qa to next step
-                if idx + 1 < self.pipeline.steps.len() {
-                    self.step_index = idx + 1;
-                    self.step_statuses[idx + 1] = StepStatus::Running;
-                    let next_agent = self.pipeline.steps[idx + 1].agent.clone();
-                    events.push(Event::StepStarted {
-                        agent: next_agent,
-                        model: ModelId(String::new()),
-                    });
-                } else {
-                    // qa is the last step; complete with tech debt
-                    self.state = RunStatus::CompletedWithTechDebt;
-                    events.push(Event::RunComplete {
-                        status: RunStatus::CompletedWithTechDebt,
-                        duration_ms: 0,
-                        summary: String::new(),
-                    });
-                }
-            }
-        } else if stop_on_failure {
+        if stop_on_failure {
             self.state = RunStatus::Failed;
             events.push(Event::RunComplete {
                 status: RunStatus::Failed,
@@ -327,30 +271,13 @@ impl PipelineSm {
                 model: ModelId(String::new()),
             }]
         } else {
-            let final_status = if self.has_tech_debt {
-                RunStatus::CompletedWithTechDebt
-            } else {
-                RunStatus::Completed
-            };
-            self.state = final_status;
+            self.state = RunStatus::Completed;
             vec![Event::RunComplete {
-                status: final_status,
+                status: RunStatus::Completed,
                 duration_ms: 0,
                 summary: String::new(),
             }]
         }
-    }
-
-    /// Find the tdd-developer step index that precedes the given qa index.
-    /// Falls back to idx.saturating_sub(1) if not found by name.
-    fn find_tdd_developer_before_qa(&self, qa_idx: usize) -> usize {
-        // Search backward from qa_idx for the nearest tdd-developer step
-        for i in (0..qa_idx).rev() {
-            if self.pipeline.steps[i].agent == "tdd-developer" {
-                return i;
-            }
-        }
-        qa_idx.saturating_sub(1)
     }
 }
 

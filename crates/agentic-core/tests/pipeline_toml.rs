@@ -18,7 +18,7 @@ steps = [
     assert_eq!(agents, vec!["architect", "tdd-developer", "qa", "reviewer"]);
     assert_eq!(default.steps[0].allowed_questions, Some(5));
     assert!(default.steps[0].stop_on_failure);
-    assert_eq!(default.steps[1].qa_fix_loop_cap, Some(3));
+    // qa_fix_loop_cap removed in I.3 — retry policy is out of scope (v2)
     assert!(!default.steps[2].stop_on_failure);
     assert!(!default.steps[3].stop_on_failure);
 }
@@ -42,7 +42,7 @@ steps = [
     let hotfix = config.pipelines.get("hotfix").expect("hotfix present");
     assert_eq!(hotfix.steps.len(), 3);
     assert_eq!(hotfix.steps[0].agent, "troubleshooter");
-    assert_eq!(hotfix.steps[1].qa_fix_loop_cap, Some(1));
+    // qa_fix_loop_cap removed in I.3; TOML field is silently ignored now
 }
 
 #[test]
@@ -53,9 +53,9 @@ fn missing_file_returns_builtin_default_pipeline() {
     assert_eq!(default.steps.len(), 4);
     let agents: Vec<&str> = default.steps.iter().map(|s| s.agent.as_str()).collect();
     assert_eq!(agents, vec!["architect", "tdd-developer", "qa", "reviewer"]);
-    // Built-in default also sets the documented spec §10.4 parameters
+    // Built-in default sets the documented spec §10.4 parameters
+    // qa_fix_loop_cap removed in I.3; retry policy is out of scope (v2)
     assert_eq!(default.steps[0].allowed_questions, Some(5));
-    assert_eq!(default.steps[1].qa_fix_loop_cap, Some(3));
 }
 
 #[test]

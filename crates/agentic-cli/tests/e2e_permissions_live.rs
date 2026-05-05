@@ -216,7 +216,6 @@ default_on_timeout = "deny"
             agent: "tdd-developer".to_string(),
             stop_on_failure: false,
             allowed_questions: None,
-            qa_fix_loop_cap: None,
         }],
     };
 

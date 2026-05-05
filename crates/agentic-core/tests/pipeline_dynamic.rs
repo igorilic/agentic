@@ -2,8 +2,8 @@
 ///
 /// These tests verify the new linear N-step contract introduced in I.3.
 use agentic_core::{
-    BackendId, Event, ModelId, Pipeline, PipelineConfig, PipelineSm, ProfileId, RunStatus,
-    SmInput, StepStatus, TicketKind, TicketRef,
+    BackendId, Event, ModelId, Pipeline, PipelineConfig, PipelineSm, ProfileId, RunStatus, SmInput,
+    TicketKind, TicketRef,
 };
 
 fn sample_ticket() -> TicketRef {
@@ -31,20 +31,6 @@ fn pipeline_from_agents(agents: &[&str]) -> Pipeline {
             .map(|&name| agentic_core::PipelineStep {
                 agent: name.to_string(),
                 stop_on_failure: true,
-                allowed_questions: None,
-            })
-            .collect(),
-    }
-}
-
-// Helper for a step with stop_on_failure = false
-fn pipeline_from_agents_no_stop(agents: &[&str]) -> Pipeline {
-    Pipeline {
-        steps: agents
-            .iter()
-            .map(|&name| agentic_core::PipelineStep {
-                agent: name.to_string(),
-                stop_on_failure: false,
                 allowed_questions: None,
             })
             .collect(),
@@ -85,7 +71,13 @@ fn single_agent_pipeline_completes_after_one_step_passed() {
 
 #[test]
 fn five_agent_pipeline_with_duplicate_name_advances_in_order() {
-    let agents = ["architect", "tdd-developer", "qa", "tdd-developer", "reviewer"];
+    let agents = [
+        "architect",
+        "tdd-developer",
+        "qa",
+        "tdd-developer",
+        "reviewer",
+    ];
     let pipeline = pipeline_from_agents(&agents);
     let mut sm = PipelineSm::new("run-2".to_string(), pipeline);
 
@@ -111,15 +103,13 @@ fn five_agent_pipeline_with_duplicate_name_advances_in_order() {
         RunStatus::Completed,
         "5-agent pipeline must Complete after 5 StepPassed calls"
     );
-    assert!(
-        events.iter().any(|e| matches!(
-            e,
-            Event::RunComplete {
-                status: RunStatus::Completed,
-                ..
-            }
-        ))
-    );
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Event::RunComplete {
+            status: RunStatus::Completed,
+            ..
+        }
+    )));
 }
 
 // --- Test 3: qa failure with stop_on_failure: false advances to next step (no retry) ---
@@ -153,8 +143,9 @@ fn qa_step_failure_with_stop_false_advances_to_reviewer_without_retry() {
     let mut sm = PipelineSm::new("run-3".to_string(), pipeline);
 
     sm.handle(start_input()).expect("start");
-    sm.handle(SmInput::StepPassed).expect("architect passed");   // → tdd-developer
-    sm.handle(SmInput::StepPassed).expect("tdd-developer passed"); // → qa
+    sm.handle(SmInput::StepPassed).expect("architect passed"); // → tdd-developer
+    sm.handle(SmInput::StepPassed)
+        .expect("tdd-developer passed"); // → qa
 
     // qa fails — must advance to reviewer, NOT roll back to tdd-developer
     let events = sm.handle(SmInput::StepFailed).expect("qa failed");
@@ -165,7 +156,9 @@ fn qa_step_failure_with_stop_false_advances_to_reviewer_without_retry() {
     );
     // No RetryStarted event must be emitted (that was the old behavior)
     assert!(
-        !events.iter().any(|e| matches!(e, Event::RetryStarted { .. })),
+        !events
+            .iter()
+            .any(|e| matches!(e, Event::RetryStarted { .. })),
         "qa failure must NOT emit RetryStarted under the new contract"
     );
     // Must start reviewer next
@@ -214,7 +207,8 @@ fn qa_step_failure_with_stop_true_terminates_with_failed() {
 
     sm.handle(start_input()).expect("start");
     sm.handle(SmInput::StepPassed).expect("architect passed");
-    sm.handle(SmInput::StepPassed).expect("tdd-developer passed");
+    sm.handle(SmInput::StepPassed)
+        .expect("tdd-developer passed");
 
     let events = sm.handle(SmInput::StepFailed).expect("qa failed");
     assert_eq!(
@@ -279,7 +273,11 @@ fn from_agents_non_canonical_names_run_successfully() {
         RunStatus::Completed,
         "non-canonical names must run to Completed"
     );
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, Event::RunComplete { status: RunStatus::Completed, .. })));
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Event::RunComplete {
+            status: RunStatus::Completed,
+            ..
+        }
+    )));
 }

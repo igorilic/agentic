@@ -18,6 +18,10 @@ pub struct Pipeline {
     pub steps: Vec<PipelineStep>,
 }
 
+/// One step in a pipeline.
+///
+/// Retry policy is out of scope for v1 — each step runs once.
+/// Failure routing is controlled by `stop_on_failure` only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PipelineStep {
     pub agent: String,
@@ -25,8 +29,6 @@ pub struct PipelineStep {
     pub stop_on_failure: bool,
     #[serde(default)]
     pub allowed_questions: Option<u32>,
-    #[serde(default)]
-    pub qa_fix_loop_cap: Option<u32>,
 }
 
 fn default_stop_on_failure() -> bool {
@@ -43,31 +45,50 @@ impl PipelineConfig {
                     agent: "architect".to_string(),
                     stop_on_failure: true,
                     allowed_questions: Some(5),
-                    qa_fix_loop_cap: None,
                 },
                 PipelineStep {
                     agent: "tdd-developer".to_string(),
                     stop_on_failure: true,
                     allowed_questions: None,
-                    qa_fix_loop_cap: Some(3),
                 },
                 PipelineStep {
                     agent: "qa".to_string(),
                     stop_on_failure: false,
                     allowed_questions: None,
-                    qa_fix_loop_cap: None,
                 },
                 PipelineStep {
                     agent: "reviewer".to_string(),
                     stop_on_failure: false,
                     allowed_questions: None,
-                    qa_fix_loop_cap: None,
                 },
             ],
         };
         let mut pipelines = HashMap::new();
         pipelines.insert("default".to_string(), default_pipeline);
         Self { pipelines }
+    }
+
+    /// Build a `Pipeline` from a user-supplied agent name list.
+    ///
+    /// Each step is configured with `stop_on_failure = true` and
+    /// other fields at their defaults. Returns an error if `agents`
+    /// is empty.
+    pub fn from_agents(agents: &[String]) -> Result<Pipeline> {
+        if agents.is_empty() {
+            return Err(CoreError::Config(
+                "agents list is empty — supply at least one agent".to_string(),
+            ));
+        }
+        Ok(Pipeline {
+            steps: agents
+                .iter()
+                .map(|name| PipelineStep {
+                    agent: name.clone(),
+                    stop_on_failure: true,
+                    allowed_questions: None,
+                })
+                .collect(),
+        })
     }
 
     /// Parse a pipeline.toml string. Fails if:

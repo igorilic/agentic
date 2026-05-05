@@ -72,7 +72,8 @@ fn qa_failure_with_stop_false_advances_linearly_no_retry() {
     let mut sm = default_sm();
     sm.handle(start_input()).expect("start");
     sm.handle(SmInput::StepPassed).expect("architect passed"); // → tdd-developer
-    sm.handle(SmInput::StepPassed).expect("tdd-developer passed"); // → qa
+    sm.handle(SmInput::StepPassed)
+        .expect("tdd-developer passed"); // → qa
 
     // qa fails — must advance directly to reviewer, no RetryStarted, no rollback.
     let events = sm.handle(SmInput::StepFailed).expect("qa failed");
@@ -82,7 +83,9 @@ fn qa_failure_with_stop_false_advances_linearly_no_retry() {
         "run must still be Running after qa fails with stop_on_failure=false"
     );
     assert!(
-        !events.iter().any(|e| matches!(e, Event::RetryStarted { .. })),
+        !events
+            .iter()
+            .any(|e| matches!(e, Event::RetryStarted { .. })),
         "qa failure must NOT emit RetryStarted under the new linear contract"
     );
     assert!(
