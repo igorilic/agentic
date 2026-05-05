@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Modal from "./Modal";
+import { useJiraFetch } from "../hooks/useJiraFetch";
 
 export type SpecDialogProps = {
   open: boolean;
@@ -7,16 +8,45 @@ export type SpecDialogProps = {
   onSubmit: (title: string, body: string) => void | Promise<void>;
 };
 
+const KEY_REGEX = /^[A-Z][A-Z0-9]+-\d+$/;
+
 export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [jiraKey, setJiraKey] = useState("");
+  const [pullError, setPullError] = useState<string | null>(null);
+  const [pulling, setPulling] = useState(false);
 
+  const { fetch: fetchJira } = useJiraFetch();
+
+  const keyValid = KEY_REGEX.test(jiraKey);
   const submitDisabled = title.trim() === "";
 
   const handleSubmit = () => {
     if (submitDisabled) return;
     void onSubmit(title, body);
   };
+
+  const handlePull = () => {
+    if (!keyValid || pulling) return;
+    setPulling(true);
+    setPullError(null);
+    fetchJira(jiraKey)
+      .then((dto) => {
+        setTitle(dto.title);
+        setBody(dto.body + (dto.ac ? "\n\n## Acceptance Criteria\n" + dto.ac : ""));
+        setPullError(null);
+      })
+      .catch((e: unknown) => {
+        setPullError(typeof e === "string" ? e : String(e));
+      })
+      .finally(() => {
+        setPulling(false);
+      });
+  };
+
+  const missingEnvError =
+    pullError?.startsWith("missing environment variables") ? pullError : undefined;
 
   return (
     <Modal
@@ -48,6 +78,33 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
 
         {/* Body */}
         <div className="flex flex-col gap-3">
+          {/* Jira pull row */}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              data-testid="spec-dialog-jira-key-input"
+              value={jiraKey}
+              onChange={(e) => setJiraKey(e.target.value)}
+              placeholder="PROJ-123"
+              className="flex-1 rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="button"
+              data-testid="spec-dialog-jira-pull-button"
+              disabled={!keyValid || pulling}
+              title={missingEnvError}
+              onClick={handlePull}
+              className="rounded-md border border-border px-3 py-2 text-[13px] font-medium text-fg hover:bg-bg-surface-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Pull from Jira
+            </button>
+          </div>
+          {pullError && (
+            <p data-testid="spec-dialog-jira-pull-error" className="text-[11px] text-red-600">
+              {pullError}
+            </p>
+          )}
+
           <input
             type="text"
             data-testid="spec-dialog-title-input"
