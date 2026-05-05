@@ -41,7 +41,7 @@ export default function App() {
     invoke<string>("get_workspace_id")
       .then((id) => setWsId(id))
       .catch((err) => {
-        console.warn("[App] get_workspace_id failed:", err);
+        console.error("[App] get_workspace_id failed — wsId will stay null, pipeline persistence disabled:", err);
       });
   }, []);
 
@@ -155,6 +155,7 @@ export default function App() {
             ticketSlug={activeRunId ? ticket.id : null}
             runState={overallRunState}
             elapsedMs={elapsedMs}
+            hasAgents={pipelineAgents.length > 0}
             onOpenSettings={() => setSettingsOpen(true)}
             onRunPipeline={handleRunPipeline}
             onStopRun={() => {

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { RunState } from "../types/run";
 import { reorderArray, insertAt } from "../utils/arrayMove";
-import { derivePipelineSeed } from "../utils/derivePipelineSeed";
 
 export type UsePipelineMutationResult = {
   pipelineAgents: string[];
@@ -20,12 +19,12 @@ export type UsePipelineMutationResult = {
  * an internal `useState` is used (backward-compatible for tests / contexts
  * without persistence).
  *
- * Re-seeds `pipelineAgents` from `runState` whenever `activeRunId` changes
- * from undefined → string. If the run's steps are non-empty, they override
- * the current list (e.g. re-attaching to an in-progress run).
+ * The `runState` parameter is retained in the signature for caller
+ * compatibility but is intentionally not read — pipeline display from run
+ * steps is handled at the App layer. See I.7 TD1 for context.
  */
 export function usePipelineMutation(
-  runState: RunState,
+  _runState: RunState,
   activeRunId: string | undefined,
   externalAgents?: string[],
   setExternalAgents?: (next: string[]) => void,
@@ -39,14 +38,13 @@ export function usePipelineMutation(
   const pipelineAgents = externalAgents ?? internalAgents;
   const setPipelineAgents = setExternalAgents ?? setInternalAgents;
 
-  // Re-seed on run-id change only. Not on every runState tick — that would
-  // clobber user edits made between run start and run completion.
+  // Reset skip-set when a new run starts. Do NOT overwrite the configured
+  // pipeline (externalAgents / internalAgents) with run-derived agents — the
+  // user's configured pipeline is the source of truth and must survive run
+  // start/stop. Overwriting it was the root cause of the "pipeline agents
+  // disappear after run" symptom (I.7 fix-loop TD1).
   useEffect(() => {
-    if (!activeRunId) return;  // only re-seed on undefined → string per spec §6.8.3
-    const seed = derivePipelineSeed(runState);
-    if (seed.length > 0) {
-      setPipelineAgents(seed);
-    }
+    if (!activeRunId) return;
     setPipelineSkipped(new Set<string>());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRunId]);

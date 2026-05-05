@@ -57,6 +57,14 @@ function readFromStorage(wsId: string): string[] {
       localStorage.removeItem(`agentic.pipeline.${wsId}`);
       return [];
     }
+    if (!parsed.every((x) => typeof x === "string")) {
+      console.warn(
+        `[usePipelinePersistence] expected string[] at agentic.pipeline.${wsId}, found non-string entries:`,
+        raw,
+      );
+      localStorage.removeItem(`agentic.pipeline.${wsId}`);
+      return [];
+    }
     return parsed as string[];
   } catch {
     console.warn(

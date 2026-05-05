@@ -14,19 +14,23 @@ export function formatMmSs(ms: number): string {
 type RunStateBadgeProps = {
   runState: RunStateOverall;
   elapsedMs: number | null;
+  hasAgents: boolean;
   onRunPipeline: () => void;
   onStopRun: () => void;
   onRerun: () => void;
 };
 
-function RunStateBadge({ runState, elapsedMs, onRunPipeline, onStopRun, onRerun }: RunStateBadgeProps) {
+function RunStateBadge({ runState, elapsedMs, hasAgents, onRunPipeline, onStopRun, onRerun }: RunStateBadgeProps) {
   if (runState === "idle") {
+    const disabled = !hasAgents;
     return (
       <button
         type="button"
         data-testid="header-run"
-        onClick={onRunPipeline}
-        className="rounded-md bg-[#18181b] px-3 py-1.5 text-xs font-semibold text-white"
+        onClick={disabled ? undefined : onRunPipeline}
+        disabled={disabled}
+        title={disabled ? "Pick agents in the pipeline rail first" : undefined}
+        className="rounded-md bg-[#18181b] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
       >
         Run pipeline
       </button>
@@ -139,6 +143,8 @@ export type HeaderBarProps = {
   ticketSlug: string | null;
   runState: RunStateOverall;
   elapsedMs: number | null;
+  /** When false the "Run pipeline" button is disabled with a tooltip. Defaults to true. */
+  hasAgents?: boolean;
   onOpenSettings: () => void;
   onRunPipeline: () => void;
   onStopRun: () => void;
@@ -150,6 +156,7 @@ export default function HeaderBar({
   ticketSlug,
   runState,
   elapsedMs,
+  hasAgents = true,
   onOpenSettings,
   onRunPipeline,
   onStopRun,
@@ -191,6 +198,7 @@ export default function HeaderBar({
           <RunStateBadge
             runState={runState}
             elapsedMs={elapsedMs}
+            hasAgents={hasAgents}
             onRunPipeline={onRunPipeline}
             onStopRun={onStopRun}
             onRerun={onRerun}

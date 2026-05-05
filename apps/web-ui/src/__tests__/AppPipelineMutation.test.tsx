@@ -14,7 +14,7 @@
  *   drag(0) → gap-3: adjusted = 0 < 3 ? 2 : 3 = 2 → order: [tdd-developer, qa, architect, reviewer]
  */
 
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { renderHook } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
@@ -336,43 +336,35 @@ describe("App pipeline mutation — W.9.1", () => {
   });
 
   // =========================================================================
-  // 9. Guard: re-seed does NOT fire when activeRunId transitions to undefined
-  //    (spec §6.8.3: re-seed only on undefined → string, not string → undefined)
+  // 9. Guard: run start does NOT clobber the configured pipeline (I.7 TD1 fix).
+  //    Previously the hook re-seeded pipelineAgents from runState on run-id
+  //    change (undefined → string). That overwrote the user's configured list.
+  //    The fix: only pipelineSkipped is reset; the agent list is left alone.
   // =========================================================================
-  it("does not re-seed when activeRunId becomes undefined (run cancelled)", () => {
-    // Set up a run state with steps (so seed != DEFAULT_AGENTS)
+  it("run start does NOT overwrite the configured pipeline (I.7 TD1 fix)", () => {
+    // User has a configured 3-agent pipeline via externalAgents
+    const configuredAgents = ["architect", "tdd-developer", "reviewer"];
+    const setExternalMock = vi.fn();
+
     const runStateWithSteps: RunState = {
       steps: [
-        { agent: "architect", status: "pending", tokens: 0, costUsd: null, durationMs: 0, summary: null },
-        { agent: "tdd-developer", status: "pending", tokens: 0, costUsd: null, durationMs: 0, summary: null },
-        { agent: "qa", status: "pending", tokens: 0, costUsd: null, durationMs: 0, summary: null },
-        { agent: "reviewer", status: "pending", tokens: 0, costUsd: null, durationMs: 0, summary: null },
+        { agent: "qa", status: "running", tokens: 0, costUsd: null, durationMs: 0, summary: null },
+        { agent: "developer", status: "pending", tokens: 0, costUsd: null, durationMs: 0, summary: null },
       ],
       totalTokens: 0,
       totalCostUsd: 0,
     };
 
-    // Mount with an active run id — seeds from runState
-    type HookProps = { runState: RunState; activeRunId: string | undefined };
-    const initialProps: HookProps = { runState: runStateWithSteps, activeRunId: "run-1" };
-    const { result, rerender } = renderHook(
-      ({ runState, activeRunId }: HookProps) =>
-        usePipelineMutation(runState, activeRunId),
-      { initialProps },
+    // Mount with run already active (different agents in runState vs configured)
+    renderHook(
+      () =>
+        usePipelineMutation(runStateWithSteps, "run-1", configuredAgents, setExternalMock),
     );
 
-    // Simulate user edit: remove qa (index 2)
-    act(() => {
-      result.current.onRemove(2);
-    });
-
-    // User now has 3 agents (qa removed)
-    expect(result.current.pipelineAgents).toEqual(["architect", "tdd-developer", "reviewer"]);
-
-    // Simulate run cancellation: activeRunId → undefined
-    rerender({ runState: runStateWithSteps, activeRunId: undefined });
-
-    // Guard should have blocked the re-seed — user edits are preserved
-    expect(result.current.pipelineAgents).toEqual(["architect", "tdd-developer", "reviewer"]);
+    // setExternalMock must NOT have been called with the run's agents
+    const clobberedWithRunAgents = setExternalMock.mock.calls.some(
+      (call) => JSON.stringify(call[0]) === JSON.stringify(["qa", "developer"]),
+    );
+    expect(clobberedWithRunAgents).toBe(false);
   });
 });

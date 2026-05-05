@@ -22,7 +22,8 @@
 
 use std::sync::Arc;
 
-use agentic_cli::ticket_run::{PipelineRunContext, execute_pipeline, stable_workspace_id};
+use agentic_cli::ticket_run::{PipelineRunContext, execute_pipeline};
+use agentic_core::stable_workspace_id;
 
 /// Shared shape for the `Backend` factory closure used by both prod and
 /// tests. Aliasing keeps clippy::type_complexity quiet.
