@@ -339,5 +339,66 @@ describe("SpecDialog", () => {
         expect(pullButton.disabled).toBe(false);
       });
     });
+
+    it("re-pull clears prior error before fetch settles", async () => {
+      // First pull: fails with "network down"
+      mockFetch.mockRejectedValueOnce("network down");
+
+      render(<SpecDialog {...makeProps()} />);
+      const keyInput = screen.getByTestId("spec-dialog-jira-key-input");
+      await userEvent.type(keyInput, "PROJ-1");
+      await userEvent.click(screen.getByTestId("spec-dialog-jira-pull-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("spec-dialog-jira-pull-error")).toHaveTextContent("network down");
+      });
+
+      // Second pull: resolves successfully
+      const dto = { key: "PROJ-1", title: "Fixed title", body: "Fixed body", ac: null };
+      mockFetch.mockResolvedValueOnce(dto);
+      await userEvent.click(screen.getByTestId("spec-dialog-jira-pull-button"));
+
+      await waitFor(() => {
+        // Error must be gone
+        expect(screen.queryByTestId("spec-dialog-jira-pull-error")).toBeNull();
+      });
+
+      // Title and body must be populated from successful pull
+      const titleInput = screen.getByTestId("spec-dialog-title-input") as HTMLInputElement;
+      const bodyTextarea = screen.getByTestId("spec-dialog-body-textarea") as HTMLTextAreaElement;
+      expect(titleInput.value).toBe("Fixed title");
+      expect(bodyTextarea.value).toBe("Fixed body");
+    });
+
+    it("close + reopen clears jira key and error", async () => {
+      const onClose = vi.fn();
+      const { rerender } = render(<SpecDialog {...makeProps({ onClose })} />);
+
+      // Type a key and trigger an error
+      mockFetch.mockRejectedValueOnce("server error");
+      await userEvent.type(screen.getByTestId("spec-dialog-jira-key-input"), "PROJ-99");
+      await userEvent.click(screen.getByTestId("spec-dialog-jira-pull-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("spec-dialog-jira-pull-error")).toHaveTextContent("server error");
+      });
+
+      // Close the dialog (simulate Cancel click which calls onClose, then parent sets open=false)
+      await userEvent.click(screen.getByTestId("spec-dialog-cancel"));
+      expect(onClose).toHaveBeenCalledTimes(1);
+
+      // Parent re-renders with open=false
+      rerender(<SpecDialog {...makeProps({ open: false, onClose })} />);
+
+      // Reopen
+      rerender(<SpecDialog {...makeProps({ open: true, onClose })} />);
+
+      // Key input should be empty
+      const keyInput = screen.getByTestId("spec-dialog-jira-key-input") as HTMLInputElement;
+      expect(keyInput.value).toBe("");
+
+      // No error visible
+      expect(screen.queryByTestId("spec-dialog-jira-pull-error")).toBeNull();
+    });
   });
 });
