@@ -4037,7 +4037,7 @@ small inline component within the file. Skip if cosmetic.
 
 ---
 
-### [ ] Step F.2.5: SpecDialog → IPC integration smoke test
+### [x] Step F.2.5: SpecDialog → IPC integration smoke test
 
 **Goal**: An end-to-end-flavored test that renders the full
 SpecDialog flow from "user types a Jira key" → "title and body
@@ -4092,6 +4092,6 @@ edge case, the fix lands here as a small refinement to
 
 - [x] F.2.1 fetch_jira_ticket IPC + DTO + helpers
 - [x] F.2.2 Permission TOML + capability registration
-- [ ] F.2.3 useJiraFetch() hook + JiraTicketDto type
-- [ ] F.2.4 SpecDialog jira-pull row + validation
-- [ ] F.2.5 SpecDialog → IPC integration smoke test
+- [x] F.2.3 useJiraFetch() hook + JiraTicketDto type
+- [x] F.2.4 SpecDialog jira-pull row + validation
+- [x] F.2.5 SpecDialog → IPC integration smoke test
