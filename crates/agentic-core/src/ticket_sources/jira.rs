@@ -6,13 +6,23 @@ use super::{
 };
 use crate::events::{TicketKind, TicketRef};
 
+/// Authentication scheme for the Jira REST API.
+///
+/// - `Basic`: email + API token, sent as `Authorization: Basic <base64>`.
+///   This is what Atlassian Cloud (`*.atlassian.net`) accepts.
+/// - `Bearer`: Personal Access Token, sent as `Authorization: Bearer <token>`.
+///   This is what self-hosted Jira Server / Data Centre accepts.
+#[derive(Clone, Debug)]
+pub enum JiraAuth {
+    Basic { email: String, token: String },
+    Bearer { token: String },
+}
+
 pub struct JiraTicketSource {
     /// Base URL e.g. "https://org.atlassian.net/rest/api/3".
     base_url: String,
-    /// Email for basic auth (Jira's email).
-    email: String,
-    /// API token (NOT the password — generated at id.atlassian.com/manage-profile/security/api-tokens).
-    token: String,
+    /// Authentication scheme (Basic or Bearer).
+    auth: JiraAuth,
     /// Optional custom field id holding Acceptance Criteria,
     /// e.g. "customfield_10100". When None, AC is parsed from description.
     ac_custom_field: Option<String>,
@@ -22,14 +32,12 @@ pub struct JiraTicketSource {
 impl JiraTicketSource {
     pub fn new(
         base_url: impl Into<String>,
-        email: impl Into<String>,
-        token: impl Into<String>,
+        auth: JiraAuth,
         ac_custom_field: Option<String>,
     ) -> Self {
         Self {
             base_url: base_url.into(),
-            email: email.into(),
-            token: token.into(),
+            auth,
             ac_custom_field,
             client: super::http::shared_client(),
         }
@@ -116,13 +124,20 @@ impl TicketSource for JiraTicketSource {
         let key = parse_ref(&reference.reference)?;
 
         let url = format!("{}/issue/{}", self.base_url, key);
-        let raw_auth = format!("{}:{}", self.email, self.token);
-        let auth_b64 = base64::engine::general_purpose::STANDARD.encode(raw_auth.as_bytes());
+
+        let auth_header = match &self.auth {
+            JiraAuth::Basic { email, token } => {
+                let raw = format!("{email}:{token}");
+                let b64 = base64::engine::general_purpose::STANDARD.encode(raw.as_bytes());
+                format!("Basic {b64}")
+            }
+            JiraAuth::Bearer { token } => format!("Bearer {token}"),
+        };
 
         let resp = self
             .client
             .get(&url)
-            .header("Authorization", format!("Basic {auth_b64}"))
+            .header("Authorization", auth_header)
             .header("Accept", "application/json")
             .send()
             .await
