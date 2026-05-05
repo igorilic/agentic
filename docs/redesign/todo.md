@@ -4738,3 +4738,1002 @@ pnpm -F @agentic/web-ui test
 
 - [ ] H.1 RED test (or hypothesis write-up)
 - [ ] H.2 fix the regression
+
+---
+
+## Phase I — User-owned pipeline (dynamic agents)
+
+**Goal**: Today the pipeline is a 4-element hard-coded constant
+(`architect → tdd-developer → qa → reviewer`) baked into
+`PipelineConfig::builtin_default`, mirrored in
+`apps/web-ui/src/types/run.ts::DEFAULT_AGENTS`, and asserted in
+`pre_flight_check`'s for-loop. Phase I makes the pipeline **discovered
+and user-controlled**:
+
+1. Backend lists every agent file it can find for the active backend
+   (project precedence over home, both shown to the user with a `source`
+   tag). The four-name hardcoded list dies.
+2. The pipeline that runs is whatever ordered list of agent names the
+   user (or the chat / web UI / CLI flag) hands the IPC. No implicit
+   fallback list.
+3. `start_ticket_run` IPC takes `agents: Vec<String>` as a **required**
+   arg; CLI gains a `--agents <name>[,<name>...]` flag with no default.
+   No agents flag → CLI errors with an actionable message.
+4. The web UI persists the user's chosen pipeline per-project in
+   `localStorage` and replays it on next start.
+5. `agentic-cli init` keeps existing semantics (skip-if-exists,
+   `--force` to overwrite) but is **no longer required to run** —
+   the pipeline is happy with zero, one, or N agents in any backend
+   directory; the user just has to point at the ones they want.
+
+**Triage outcomes baked in (from architect/user Q&A, all 12 confirmed):**
+
+1. `AgentInfo` exposes `name`, `description`, `source`. No `model` or
+   other frontmatter hints leak. (`description` comes from the existing
+   `Agent.description` frontmatter field.)
+2. Pipeline persistence = **localStorage per-project** for v1. Keys are
+   namespaced by workspace id (the existing `stable_workspace_id`
+   exposed via the `RunSummary` flow / a new lightweight IPC). File-
+   based `pipeline.toml` persistence is deferred (see "Out of scope").
+3. `start_ticket_run` signature change is breaking: the new IPC takes
+   `agents: Vec<String>` as a required arg. **All callers updated in
+   the same step that breaks the contract** — no parallel "legacy
+   default" code path.
+4. CLI `run --ticket` requires a non-empty `--agents` flag (or a future
+   `pipeline.toml` entry). No implicit "all agents alphabetically"
+   fallback. Empty `--agents` errors with: ``--agents is required:
+   pass --agents architect,tdd-developer or run `agentic-cli list-agents`
+   to see what's discoverable``.
+5. Phase H DnD work folds into Phase I — the picker / reorder UX must
+   keep working as the agent list grows past 4. (We do **not** restart
+   Phase H; the existing H.1/H.2 stay independent.)
+6. Backward compat for tests: tests update **in the same step that
+   breaks the contract**. No "legacy default agents" shim in test
+   helpers.
+7. **TUI ripple is out of scope for Phase I** — the TUI's pipeline
+   strip currently renders `RunState.steps` (already dynamic, fed by
+   the events stream) but the keyboard shortcuts (`:add`, `:rm`) are
+   no-ops. Wiring them to the new IPC + persistence lands with GH #103
+   when that lands. Noted in "Out of scope" + a tech-debt entry.
+8. `agentic-cli init` template versioning: **skip-if-exists** is the
+   default (already implemented); `--force` overwrites. No new flag —
+   just verify the existing `--force` still does the right thing
+   against an enlarged template list, if any.
+9. **Partial agent list runs**: a project with only `architect.md`
+   discoverable can run a 1-agent pipeline. `start_ticket_run`'s
+   orchestrator is generic over `agents.len() ∈ [1, ∞)`. `qa_fix_loop`
+   coupling (today: tdd-developer ↔ qa, hard-coded by name) is dropped
+   — see "Out of scope" item on per-step retry semantics.
+10. `AgentInfo.path` is **server-side only**. The Tauri DTO exposed
+    over IPC carries `name` + `description` + `source` ("project" |
+    "home"). Path leakage would let the webview render absolute paths
+    from the user's machine — avoid.
+11. Discovery merges by agent name with **project precedence over
+    home**. UI shows the agent's `source` ("project" | "home") so the
+    user knows whether they're editing a repo file or a global one.
+12. `RunStep.role` field is **removed entirely**. The DB-row already
+    only has `agent_name` (`crates/agentic-core/src/db/steps.rs:15`),
+    so the cleanup is in the events / Tauri DTO surface and any TUI /
+    web-ui type that grew a `role` mirror. After Phase I, the only
+    identifier is `agent: String` (+ `index: u32` where ordering
+    matters).
+
+### Out of scope (Phase I)
+
+- **TUI dynamic-list integration**. The TUI already renders pipeline
+  cards from `RunState.steps`, so the new agents-from-IPC path will
+  flow through events without a TUI change. But the keyboard
+  shortcuts (`:add <agent>`, `:rm <agent>`, `[a]dd`, `[r]eorder`,
+  `[d]rop` from the pipeline strip footer) are still no-ops at
+  state-mutation level. Wiring them to a new mutation IPC + the
+  same localStorage-or-equivalent persistence layer is **deferred to
+  GH #103**. Phase I gets a tech-debt entry that explicitly mirrors
+  GH #103 + a manual-verify checklist (run a 2-agent pipeline from
+  the CLI, watch the TUI render only those 2 cards).
+- **File-based `pipeline.toml` persistence**. The existing
+  `<repo>/.agentic/pipeline.toml` parser
+  (`crates/agentic-core/src/pipeline/config.rs`) stays as-is and is
+  **not** consumed by Phase I — `start_ticket_run` no longer falls
+  back to `PipelineConfig::load(...).default_pipeline()`. A future
+  phase reconciles the two surfaces (Q2 deferred); the trigger is
+  "user wants the pipeline to survive a `localStorage.clear()`".
+  Tech-debt entry filed.
+- **Per-step retry semantics**. The current `qa_fix_loop_cap` field
+  on `PipelineStep` couples `tdd-developer` and `qa` by literal name
+  in `PipelineSm::new`
+  (`crates/agentic-core/src/pipeline/sm.rs:60-62`). Phase I drops the
+  coupling: a generic N-agent pipeline runs each step once in order,
+  no automatic retry. If a user wants the old QA-retry loop, they
+  re-list `tdd-developer` after `qa` in the agents array (manual). A
+  proper "retry policy per step" surface lives in v2 if anyone
+  misses it.
+
+### Migration notes (breaking changes shipped in this phase)
+
+- **`start_ticket_run` IPC adds a required `agents: string[]` field.**
+  Every JS caller updates in the same step that breaks the Rust
+  signature. Affected JS files (full list found via
+  `rg -l 'start_ticket_run' apps/`):
+  - `apps/web-ui/src/components/ChatPane.tsx:41`
+  - `apps/web-ui/src/utils/createSpec.ts:15`
+  - `apps/web-ui/src/utils/devInvokeMock.ts:118`
+  - `apps/web-ui/src/__tests__/permissionFlow.integration.test.tsx`
+  - `apps/web-ui/src/__tests__/devInvokeMock.test.ts`
+  - `apps/web-ui/src/__tests__/app.test.tsx`
+  - `apps/web-ui/src/__tests__/AppPolish.test.tsx`
+  - `apps/web-ui/src/__tests__/ChatColumn.test.tsx`
+  - `apps/web-ui/src/__tests__/createSpec.test.ts`
+  - `apps/web-ui/src/__tests__/ChatPane.test.tsx`
+  - `apps/web-ui/src/__tests__/IssueColumnSpecFlow.test.tsx`
+  Affected Rust callers / tests:
+  - `crates/agentic-tauri/src/commands/ticket.rs:50` (the IPC
+    definition itself)
+  - `crates/agentic-tauri/tests/ticket_ipc.rs`
+  - `crates/agentic-cli/src/main.rs:73-90` (Run subcommand args)
+  - `crates/agentic-cli/src/ticket_run.rs::cmd_run_ticket`
+  - `crates/agentic-cli/src/ticket_run.rs` test scaffolding
+  - `crates/agentic-cli/tests/e2e_permissions_live.rs`
+  - `crates/agentic-cli/tests/e2e_copilot_live.rs`
+  - `crates/agentic-cli/tests/execute_pipeline_file_changes.rs`
+- **`RunStep.role` is removed everywhere.** The DB row
+  (`crates/agentic-core/src/db/steps.rs::Step.agent_name`) is the
+  source of truth. Any DTO that grew a parallel `role` field
+  collapses onto `{ agent: String, index: u32 }`. Search anchor:
+  `rg -n '\\brole\\b' crates/ apps/web-ui/src` — every match outside
+  `chat::ChatMessage.role` ("user"/"assistant") is in scope.
+- **`agentic-cli init` is no longer a precondition for running a
+  pipeline.** The pre-flight check in
+  `crates/agentic-tauri/src/commands/ticket.rs::pre_flight_check`
+  switches from "every name in `["architect", "tdd-developer", "qa",
+  "reviewer"]` resolves" to "every name in the **user-supplied**
+  `agents` list resolves". Discovery's
+  `CoreError::AgentNotFound` already lists searched paths and points
+  at `agentic-cli init`, so the actionable hint stays. `init` itself
+  is unchanged in behaviour (skip-if-exists default; `--force`
+  overwrites).
+
+### Step I.1: List discoverable agents (core, with `source` tag)
+
+**Goal**: Add an `agentic_core::agents::list_discoverable` API that
+returns every agent file resolvable for a `BackendKind` under a given
+repo root + home, **deduplicated by name with project precedence over
+home**, each tagged with `source: AgentSource::{Project, Home}`. The
+existing `discover_agent` lookup-by-name stays unchanged; the new API
+is the iteration surface.
+
+**Depends on**: nothing inside Phase I (assumes Phase G's
+`BackendKind`-aware discovery already landed, which it has).
+
+**Test first** (RED):
+- New test file `crates/agentic-core/tests/agents_list.rs`:
+  - `it("list_discoverable returns project file with source = Project")`:
+    write `<root>/.claude/agents/architect.md` with valid frontmatter.
+    Call `list_discoverable(BackendKind::ClaudeCode, root, Some(home), &paths)` (no
+    home file). Assert `[AgentInfo { name: "architect", description: "...",
+    source: AgentSource::Project }]`.
+  - `it("list_discoverable returns home file with source = Home when project absent")`:
+    write only `<home>/.claude/agents/qa.md`. Assert
+    `[AgentInfo { name: "qa", description: "...", source: AgentSource::Home }]`.
+  - `it("list_discoverable: project precedence wins over home (single AgentInfo, source = Project)")`:
+    write the same `architect.md` to **both** `<root>/.claude/agents/`
+    and `<home>/.claude/agents/`, with **different** descriptions.
+    Assert exactly 1 result; `source == Project`; `description`
+    matches the project file. Order does not matter for this assertion
+    (sort by name in the impl for determinism).
+  - `it("list_discoverable returns empty for empty backend dirs")`:
+    no agent files anywhere → `Ok(vec![])` (not an error).
+  - `it("list_discoverable: agentic universal override beats both backend dirs")`:
+    write `architect.md` to `<root>/.agentic/agents/` and
+    `<root>/.claude/agents/` with different descriptions. Assert
+    `source == Project` and the description matches the
+    `.agentic/agents/` file.
+  - `it("list_discoverable: copilot-cli only sees .github + ~/.copilot")`:
+    write `qa.md` to `<root>/.claude/agents/`. Call with
+    `BackendKind::CopilotCli`. Assert empty result (the claude file
+    is invisible to copilot).
+  - `it("list_discoverable: malformed frontmatter file is skipped, not fatal")`:
+    write a valid `architect.md` and a malformed `qa.md` (missing
+    closing `+++`). Assert the result contains only `architect`;
+    no error returned, but a `tracing::warn!` event is emitted (use
+    `tracing-test` or assert the function doesn't error).
+- Add `pub struct AgentInfo { pub name: String, pub description: String,
+  pub source: AgentSource }` and `pub enum AgentSource { Project, Home }`
+  to `crates/agentic-core/src/agents/mod.rs` (in the test, import via
+  `agentic_core::{AgentInfo, AgentSource}`). The test serves as the
+  spec for the public types.
+
+**Implement** (GREEN):
+- Add `AgentInfo` + `AgentSource` to `crates/agentic-core/src/agents/mod.rs`,
+  re-exported from `lib.rs` next to `Agent`. Derive `Debug`, `Clone`,
+  `PartialEq`, `Eq`, `Serialize`, `Deserialize` (the IPC layer in I.5
+  reuses the same struct).
+- New module `crates/agentic-core/src/agents/list.rs` with:
+  ```rust
+  pub fn list_discoverable(
+      backend: BackendKind,
+      repo_root: &Path,
+      home: Option<&Path>,
+  ) -> Result<Vec<AgentInfo>>
+  ```
+  Walks the backend-scoped directories in priority order:
+  - `<root>/.agentic/agents/` (universal override → `Project`)
+  - `<root>/.{claude|github}/agents/` (→ `Project`)
+  - `<home>/.{claude|copilot}/agents/` (→ `Home`)
+  For each `*.md` in each dir, calls `parse_agent` to extract the
+  frontmatter; on parse error, logs `tracing::warn!` and skips the
+  file (one bad agent doesn't poison the whole list). Dedup by name,
+  keeping the first match (priority order = project beats home). Sort
+  results alphabetically by name for determinism.
+- Re-export from `crates/agentic-core/src/agents/mod.rs::pub use list::list_discoverable;`
+  and from `crates/agentic-core/src/lib.rs`.
+
+**Refactor**: None this step.
+
+**Files**:
+- `crates/agentic-core/src/agents/mod.rs` (add types, re-export)
+- `crates/agentic-core/src/agents/list.rs` (new)
+- `crates/agentic-core/src/lib.rs` (re-export `AgentInfo`,
+  `AgentSource`, `list_discoverable`)
+- `crates/agentic-core/tests/agents_list.rs` (new)
+
+**Commit**: `feat(core): list discoverable agents with project/home source tag`
+
+**Verification**:
+```
+cargo test -p agentic-core --test agents_list
+cargo clippy -p agentic-core --all-features --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+---
+
+### Step I.2: Drop the hard-coded 4-agent assumption from pre-flight + tests
+
+**Goal**: `pre_flight_check` switches from
+``for name in ["architect", "tdd-developer", "qa", "reviewer"]`` to
+``for name in agents.iter()``. The 4-name literal dies in this step.
+This is the smallest possible change that lets I.4 add the IPC arg
+without a temporary "use the old list when none provided" branch.
+
+**Depends on**: I.1 (uses the same crate; not a hard dep but
+keeps PR-sized changes coherent).
+
+**Test first** (RED):
+- Existing test
+  `crates/agentic-tauri/tests/ticket_ipc.rs::pre_flight_check_*`
+  (search for the test that today asserts all four names are
+  required) — keep the assertion, but parameterise it on the
+  agents-list arg.
+- New test cases in `crates/agentic-tauri/tests/ticket_ipc.rs`:
+  - `it("pre_flight_check passes for a 1-agent list when only that agent file exists")`:
+    write only `<root>/.claude/agents/architect.md`. Call
+    `pre_flight_check_with_home(root, &ClaudeCode, &["architect"], home)`.
+    Assert `Ok(())`.
+  - `it("pre_flight_check fails on first missing agent in the user list, not on the literal four")`:
+    write `architect.md` only. Call with `&["architect", "reviewer"]`.
+    Assert error message names `reviewer` (not `tdd-developer`).
+  - `it("pre_flight_check rejects an empty agents list with an actionable error")`:
+    Assert `Err` whose message contains `"agents list is empty"` or
+    similar.
+
+**Implement** (GREEN):
+- Change `pre_flight_check` and `pre_flight_check_with_home` in
+  `crates/agentic-tauri/src/commands/ticket.rs` to take
+  `agents: &[String]` (or `&[&str]`) instead of relying on the
+  hard-coded `["architect", "tdd-developer", "qa", "reviewer"]`.
+- Empty `agents` slice → return `Err` with the message
+  ``"pre-flight: agents list is empty — pass at least one agent in
+  start_ticket_run.agents"``.
+- Update the **two** internal callers (the IPC body and any tests
+  that fed it via the public `pre_flight_check_with_home` re-export).
+  At this step, the IPC body still hard-codes the four names *at
+  the call site* — I.4 replaces that with the user-supplied list.
+- Existing tests that asserted "all four required" become "all
+  agents in the supplied slice required". No legacy default fallback.
+
+**Refactor**:
+- Rename the internal `for name in ["architect", ...]` loop variable
+  from `name` to `agent_name` so the function reads naturally as
+  "for each agent_name in agents".
+
+**Files**:
+- `crates/agentic-tauri/src/commands/ticket.rs`
+- `crates/agentic-tauri/tests/ticket_ipc.rs`
+
+**Commit**: `refactor(tauri): pre_flight_check takes user-supplied agents list`
+
+**Verification**:
+```
+cargo test -p agentic-tauri --test ticket_ipc
+cargo clippy -p agentic-tauri --all-features --all-targets -- -D warnings
+```
+
+---
+
+### Step I.3: `execute_pipeline` accepts an arbitrary agent list (decouple qa-fix-loop)
+
+**Goal**: Remove the `qa_fix_loop_cap` literal-name coupling in
+`PipelineSm::new` and switch `execute_pipeline` from "consume a
+pre-built `Pipeline` whose steps were assembled from
+`PipelineConfig::builtin_default`" to "consume a `Pipeline` built
+from the user-supplied agent name list with default per-step config".
+The pipeline is N agents in order, each run once, no implicit retry.
+
+**Depends on**: I.2 (lets us flip the CLI/Tauri callers in I.4 / I.5
+without a stale half-state).
+
+**Test first** (RED):
+- New test file `crates/agentic-core/tests/pipeline_dynamic.rs` (or
+  add cases to the existing `pipeline_toml.rs` if name-conflict
+  coverage stays clean):
+  - `it("PipelineSm runs a 1-agent pipeline to completion with no qa retry")`:
+    build `Pipeline { steps: vec![PipelineStep { agent: "reviewer", ... }] }`.
+    Drive `Start → StepPassed`. Assert state machine goes
+    `Pending → Running → Completed` in one StepPassed cycle.
+  - `it("PipelineSm runs a 5-agent pipeline including duplicate tdd-developer")`:
+    build steps `[architect, tdd-developer, qa, tdd-developer, reviewer]`.
+    All `StepPassed`. Assert each `step_index` increments to N=5.
+    Asserts the SM doesn't trip on the duplicate name.
+  - `it("PipelineSm: qa step failure does NOT trigger a retry into tdd-developer (post-Phase-I)")`:
+    `[architect, tdd-developer, qa, reviewer]`. Drive
+    `Start → StepPassed (architect) → StepPassed (tdd-developer) →
+     StepFailed (qa)`. With `stop_on_failure: false` on qa (the
+     existing builtin default), assert the SM advances to reviewer
+     **without** rolling back step_index to tdd-developer (today it
+     does). The new contract: qa-fix-loop is no longer automatic.
+  - `it("PipelineSm: qa step failure on stop_on_failure: true terminates with Failed")`:
+    same pipeline but flip qa's `stop_on_failure` to true. Assert
+    terminal state is `Failed`.
+- Existing tests in `crates/agentic-core/tests/pipeline_toml.rs` and
+  `crates/agentic-core/src/pipeline/sm.rs::tests::*` that asserted
+  the old qa-fix-loop semantics get **rewritten** in this same step
+  (no parallel "legacy default" path). Tests that today expect
+  `qa_retries` to bump on `StepFailed(qa)` flip to expecting linear
+  advancement.
+
+**Implement** (GREEN):
+- Delete `qa_fix_loop_cap` from `PipelineStep` (the field) **and**
+  from `PipelineSm`'s state. Delete the special-case in
+  `handle_step_failed` that compares the running step's agent name
+  to `"qa"` and rolls back. The SM becomes a linear N-step advancer
+  with `StepFailed` resolving via `stop_on_failure` only.
+- Update the TOML deserialiser tests
+  (`crates/agentic-core/tests/pipeline_toml.rs`) — any test that
+  parsed a TOML containing `qa_fix_loop_cap = N` either drops the
+  field or the test is removed entirely (the field no longer exists).
+- Update `PipelineConfig::builtin_default` in
+  `crates/agentic-core/src/pipeline/config.rs` to drop the
+  `qa_fix_loop_cap: Some(3)` line on tdd-developer. The builtin
+  pipeline still ships as-is (4 agents, sensible defaults) so the
+  TOML parser tests survive.
+- Add a new free function or `PipelineConfig::from_agents(agents:
+  &[String]) -> Pipeline` that builds a `Pipeline` from a string
+  slice with `stop_on_failure = true` and other fields at default.
+  This is what I.4 / I.5 will call.
+
+**Refactor**:
+- Update doc comments on `PipelineStep` to drop the qa-fix-loop
+  references; replace with "retry policy is out of scope (v2)".
+- Update `crates/agentic-core/src/pipeline/sm.rs` doc comment that
+  mentions tdd-developer ↔ qa coupling.
+
+**Files**:
+- `crates/agentic-core/src/pipeline/config.rs`
+- `crates/agentic-core/src/pipeline/sm.rs`
+- `crates/agentic-core/tests/pipeline_dynamic.rs` (new)
+- `crates/agentic-core/tests/pipeline_toml.rs` (rewrites)
+
+**Commit**: `refactor(core): pipeline accepts arbitrary agent list, drop qa-fix-loop`
+
+**Verification**:
+```
+cargo test -p agentic-core --test pipeline_dynamic
+cargo test -p agentic-core --test pipeline_toml
+cargo test -p agentic-core
+cargo clippy --workspace --all-features --all-targets -- -D warnings
+```
+
+---
+
+### Step I.4: CLI `run --ticket --agents <list>` (no implicit fallback)
+
+**Goal**: `agentic-cli run --ticket "..." --agents architect,tdd-developer,qa,reviewer`
+runs the pipeline with that agent list. **Empty / missing
+`--agents` errors with an actionable message** (no fallback to
+"all agents alphabetically" or any other implicit default).
+
+**Depends on**: I.3 (uses `from_agents`).
+
+**Test first** (RED):
+- Add a test to `crates/agentic-cli/src/main.rs` (or a new
+  `crates/agentic-cli/tests/cli_args.rs` for cleaner separation):
+  - `it("run --ticket --agents foo,bar parses to agents = [foo, bar]")`:
+    use clap's `try_parse_from` to assert the resulting subcommand
+    has `agents == vec!["foo".to_string(), "bar".to_string()]`.
+  - `it("run --ticket without --agents errors with a clear message")`:
+    `try_parse_from(&["agentic-cli", "run", "--ticket", "fix bug"])`
+    asserts an error whose message contains `--agents`.
+  - `it("run --ticket --agents '' errors (whitespace-only list)")`:
+    parse succeeds (clap gets an empty string), but
+    `cmd_run_ticket` errors with the same actionable message
+    (`"--agents is required: pass --agents architect,tdd-developer
+    or run agentic-cli list-agents to see what's discoverable"`).
+- Update existing `cmd_run_ticket` integration tests
+  (`crates/agentic-cli/tests/e2e_permissions_live.rs`,
+  `crates/agentic-cli/tests/e2e_copilot_live.rs`,
+  `crates/agentic-cli/tests/execute_pipeline_file_changes.rs`) to
+  pass an explicit agent list. No legacy default helper.
+
+**Implement** (GREEN):
+- Add to `crates/agentic-cli/src/main.rs::Command::Run`:
+  ```rust
+  /// Comma-separated agent names in pipeline order. Required for
+  /// --ticket; not used with --scripted.
+  #[arg(long, value_delimiter = ',', requires = "ticket")]
+  agents: Vec<String>,
+  ```
+  No `default_value` — empty `Vec` means "user didn't pass it".
+- In `run_command`, the `Run { ticket: Some(_), agents, .. }` branch
+  validates `agents`:
+  - If `agents.is_empty()` (or every entry is whitespace-only),
+    bail with the actionable message.
+  - Otherwise pass the list to `cmd_run_ticket`.
+- `cmd_run_ticket` signature gains `agents: Vec<String>`. Inside,
+  it builds the pipeline via `PipelineConfig::from_agents(&agents)`
+  (from I.3) instead of `PipelineConfig::load(...).default_pipeline()`.
+- Drop the `PipelineConfig::load` call from `cmd_run_ticket` —
+  Phase I no longer reads `pipeline.toml` (see Out of scope item).
+  A future phase reconciles.
+
+**Refactor**:
+- If `cmd_run_ticket`'s arg list grows past 5, group into a struct
+  (matches the `PipelineRunContext` pattern already in
+  `ticket_run.rs`).
+
+**Files**:
+- `crates/agentic-cli/src/main.rs`
+- `crates/agentic-cli/src/ticket_run.rs`
+- `crates/agentic-cli/tests/e2e_permissions_live.rs`
+- `crates/agentic-cli/tests/e2e_copilot_live.rs`
+- `crates/agentic-cli/tests/execute_pipeline_file_changes.rs`
+- `crates/agentic-cli/tests/cli_args.rs` (new, optional)
+
+**Commit**: `feat(cli): require --agents on run --ticket; no implicit default`
+
+**Verification**:
+```
+cargo test -p agentic-cli
+cargo clippy -p agentic-cli --all-features --all-targets -- -D warnings
+```
+
+---
+
+### Step I.5: `start_ticket_run` IPC takes `agents: Vec<String>` (breaking)
+
+**Goal**: The Tauri IPC signature changes to:
+```rust
+async fn start_ticket_run(
+    bus_state, db_state,
+    ticket: String,
+    backend: String,
+    agents: Vec<String>,
+    model: Option<String>,
+) -> Result<String, String>
+```
+Every JS caller in the Migration notes section above updates in this
+same step. No legacy default fallback.
+
+**Depends on**: I.2, I.3, I.4 (the upstream surfaces are all in their
+new shape; this step is the IPC + JS sync).
+
+**Test first** (RED):
+- Update / add tests in `crates/agentic-tauri/tests/ticket_ipc.rs`:
+  - `it("start_ticket_run with empty agents errors before seeding rows")`:
+    invoke with `agents: vec![]`. Assert `Err` whose message
+    contains `"agents list is empty"`. Assert no `runs` row was
+    inserted (DB count stays 0 / stays at the pre-call value).
+  - `it("start_ticket_run with a 2-agent list seeds and dispatches")`:
+    write 2 valid agent files. Invoke with `agents: vec!["architect",
+    "reviewer"]`. Assert the returned run_id is non-empty; assert
+    the run row is seeded with the matching agents (the orchestrator
+    publishes `StepStarted` per name).
+  - `it("start_ticket_run rejects names that don't resolve")`:
+    invoke with `agents: vec!["nope"]`. Assert `Err` with the
+    pre-flight error format from I.2 (lists searched paths).
+- Update the JS test surface (Migration notes lists every caller).
+  Each caller passes a fixture agents array; the existing devInvoke
+  mock learns the new arg. **No "default to DEFAULT_AGENTS when
+  agents is undefined"** shim — TS callers all pass the array.
+- New JS test
+  `apps/web-ui/src/__tests__/startTicketRunAgents.test.ts`:
+  - `it("invoke('start_ticket_run', ...) requires an agents array")`:
+    via the dev mock, asserts the mock rejects when `agents` is
+    missing. (Mirror the Rust validation in the dev path so
+    integration tests catch regressions.)
+
+**Implement** (GREEN):
+- Update `start_ticket_run` in
+  `crates/agentic-tauri/src/commands/ticket.rs:50` to accept
+  `agents: Vec<String>`. Validate: trim whitespace per entry,
+  dedup-preserving-order is **not** done (a duplicate
+  `tdd-developer` is a legitimate user choice — see I.3 test).
+  Empty after trim → error.
+- Replace the `pipeline_config = PipelineConfig::load(...)` block
+  with `PipelineConfig::from_agents(&agents)`. Drop the
+  `pipeline.toml` read entirely (deferred; see Out of scope).
+- Replace the hard-coded `["architect", ...]` in `pre_flight_check`
+  call with the `agents` slice (the function already accepts
+  `&[String]` from I.2).
+- Update the Tauri capabilities / permission JSON if `start_ticket_run`'s
+  arg shape requires it (it shouldn't — the permission is name-based,
+  not arg-based).
+- Update every JS caller (full list in Migration notes). Each caller
+  passes either its own user-supplied list (chat / start-form) or
+  reads from the persistence layer landing in I.6 (placeholder
+  `[]` literal acceptable in this step; I.6 wires real data).
+
+**Refactor**:
+- The existing inline `BackendKind::parse(&backend)?` line moves
+  ahead of the `agents` check so a malformed backend doesn't get
+  masked by an empty-agents complaint.
+
+**Files**:
+- `crates/agentic-tauri/src/commands/ticket.rs`
+- `crates/agentic-tauri/tests/ticket_ipc.rs`
+- `apps/web-ui/src/components/ChatPane.tsx`
+- `apps/web-ui/src/utils/createSpec.ts`
+- `apps/web-ui/src/utils/devInvokeMock.ts`
+- `apps/web-ui/src/__tests__/permissionFlow.integration.test.tsx`
+- `apps/web-ui/src/__tests__/devInvokeMock.test.ts`
+- `apps/web-ui/src/__tests__/app.test.tsx`
+- `apps/web-ui/src/__tests__/AppPolish.test.tsx`
+- `apps/web-ui/src/__tests__/ChatColumn.test.tsx`
+- `apps/web-ui/src/__tests__/createSpec.test.ts`
+- `apps/web-ui/src/__tests__/ChatPane.test.tsx`
+- `apps/web-ui/src/__tests__/IssueColumnSpecFlow.test.tsx`
+- `apps/web-ui/src/__tests__/startTicketRunAgents.test.ts` (new)
+
+**Commit**: `feat(tauri,web): start_ticket_run takes agents list (breaking)`
+
+**Verification**:
+```
+cargo test -p agentic-tauri
+pnpm -F @agentic/web-ui test
+cargo clippy --workspace --all-features --all-targets -- -D warnings
+```
+
+---
+
+### Step I.6: New `list_agents` IPC + Tauri DTO (no path leakage)
+
+**Goal**: Expose the agent inventory to the webview via a new IPC
+`list_agents(backend: String) -> Result<Vec<AgentInfoDto>, String>`.
+The DTO carries `name`, `description`, `source` only — no
+`path`. Maps `agentic_core::AgentInfo` (which has the path
+internally if we want it) to a webview-safe shape.
+
+**Depends on**: I.1.
+
+**Test first** (RED):
+- New test `crates/agentic-tauri/tests/list_agents_ipc.rs`:
+  - `it("list_agents returns Project-tagged entries for repo files")`:
+    write 2 agents in `<root>/.claude/agents/`. Invoke
+    `list_agents("claude-code")`. Assert 2 entries, each with
+    `source: "project"`. Assert no `path` field is serialised
+    (parse the result as `serde_json::Value` and assert
+    `entry.get("path").is_none()`).
+  - `it("list_agents returns Home-tagged entries when only ~/.claude has them")`:
+    same fixture but in `<home>/.claude/agents/`. Invoke. Assert
+    `source: "home"`.
+  - `it("list_agents on unknown backend errors")`:
+    invoke with `"scripted"`. Assert `Err` whose message lists the
+    valid backends.
+  - `it("list_agents returns alphabetically-sorted entries")`:
+    write `reviewer.md` then `architect.md`. Assert the result is
+    `[architect, reviewer]`.
+- New JS test
+  `apps/web-ui/src/__tests__/useDiscoverableAgents.test.ts`:
+  - `it("loads agents on mount and exposes { agents, loading, error }")`:
+    mock `invoke("list_agents", ...)` to return a fixture array.
+    Render a wrapper component that calls the new
+    `useDiscoverableAgents(backend)` hook. Assert the hook's state
+    progresses `loading: true → loading: false, agents: [...]`.
+
+**Implement** (GREEN):
+- Add `crates/agentic-tauri/src/commands/agents.rs` with:
+  ```rust
+  #[derive(Serialize)]
+  pub struct AgentInfoDto {
+      pub name: String,
+      pub description: String,
+      pub source: String, // "project" | "home"
+  }
+
+  #[tauri::command]
+  pub async fn list_agents(backend: String) -> Result<Vec<AgentInfoDto>, String>;
+  ```
+  Maps `agentic_core::AgentInfo { name, description, source }` to
+  the DTO. Resolves `repo_root` and `home` exactly like
+  `start_ticket_run` does.
+- Register the command in `crates/agentic-tauri/src/main.rs`'s
+  `tauri::generate_handler!` list.
+- Add the permission entry in
+  `crates/agentic-tauri/permissions/...` (or wherever
+  `start_ticket_run` is whitelisted) — copy the same shape.
+- Add a JS hook `apps/web-ui/src/hooks/useDiscoverableAgents.ts`:
+  ```ts
+  export function useDiscoverableAgents(backend: BackendId): {
+    agents: AgentInfo[];
+    loading: boolean;
+    error: string | null;
+    refresh: () => void;
+  };
+  ```
+  TS type `AgentInfo` matches the Rust DTO field-for-field. Lives
+  in `apps/web-ui/src/types/agent.ts` (new file).
+
+**Refactor**: None.
+
+**Files**:
+- `crates/agentic-tauri/src/commands/agents.rs` (new)
+- `crates/agentic-tauri/src/commands/mod.rs` (re-export)
+- `crates/agentic-tauri/src/main.rs` (register handler)
+- `crates/agentic-tauri/permissions/<file>.toml` (whitelist)
+- `crates/agentic-tauri/tests/list_agents_ipc.rs` (new)
+- `apps/web-ui/src/types/agent.ts` (new)
+- `apps/web-ui/src/hooks/useDiscoverableAgents.ts` (new)
+- `apps/web-ui/src/__tests__/useDiscoverableAgents.test.ts` (new)
+
+**Commit**: `feat(tauri,web): list_agents IPC + useDiscoverableAgents hook`
+
+**Verification**:
+```
+cargo test -p agentic-tauri --test list_agents_ipc
+pnpm -F @agentic/web-ui test useDiscoverableAgents
+```
+
+---
+
+### Step I.7: Per-project pipeline persistence (`localStorage`)
+
+**Goal**: The web UI persists the user's chosen agent list per
+workspace id under
+`localStorage["agentic.pipeline.<wsId>"]` and loads it on mount
+into the `pipelineAgents` state that drives `PipelineBar` +
+`start_ticket_run`. New users with no saved pipeline see an empty
+pipeline and must build one (no implicit fallback to a hard-coded
+list).
+
+**Depends on**: I.5 (the IPC accepts `agents`), I.6 (the picker
+needs the agent inventory).
+
+**Test first** (RED):
+- New test
+  `apps/web-ui/src/__tests__/pipelinePersistence.test.tsx`:
+  - `it("saves pipelineAgents to localStorage on change, keyed by workspace id")`:
+    render `<App />` with a fixed `wsId`. Mutate the pipeline (drag
+    or picker). Assert
+    `localStorage.getItem("agentic.pipeline.<wsId>")` parses to the
+    new array.
+  - `it("hydrates pipelineAgents from localStorage on mount")`:
+    `localStorage.setItem("agentic.pipeline.<wsId>", JSON.stringify(["architect"]))`.
+    Render `<App />`. Assert `data-testid="pipeline-bar"` shows
+    1 card with name "architect".
+  - `it("ignores corrupt JSON gracefully and starts with an empty pipeline")`:
+    `localStorage.setItem("agentic.pipeline.<wsId>", "{not json}")`.
+    Render. Assert pipeline is empty + no thrown error visible to
+    the user. (Optionally assert a console warn.)
+  - `it("isolates per-workspace: switching wsId loads a different list")`:
+    seed two keys with different lists. Render with wsId A → assert
+    list A. Re-render with wsId B → assert list B.
+- A test that asserts **no implicit DEFAULT_AGENTS fallback**:
+  - `it("first-run with no localStorage entry shows an empty pipeline (no DEFAULT_AGENTS)")`:
+    clear localStorage, render `<App />`. Assert `pipelineAgents.length === 0`
+    and `data-testid="pipeline-empty-state"` is visible (a small
+    "Add an agent to get started" prompt — see UI delta below).
+
+**Implement** (GREEN):
+- New hook `apps/web-ui/src/hooks/usePipelinePersistence.ts`:
+  ```ts
+  export function usePipelinePersistence(wsId: string | null): {
+    pipelineAgents: string[];
+    setPipelineAgents: (next: string[]) => void;
+  };
+  ```
+  - Reads `localStorage["agentic.pipeline.<wsId>"]` on mount /
+    when `wsId` changes. Parses JSON → `string[]`. On parse error,
+    returns `[]` and clears the key.
+  - Writes back via `setPipelineAgents`. No debouncing (the user
+    isn't going to spam mutations and the cost is one
+    `JSON.stringify` per change).
+  - When `wsId` is `null` (no active workspace), returns
+    `{ pipelineAgents: [], setPipelineAgents: noop }`.
+- Replace the `useState(DEFAULT_AGENTS)` (or equivalent) in
+  `App.tsx` with `usePipelinePersistence(wsId)`. Resolve `wsId`
+  via the existing run-summary / workspace surface (the
+  `RunSummary` already carries `workspace_id`; if it doesn't yet,
+  add a tiny `get_workspace_id()` IPC — flag this as a sub-decision
+  in "Open implementation questions").
+- Update the `PipelineBar` empty-state UX: when `pipelineAgents.length
+  === 0`, render a single dashed-border tile with text
+  "Add an agent to get started" and the existing `+ Add agent`
+  affordance. Add `data-testid="pipeline-empty-state"`.
+- Wire `setPipelineAgents` through `usePipelineMutation` so the
+  drag/insert/remove handlers in `PipelineBar` continue to work.
+
+**Refactor**:
+- Delete `DEFAULT_AGENTS` from `apps/web-ui/src/types/run.ts` if
+  no other file consumes it (Phase I retires it). Update
+  `emptyRunState` and `deriveRunState` to take a required
+  `agents: string[]` (callers always have one in the post-Phase-I
+  world).
+
+**Files**:
+- `apps/web-ui/src/hooks/usePipelinePersistence.ts` (new)
+- `apps/web-ui/src/__tests__/pipelinePersistence.test.tsx` (new)
+- `apps/web-ui/src/App.tsx`
+- `apps/web-ui/src/components/PipelineBar.tsx` (empty-state)
+- `apps/web-ui/src/types/run.ts` (drop `DEFAULT_AGENTS`)
+- `apps/web-ui/src/hooks/usePipelineFromRunState.ts` (consumes
+  required `agents`)
+- `apps/web-ui/src/utils/derivePipelineSeed.ts` (consumes required
+  `agents`)
+- Touched test files where `emptyRunState()` was called without
+  args: pass an explicit list per test.
+
+**Commit**: `feat(web): per-project pipeline persistence in localStorage`
+
+**Verification**:
+```
+pnpm -F @agentic/web-ui test pipelinePersistence
+pnpm -F @agentic/web-ui test
+```
+
+**Notes**: If `RunSummary` doesn't already expose `workspace_id`,
+introduce a tiny `get_workspace_id()` IPC in this step — surface
+the question to the user before dispatch. **Open implementation
+question 1 below.**
+
+---
+
+### Step I.8: AgentPicker consumes `useDiscoverableAgents` (kill the hardcoded library)
+
+**Goal**: The existing `AgentPicker` component (today seeded from
+`AGENT_LIBRARY` constant or from `data.js`-derived hardcoded list)
+switches to consuming `useDiscoverableAgents(backend)`. Each row
+shows the agent's `description` (from frontmatter) and a small
+`source` chip ("project" / "home"). Filter excludes agents already
+in the current pipeline.
+
+**Depends on**: I.6, I.7.
+
+**Test first** (RED):
+- New / updated tests in
+  `apps/web-ui/src/__tests__/AgentPicker.test.tsx`:
+  - `it("shows discoverable agents with their description and source chip")`:
+    mock `useDiscoverableAgents` → `[{name:"architect", description:"plan",
+    source:"project"}, {name:"qa", description:"verify", source:"home"}]`.
+    Render `<AgentPicker open onSelect={fn} pipelineAgents={[]} />`.
+    Assert `architect` row contains text `plan` and a chip
+    `data-testid="agent-source-chip-architect"` with text `project`.
+    Assert `qa` row's chip says `home`.
+  - `it("filters out agents already in pipelineAgents")`:
+    same mock, but `pipelineAgents={["architect"]}`. Assert the
+    rendered list contains `qa` only.
+  - `it("renders a loading state while the hook is fetching")`:
+    mock the hook with `loading: true`. Assert
+    `data-testid="agent-picker-loading"` is visible.
+  - `it("renders an empty state when no agents are discoverable")`:
+    mock `agents: []`. Assert `data-testid="agent-picker-empty"`
+    is visible with copy `"No agents discovered. Run \`agentic-cli init\` or \`agentic-cli init --copilot\`."`.
+
+**Implement** (GREEN):
+- Update `apps/web-ui/src/components/AgentPicker.tsx`:
+  - Drop the `AGENT_LIBRARY` import / constant.
+  - Accept a `backend: BackendId` prop (or read it from the existing
+    `BackendContext` if one exists — check before adding a prop).
+  - Call `useDiscoverableAgents(backend)`.
+  - Render `loading`, `error`, `empty` branches.
+  - Each row gets a small chip element to the right of the name
+    showing the source. Style: 1px border + 10px text, the
+    `border-soft` class for `home`, `border` for `project`
+    (subtle visual differentiation).
+- Delete the `AGENT_LIBRARY` constant (typically in
+  `apps/web-ui/src/data/agentLibrary.ts` or inlined; trace via
+  `rg AGENT_LIBRARY apps/web-ui/src`).
+
+**Refactor**:
+- If `AgentPicker` previously imported icons / accent colors per
+  agent name from a hardcoded map, switch to a deterministic hash
+  (e.g., a colour-from-name helper) so unknown names render
+  reasonably.
+
+**Files**:
+- `apps/web-ui/src/components/AgentPicker.tsx`
+- `apps/web-ui/src/__tests__/AgentPicker.test.tsx`
+- `apps/web-ui/src/data/agentLibrary.ts` (delete or empty out)
+- Any caller of `AGENT_LIBRARY` (search via `rg`) updated to use
+  the hook instead.
+
+**Commit**: `feat(web): AgentPicker consumes useDiscoverableAgents`
+
+**Verification**:
+```
+pnpm -F @agentic/web-ui test AgentPicker
+pnpm -F @agentic/web-ui test
+```
+
+---
+
+### Step I.9: Drop `RunStep.role` everywhere
+
+**Goal**: Surface the audit committed to in triage outcome 12.
+Search anchor: `rg -n '\\brole\\b' crates/ apps/web-ui/src`. Every
+match outside `chat::ChatMessage.role` ("user"/"assistant"
+conversational role, unrelated to pipelines) collapses onto
+`{ agent: String, index: u32 }`.
+
+**Depends on**: I.5 (the IPC has stabilised on the new agent-list
+shape).
+
+**Test first** (RED):
+- Audit step. The agent runs `rg -n '\\brole\\b' crates/ apps/web-ui/src`,
+  documents every hit in the commit body, and:
+  - Adds an assertion test in
+    `crates/agentic-tauri/tests/ticket_ipc.rs::ipc_dto_shape`:
+    `it("RunStep DTO has agent + index, no role")`: invoke
+    `start_ticket_run`, capture the first `StepStarted` envelope,
+    assert `serde_json::to_value(&step_dto)` does **not** contain
+    a `"role"` key.
+  - Adds a TS test in
+    `apps/web-ui/src/__tests__/runState.test.ts`:
+    `it("StepInfo has no role field")`: assert the type definition
+    in `types/run.ts` does not export a `role` member (compile-time
+    check via `// @ts-expect-error` against an attempt to read
+    `step.role`).
+  - For every `role` field found that maps to pipeline-step semantics
+    (not conversational chat), the agent flips it to `agent` (if
+    not already present) and removes the `role` field. Both the
+    field and any serde / ts mirroring updates in the same step.
+
+**Implement** (GREEN):
+- Drive by the audit. Likely zero work in
+  `crates/agentic-core/src/db/steps.rs` (already `agent_name`).
+- Likely target areas based on the codebase shape:
+  - Any `RunStep` / `StepRow` DTO in `crates/agentic-tauri` (none
+    found at audit time, but verify post-refactor PRs haven't added
+    one).
+  - `apps/web-ui/src/types/run.ts::StepInfo` (already only `agent`).
+  - `crates/agentic-tui/src/run.rs::StepRow` (already only
+    `agent`).
+- The most likely real hits (if any) live in the events-translation
+  layer or the IPC-derived TS types. The audit drives the diff.
+
+**Refactor**:
+- Update doc comments anywhere the word "role" was used loosely to
+  mean "the agent in this pipeline step". Replace with "agent".
+
+**Files**:
+- Whatever the audit surfaces. List in the commit body.
+- `crates/agentic-tauri/tests/ticket_ipc.rs` (DTO shape assertion)
+- `apps/web-ui/src/__tests__/runState.test.ts` (type assertion)
+
+**Commit**: `refactor: drop RunStep.role; agent + index is the only step identity`
+
+**Verification**:
+```
+cargo test --workspace
+pnpm -F @agentic/web-ui test
+rg -n '\brole\b' crates/ apps/web-ui/src | rg -v 'chat::ChatMessage|chat\\.rs|\\.role.*user|\\.role.*assistant|conversational'
+# expect zero matches outside the chat conversational role
+```
+
+---
+
+### Step I.10: Integration smoke — end-to-end 2-agent pipeline
+
+**Goal**: One last integration step that exercises every Phase I
+contract together: list discoverable agents → pick a 2-agent
+subset → persist the choice → run the pipeline → verify the run
+publishes exactly 2 `StepStarted` envelopes in order.
+
+**Depends on**: I.1 through I.9.
+
+**Test first** (RED):
+- New integration test
+  `apps/web-ui/src/__tests__/dynamicPipeline.integration.test.tsx`:
+  - `it("end-to-end: list → pick 2 → persist → run → 2 StepStarted events")`:
+    1. Mock `invoke("list_agents", ...)` to return
+       `[{name:"architect",...}, {name:"reviewer",...}, {name:"qa",...}]`.
+    2. Render `<App />` with empty localStorage.
+    3. Open the AgentPicker, click `architect` then `reviewer`
+       (in that order).
+    4. Assert `pipelineAgents` is `["architect", "reviewer"]` and
+       `localStorage["agentic.pipeline.<wsId>"]` matches.
+    5. Click "Run pipeline".
+    6. Assert `invoke` was called with
+       `start_ticket_run, { agents: ["architect", "reviewer"], ... }`.
+    7. Drive 2 `StepStarted` envelopes through the dev mock and
+       assert both pipeline cards advance through `running` →
+       `passed` per the events.
+- Optional: a Rust-side end-to-end smoke in
+  `crates/agentic-cli/tests/cli_dynamic_pipeline.rs` that runs
+  `agentic-cli run --ticket "x" --agents architect` against a
+  scaffolded fixture and asserts a 1-step `RunComplete` envelope
+  (use the existing `e2e_permissions_live.rs` scaffolding pattern).
+
+**Implement** (GREEN): No new production code expected. This step
+is the canary that I.1-I.9 land coherently. If it fails, the
+diagnosis points at the seam between two earlier steps; loop back
+to that step's RED+GREEN with the failing assertion as the new
+contract.
+
+**Refactor**: None.
+
+**Files**:
+- `apps/web-ui/src/__tests__/dynamicPipeline.integration.test.tsx` (new)
+- `crates/agentic-cli/tests/cli_dynamic_pipeline.rs` (new, optional)
+
+**Commit**: `test: end-to-end dynamic pipeline integration smoke`
+
+**Verification**:
+```
+pnpm -F @agentic/web-ui test dynamicPipeline.integration
+cargo test -p agentic-cli --test cli_dynamic_pipeline
+cargo test --workspace --all-features
+pnpm -F @agentic/web-ui test
+cargo clippy --workspace --all-features --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+---
+
+### Phase I status checklist
+
+- [ ] I.1 list discoverable agents (core, with `source` tag)
+- [ ] I.2 pre-flight takes user-supplied agents list
+- [ ] I.3 execute_pipeline accepts arbitrary list, drop qa-fix-loop
+- [ ] I.4 CLI `--agents` flag (no implicit fallback)
+- [ ] I.5 `start_ticket_run` IPC adds `agents` (breaking)
+- [ ] I.6 `list_agents` IPC + `useDiscoverableAgents` hook
+- [ ] I.7 per-project pipeline persistence in localStorage
+- [ ] I.8 AgentPicker consumes `useDiscoverableAgents`
+- [ ] I.9 drop `RunStep.role` everywhere
+- [ ] I.10 end-to-end dynamic pipeline integration smoke
+
+### Phase I open implementation questions (raised mid-write — triage before I.1 dispatch)
+
+1. **`wsId` source for the localStorage key (Step I.7)**: the
+   `usePipelinePersistence` hook needs a stable workspace id. The
+   Rust side has `agentic_cli::ticket_run::stable_workspace_id`,
+   but it's not exposed over IPC today. Options:
+   a. Add a thin `get_workspace_id() -> String` IPC that hashes
+      the current `cwd` (or the resolved `AGENTIC_WORKSPACE_ROOT`)
+      via the existing helper. Pro: one source of truth. Con:
+      one more IPC call on mount.
+   b. Stuff `workspace_id` into the existing `RunSummary` shape
+      (it already has `workspace_id` server-side per
+      `crates/agentic-core/src/db/runs.rs`). The webview reads it
+      from the most recent `list_runs` result, falls back to a
+      sentinel `"default"` when no runs yet. Pro: zero new IPC.
+      Con: empty workspace pre-first-run uses the sentinel; a
+      later run shifts the key.
+   c. Use a UI-supplied workspace nickname (the user types it).
+      Skip the `wsId` rabbit hole entirely. Pro: zero IPC. Con:
+      user friction on first use.
+   **Recommendation**: option (a), one `get_workspace_id` IPC,
+   confirmed before I.7 dispatches. Ranked second: option (b) —
+   acceptable if (a) feels heavy.
+
+2. **Where `AgentPicker` reads `backend` (Step I.8)**: today's
+   `BackendContext` (if it exists; check via `rg
+   BackendContext apps/web-ui/src`) may already make `backend`
+   ambient. If not, the picker takes a new `backend` prop and
+   `App.tsx` threads it down. Confirm before I.8.
+
+3. **`list_agents` permissions / capabilities entry (Step I.6)**:
+   the Tauri app may use a permission whitelist (`capabilities/`
+   directory). If so, the new `list_agents` command needs an
+   entry in the same place `start_ticket_run` is whitelisted.
+   The agent verifies pre-implementation; if no whitelist is in
+   use, this is a no-op.
