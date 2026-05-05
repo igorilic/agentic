@@ -52,8 +52,11 @@ export default function ChatColumn({
         onTicketRunStarted?.({ runId, ticketLabel: title, description });
       }
       setSpecOpen(false);
-    } catch {
-      // Keep dialog open on failure so the user can retry.
+    } catch (err) {
+      // Surface IPC errors via console so the user can diagnose. Dialog stays
+      // open on failure. TODO: lift into a visible error slot once App.tsx
+      // has one (cross-references IssueColumn's identical catch).
+      console.error("createSpec failed:", err);
     }
   };
 

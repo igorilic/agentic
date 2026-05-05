@@ -212,6 +212,33 @@ impl TicketSource for JiraTicketSource {
             reason: "missing 'fields' in response".into(),
         })?;
 
+        // Diagnostic: when JIRA_DEBUG is set, dump every field key with a
+        // short value preview so the user can find their AC custom field id
+        // (typically `customfield_NNNNN`). Set JIRA_AC_FIELD_ID=customfield_NNNNN
+        // in the environment to wire it up.
+        if std::env::var("JIRA_DEBUG").is_ok() {
+            if let Some(map) = fields.as_object() {
+                eprintln!("=== JIRA_DEBUG: fields for {key} ===");
+                let mut keys: Vec<&String> = map.keys().collect();
+                keys.sort();
+                for k in keys {
+                    let v = &map[k];
+                    let preview = match v {
+                        serde_json::Value::Null => "null".to_string(),
+                        serde_json::Value::String(s) => {
+                            let trimmed: String = s.chars().take(80).collect();
+                            format!("\"{trimmed}...\"")
+                        }
+                        serde_json::Value::Object(o) => format!("<object with {} keys>", o.len()),
+                        serde_json::Value::Array(a) => format!("<array len {}>", a.len()),
+                        other => format!("{other:?}").chars().take(80).collect(),
+                    };
+                    eprintln!("  {k}: {preview}");
+                }
+                eprintln!("=== END JIRA_DEBUG ===");
+            }
+        }
+
         let title = fields
             .get("summary")
             .and_then(|v| v.as_str())

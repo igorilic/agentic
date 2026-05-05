@@ -41,8 +41,11 @@ export default function IssueColumn({ ticket, runState, actionItems, onTicketRun
         onTicketRunStarted?.({ runId, ticketLabel: title, description });
       }
       setSpecDialogOpen(false);
-    } catch {
-      // Keep dialog open on failure so the user can retry; errors surface at the App level.
+    } catch (err) {
+      // Surface IPC errors via console so the user can diagnose. Dialog stays
+      // open on failure — pre-flight errors (binary not found, etc.) end up
+      // here. TODO: lift into a visible error slot once App.tsx has one.
+      console.error("createSpec failed:", err);
     }
   };
 

@@ -39,7 +39,10 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
     fetchJira(jiraKey)
       .then((dto) => {
         setTitle(dto.title);
-        setBody(dto.body + (dto.ac ? "\n\n## Acceptance Criteria\n" + dto.ac : ""));
+        // The IPC layer (fetch_jira_ticket_inner) already appends the
+        // '## Acceptance Criteria' section to body when ac is non-empty,
+        // so we use dto.body directly. Appending again would duplicate.
+        setBody(dto.body);
         setPullError(null);
       })
       .catch((e: unknown) => {
