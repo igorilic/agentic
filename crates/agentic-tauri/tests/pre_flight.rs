@@ -421,6 +421,93 @@ fn pre_flight_does_not_require_canonical_4_agents() {
     );
 }
 
+/// An agent file using YAML frontmatter (`---` fences instead of `+++`) must
+/// not fail pre-flight. The bug: list_discoverable (picker) was tolerant but
+/// discover_agent_with_home (pre-flight) was strict, so users with YAML agent
+/// files got "could not be parsed: agent file missing leading '+++' frontmatter
+/// fence" at run-start even though the picker showed the agent correctly.
+#[test]
+fn pre_flight_resolves_yaml_frontmatter_agent() {
+    let (ws, bin_path) = workspace_with_binary("copilot");
+    let home = empty_home();
+
+    let agents_dir = ws.path().join(".github").join("agents");
+    std::fs::create_dir_all(&agents_dir).unwrap();
+    // YAML frontmatter — mirrors the user's actual file format.
+    let yaml_content = "\
+---
+description: \"Writes implementation-ready specs\"
+tools: [read, edit, search, todo, agent]
+model: \"Claude Opus 4.6\"
+---
+You are a spec-writer agent.
+";
+    std::fs::write(agents_dir.join("spec-writer.agent.md"), yaml_content).unwrap();
+
+    unsafe {
+        std::env::set_var("COPILOT_CLI_BIN", &bin_path);
+    }
+
+    let agents = vec!["spec-writer".to_string()];
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::CopilotCli,
+        Some(home.path()),
+        &agents,
+    );
+
+    unsafe {
+        std::env::remove_var("COPILOT_CLI_BIN");
+    }
+
+    assert!(
+        result.is_ok(),
+        "YAML-frontmatter agent must pass pre-flight; got: {:?}",
+        result
+    );
+}
+
+/// Pre-flight parse-error message must not contain the retired `agentic-cli init` hint.
+/// When a file starts with +++ but has no closing fence, the error message
+/// must say "Check the frontmatter syntax" instead of the old scaffold advice.
+#[test]
+fn pre_flight_parse_error_message_does_not_mention_agentic_cli_init() {
+    let (ws, bin_path) = workspace_with_binary("copilot");
+    let home = empty_home();
+
+    let agents_dir = ws.path().join(".github").join("agents");
+    std::fs::create_dir_all(&agents_dir).unwrap();
+    // Intentionally malformed TOML: starts with +++ but no closing fence.
+    let bad_content = "+++\nname = \"broken\"\ndescription = \"no closing fence\"\n";
+    std::fs::write(agents_dir.join("broken.agent.md"), bad_content).unwrap();
+
+    unsafe {
+        std::env::set_var("COPILOT_CLI_BIN", &bin_path);
+    }
+
+    let agents = vec!["broken".to_string()];
+    let result = pre_flight_check_with_home(
+        ws.path(),
+        &BackendKind::CopilotCli,
+        Some(home.path()),
+        &agents,
+    );
+
+    unsafe {
+        std::env::remove_var("COPILOT_CLI_BIN");
+    }
+
+    let err = result.expect_err("malformed TOML agent must still fail pre-flight");
+    assert!(
+        !err.contains("agentic-cli init"),
+        "parse-error message must not mention retired agentic-cli init; got: {err}"
+    );
+    assert!(
+        err.contains("Check the frontmatter syntax"),
+        "parse-error message must say 'Check the frontmatter syntax'; got: {err}"
+    );
+}
+
 /// Single-agent list resolves Ok when the one file exists.
 #[test]
 fn pre_flight_works_with_single_agent() {

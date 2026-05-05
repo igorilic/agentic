@@ -8,18 +8,25 @@ use crate::{CoreError, Result};
 /// using the user's real home directory (via [`dirs::home_dir`]) for the
 /// global fallback paths.
 ///
-/// Strict 2-path scoping per backend (first match wins):
+/// Both `<name>.md` and `<name>.agent.md` are tried in each directory so
+/// that agent files following either the Claude-style convention (`foo.md`)
+/// or the `.agent.md` convention (`foo.agent.md`) are discovered. The `.md`
+/// variant is tried first within each directory (first match wins).
 ///
-/// **ClaudeCode:**
-///   1. `<repo_root>/.claude/agents/<name>.md`  — Claude Code project convention
-///   2. `$HOME/.claude/agents/<name>.md`         — Claude Code global
+/// **ClaudeCode** (4 candidates in priority order):
+///   1. `<repo_root>/.claude/agents/<name>.md`
+///   2. `<repo_root>/.claude/agents/<name>.agent.md`
+///   3. `$HOME/.claude/agents/<name>.md`
+///   4. `$HOME/.claude/agents/<name>.agent.md`
 ///
-/// **CopilotCli:**
-///   1. `<repo_root>/.github/agents/<name>.md`  — Copilot project convention
-///   2. `$HOME/.copilot/agents/<name>.md`        — Copilot global
+/// **CopilotCli** (4 candidates in priority order):
+///   1. `<repo_root>/.github/agents/<name>.md`
+///   2. `<repo_root>/.github/agents/<name>.agent.md`
+///   3. `$HOME/.copilot/agents/<name>.md`
+///   4. `$HOME/.copilot/agents/<name>.agent.md`
 ///
-/// Returns `CoreError::AgentNotFound` with every probed path listed in
-/// `searched` (exactly 2 paths per call) if none of the candidates exist.
+/// Returns `CoreError::AgentNotFound` with all probed paths listed in
+/// `searched` if none of the candidates exist.
 pub fn discover_agent(backend: BackendKind, repo_root: &Path, name: &str) -> Result<Agent> {
     let base = directories::BaseDirs::new();
     let home = base.as_ref().map(|b| b.home_dir());
@@ -55,26 +62,39 @@ fn candidate_paths(
     home: Option<&Path>,
     name: &str,
 ) -> Vec<PathBuf> {
-    let filename = format!("{name}.md");
-    // Strict 2-path scoping: project dir first, then home dir for the backend.
+    // Project dir first, home dir second. Within each dir, .md before .agent.md.
     let mut paths: Vec<PathBuf> = Vec::new();
 
     match backend {
         BackendKind::ClaudeCode => {
-            paths.push(repo_root.join(".claude").join("agents").join(&filename));
+            let project_dir = repo_root.join(".claude").join("agents");
+            paths.extend(paths_for_dir(&project_dir, name));
             if let Some(home) = home {
-                paths.push(home.join(".claude").join("agents").join(&filename));
+                let home_dir = home.join(".claude").join("agents");
+                paths.extend(paths_for_dir(&home_dir, name));
             }
         }
         BackendKind::CopilotCli => {
-            paths.push(repo_root.join(".github").join("agents").join(&filename));
+            let project_dir = repo_root.join(".github").join("agents");
+            paths.extend(paths_for_dir(&project_dir, name));
             if let Some(home) = home {
-                paths.push(home.join(".copilot").join("agents").join(&filename));
+                let home_dir = home.join(".copilot").join("agents");
+                paths.extend(paths_for_dir(&home_dir, name));
             }
         }
     }
 
     paths
+}
+
+/// Return `[<dir>/<name>.md, <dir>/<name>.agent.md]`. The `.md` variant
+/// appears first so the first-match-wins loop in [`discover_agent_with_home`]
+/// always prefers the plain extension.
+fn paths_for_dir(dir: &Path, name: &str) -> [PathBuf; 2] {
+    [
+        dir.join(format!("{name}.md")),
+        dir.join(format!("{name}.agent.md")),
+    ]
 }
 
 #[cfg(test)]
@@ -202,6 +222,113 @@ mod tests {
             "should resolve foo.agent.md for ClaudeCode; got: {:?}",
             result
         );
+    }
+
+    /// A `.agent.md` file using YAML frontmatter (`---` fences) must be
+    /// resolved by `discover_agent_with_home` with a fallback Agent rather
+    /// than propagating a parse error. The fallback carries the full file
+    /// content as `system_prompt` and an empty `description`.
+    #[test]
+    fn it_resolves_yaml_frontmatter_file_with_default_metadata() {
+        let repo = make_temp();
+        let home = make_temp();
+        let agents_dir = repo.path().join(".github").join("agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+        // Mirrors the user's actual file format.
+        let yaml_content = "\
+---
+description: \"Writes implementation-ready specs\"
+tools: [read, edit, search, todo, agent]
+model: \"Claude Opus 4.6\"
+---
+You are a spec-writer agent.
+";
+        std::fs::write(agents_dir.join("spec-writer.agent.md"), yaml_content).unwrap();
+
+        let result = discover_agent_with_home(
+            BackendKind::CopilotCli,
+            repo.path(),
+            Some(home.path()),
+            "spec-writer",
+        );
+        assert!(
+            result.is_ok(),
+            "YAML-frontmatter agent file must resolve without error; got: {:?}",
+            result
+        );
+        let agent = result.unwrap();
+        assert_eq!(agent.name, "spec-writer", "fallback name must equal filename stem");
+        assert!(
+            agent.description.is_empty(),
+            "fallback description must be empty (no TOML parsed); got: {:?}",
+            agent.description
+        );
+        assert!(
+            agent.system_prompt.contains("---"),
+            "system_prompt must contain the full file content including YAML fences; got: {:?}",
+            agent.system_prompt
+        );
+    }
+
+    /// A plain markdown file with no frontmatter fence at all (neither `+++`
+    /// nor `---`) must be resolved with a fallback Agent whose `system_prompt`
+    /// is the entire file content.
+    #[test]
+    fn it_resolves_fenceless_markdown_file() {
+        let repo = make_temp();
+        let home = make_temp();
+        let agents_dir = repo.path().join(".claude").join("agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+        let content = "You are a plain agent with no frontmatter.";
+        std::fs::write(agents_dir.join("foo.md"), content).unwrap();
+
+        let result = discover_agent_with_home(
+            BackendKind::ClaudeCode,
+            repo.path(),
+            Some(home.path()),
+            "foo",
+        );
+        assert!(
+            result.is_ok(),
+            "fenceless markdown file must resolve without error; got: {:?}",
+            result
+        );
+        let agent = result.unwrap();
+        assert_eq!(agent.name, "foo");
+        assert!(
+            agent.system_prompt.contains("plain agent"),
+            "system_prompt must contain the file body; got: {:?}",
+            agent.system_prompt
+        );
+    }
+
+    /// A file that starts with `+++` (user intends TOML) but is missing the
+    /// closing `+++` fence must still propagate a parse error — we do not
+    /// silently fall back for malformed-but-fenced TOML files.
+    #[test]
+    fn it_propagates_malformed_toml_frontmatter_with_missing_close() {
+        let repo = make_temp();
+        let home = make_temp();
+        let agents_dir = repo.path().join(".claude").join("agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+        // Starts with +++ but has no closing fence.
+        let content = "+++\nname = \"bad\"\ndescription = \"missing close\"\n";
+        std::fs::write(agents_dir.join("bad.md"), content).unwrap();
+
+        let result = discover_agent_with_home(
+            BackendKind::ClaudeCode,
+            repo.path(),
+            Some(home.path()),
+            "bad",
+        );
+        assert!(
+            result.is_err(),
+            "malformed TOML (missing closing fence) must propagate parse error; got Ok"
+        );
+        match result.unwrap_err() {
+            crate::CoreError::Parse(_) => {}
+            other => panic!("expected CoreError::Parse; got: {:?}", other),
+        }
     }
 
     /// When no file exists the `searched` field must list exactly 4 paths
