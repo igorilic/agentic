@@ -27,6 +27,14 @@ fn write_malformed_agent(root: &Path, subdir: &str, filename: &str) {
     std::fs::write(dir.join(filename), content).expect("write malformed agent file");
 }
 
+/// Write a plain markdown file with NO frontmatter fence (no `+++`).
+fn write_fenceless_agent(root: &Path, subdir: &str, filename: &str) {
+    let dir = root.join(subdir);
+    std::fs::create_dir_all(&dir).expect("create_dir_all");
+    let content = "# Agent\n\nThis file has no TOML frontmatter at all.\nJust markdown.\n";
+    std::fs::write(dir.join(filename), content).expect("write fenceless agent file");
+}
+
 // ─── 1. Empty result when no agents anywhere ─────────────────────────────────
 
 #[test]
@@ -205,13 +213,15 @@ fn list_discoverable_project_precedence_wins_over_home() {
     );
 }
 
-// ─── 7. .agentic/ universal override beats backend-specific dirs ─────────────
+// ─── 7. .agentic/ is NOT searched — only backend-specific dirs are ───────────
 
 #[test]
-fn list_discoverable_agentic_universal_override_beats_both_backend_dirs() {
+fn list_discoverable_agentic_dir_not_searched_only_backend_specific() {
     let tmp = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
 
+    // Agent only in .agentic/agents/ — NOT returned under strict 2-path scoping.
+    // Agent in .claude/agents/ — IS returned.
     write_agent(
         tmp.path(),
         ".agentic/agents",
@@ -233,7 +243,7 @@ fn list_discoverable_agentic_universal_override_beats_both_backend_dirs() {
     assert_eq!(
         result.len(),
         1,
-        "Should deduplicate when same name appears in multiple dirs; got: {result:?}"
+        "Should have exactly one result from .claude/agents/; got: {result:?}"
     );
     let info = &result[0];
     assert_eq!(
@@ -243,8 +253,8 @@ fn list_discoverable_agentic_universal_override_beats_both_backend_dirs() {
     );
     assert_eq!(
         info.description.as_deref(),
-        Some("agentic version"),
-        ".agentic/agents/ description should win; got: {:?}",
+        Some("claude version"),
+        ".claude/agents/ description should be returned (NOT .agentic/); got: {:?}",
         info.description
     );
 }
@@ -291,13 +301,14 @@ fn list_discoverable_claude_code_cannot_see_github_agents() {
     );
 }
 
-// ─── 10. .agentic/ visible to both backends ──────────────────────────────────
+// ─── 10. .agentic/ is NOT visible to either backend ──────────────────────────
 
 #[test]
-fn list_discoverable_agentic_dir_visible_to_both_backends() {
+fn list_discoverable_agentic_dir_not_visible_to_either_backend() {
     let tmp = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
 
+    // Only in .agentic/agents/ — strict 2-path scoping means neither backend sees it.
     write_agent(
         tmp.path(),
         ".agentic/agents",
@@ -310,13 +321,10 @@ fn list_discoverable_agentic_dir_visible_to_both_backends() {
         let result =
             list_discoverable(backend, tmp.path(), Some(home.path())).expect("list_discoverable");
 
-        assert_eq!(
-            result.len(),
-            1,
-            "{backend:?}: .agentic/agents/ should be visible; got: {result:?}"
+        assert!(
+            result.is_empty(),
+            "{backend:?}: .agentic/agents/ should NOT be visible; got: {result:?}"
         );
-        assert_eq!(result[0].source, AgentSource::Project);
-        assert_eq!(result[0].name, "orchestrator");
     }
 }
 
@@ -391,4 +399,101 @@ fn list_discoverable_mixed_project_and_home_sorted_alphabetically() {
     );
     assert_eq!(result[0].source, AgentSource::Home);
     assert_eq!(result[1].source, AgentSource::Project);
+}
+
+// ─── 14. Strict 2-path scoping: .agentic/ dir is NOT searched ────────────────
+
+#[test]
+fn list_strict_2_path_scope_excludes_agentic_dir() {
+    let tmp = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+
+    // Place an agent ONLY in .agentic/agents/ — with strict scoping this
+    // should NOT be returned for either backend.
+    write_agent(
+        tmp.path(),
+        ".agentic/agents",
+        "orchestrator.md",
+        "orchestrator",
+        "Universal agent",
+    );
+
+    for backend in [BackendKind::ClaudeCode, BackendKind::CopilotCli] {
+        let result = list_discoverable(backend, tmp.path(), Some(home.path()))
+            .expect("list_discoverable");
+        assert!(
+            result.is_empty(),
+            "{backend:?}: .agentic/agents/ should NOT be searched under strict 2-path scoping; got: {result:?}"
+        );
+    }
+}
+
+// ─── 15. Files without frontmatter: listed with description=None ─────────────
+
+#[test]
+fn list_accepts_files_without_frontmatter() {
+    let tmp = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+
+    // No +++ fence at all — should still appear in the list.
+    write_fenceless_agent(tmp.path(), ".claude/agents", "requirements-engineer.md");
+
+    let result = list_discoverable(BackendKind::ClaudeCode, tmp.path(), Some(home.path()))
+        .expect("list_discoverable");
+
+    assert_eq!(result.len(), 1, "fenceless agent should appear; got: {result:?}");
+    assert_eq!(result[0].name, "requirements-engineer");
+    assert_eq!(
+        result[0].description, None,
+        "description should be None when no frontmatter; got: {:?}",
+        result[0].description
+    );
+}
+
+// ─── 16. .agent.md double extension: canonical name strips .agent suffix ─────
+
+#[test]
+fn list_strips_agent_extension() {
+    let tmp = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+
+    // requirements-engineer.agent.md → stem is "requirements-engineer.agent"
+    // After stripping `.agent` suffix → canonical name "requirements-engineer".
+    write_fenceless_agent(
+        tmp.path(),
+        ".github/agents",
+        "requirements-engineer.agent.md",
+    );
+
+    let result = list_discoverable(BackendKind::CopilotCli, tmp.path(), Some(home.path()))
+        .expect("list_discoverable");
+
+    assert_eq!(result.len(), 1, "agent.md file should appear; got: {result:?}");
+    assert_eq!(
+        result[0].name, "requirements-engineer",
+        "name should strip the .agent suffix; got: {:?}",
+        result[0].name
+    );
+}
+
+// ─── 17. Dedup: both foo.md and foo.agent.md → only 1 entry ──────────────────
+
+#[test]
+fn list_dedupes_agent_md_and_md_for_same_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+
+    // Both files resolve to canonical name "foo".
+    write_agent(tmp.path(), ".claude/agents", "foo.md", "foo", "plain");
+    write_fenceless_agent(tmp.path(), ".claude/agents", "foo.agent.md");
+
+    let result = list_discoverable(BackendKind::ClaudeCode, tmp.path(), Some(home.path()))
+        .expect("list_discoverable");
+
+    assert_eq!(
+        result.len(),
+        1,
+        "foo.md and foo.agent.md should deduplicate to 1 entry; got: {result:?}"
+    );
+    assert_eq!(result[0].name, "foo");
 }

@@ -13,14 +13,15 @@ fn write_agent(root: &Path, subdir: &str, filename: &str, name: &str, marker: &s
     std::fs::write(dir.join(filename), content).expect("write agent file");
 }
 
-// ─── backend-scoped priority: .agentic/ is the universal first override ───────
+// ─── strict 2-path scoping: .agentic/ is NOT searched ───────────────────────
 
 #[test]
-fn agentic_dir_wins_for_claude_code() {
+fn discover_strict_2_path_scope_excludes_agentic_dir_for_claude() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     let home = tempfile::tempdir().unwrap(); // empty — no global agents
 
+    // Agent ONLY in .agentic/agents/ — strict scoping means this is NOT found.
     write_agent(
         root,
         ".agentic/agents",
@@ -28,30 +29,25 @@ fn agentic_dir_wins_for_claude_code() {
         "architect",
         "AGENTIC",
     );
-    write_agent(
-        root,
-        ".claude/agents",
-        "architect.md",
-        "architect",
-        "CLAUDE",
-    );
 
-    let agent = discover_agent_with_home(
+    let result = discover_agent_with_home(
         BackendKind::ClaudeCode,
         root,
         Some(home.path()),
         "architect",
-    )
-    .expect("discover");
-    assert!(
-        agent.description.contains("AGENTIC"),
-        ".agentic/agents/ should win for ClaudeCode; got: {}",
-        agent.description
     );
+    match result {
+        Err(CoreError::AgentNotFound { .. }) => {}
+        Ok(a) => panic!(
+            ".agentic/agents/ should NOT be searched under strict 2-path scope (ClaudeCode); got: {}",
+            a.description
+        ),
+        Err(other) => panic!("unexpected error: {other:?}"),
+    }
 }
 
 #[test]
-fn agentic_dir_wins_for_copilot_cli() {
+fn discover_strict_2_path_scope_excludes_agentic_dir_for_copilot() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     let home = tempfile::tempdir().unwrap();
@@ -63,26 +59,21 @@ fn agentic_dir_wins_for_copilot_cli() {
         "architect",
         "AGENTIC",
     );
-    write_agent(
-        root,
-        ".github/agents",
-        "architect.md",
-        "architect",
-        "GITHUB",
-    );
 
-    let agent = discover_agent_with_home(
+    let result = discover_agent_with_home(
         BackendKind::CopilotCli,
         root,
         Some(home.path()),
         "architect",
-    )
-    .expect("discover");
-    assert!(
-        agent.description.contains("AGENTIC"),
-        ".agentic/agents/ should win for CopilotCli; got: {}",
-        agent.description
     );
+    match result {
+        Err(CoreError::AgentNotFound { .. }) => {}
+        Ok(a) => panic!(
+            ".agentic/agents/ should NOT be searched under strict 2-path scope (CopilotCli); got: {}",
+            a.description
+        ),
+        Err(other) => panic!("unexpected error: {other:?}"),
+    }
 }
 
 // ─── ClaudeCode: project-level .claude/agents/ ───────────────────────────────
@@ -231,14 +222,15 @@ fn copilot_backend_does_not_find_claude_agent() {
     }
 }
 
-// ─── .agentic/ universal override ────────────────────────────────────────────
+// ─── .agentic/ is NOT searched (strict 2-path scoping for both backends) ─────
 
 #[test]
-fn agentic_override_works_for_both_backends() {
+fn agentic_dir_not_searched_for_either_backend() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     let home = tempfile::tempdir().unwrap();
 
+    // Agent only in .agentic/agents/ — should NOT be found by either backend.
     write_agent(
         root,
         ".agentic/agents",
@@ -247,31 +239,18 @@ fn agentic_override_works_for_both_backends() {
         "AGENTIC",
     );
 
-    let claude_agent = discover_agent_with_home(
-        BackendKind::ClaudeCode,
-        root,
-        Some(home.path()),
-        "architect",
-    )
-    .expect("ClaudeCode discover");
-    let copilot_agent = discover_agent_with_home(
-        BackendKind::CopilotCli,
-        root,
-        Some(home.path()),
-        "architect",
-    )
-    .expect("CopilotCli discover");
-
-    assert!(
-        claude_agent.description.contains("AGENTIC"),
-        ".agentic/ should work for ClaudeCode; got: {}",
-        claude_agent.description
-    );
-    assert!(
-        copilot_agent.description.contains("AGENTIC"),
-        ".agentic/ should work for CopilotCli; got: {}",
-        copilot_agent.description
-    );
+    for backend in [BackendKind::ClaudeCode, BackendKind::CopilotCli] {
+        let result =
+            discover_agent_with_home(backend, root, Some(home.path()), "architect");
+        match result {
+            Err(CoreError::AgentNotFound { .. }) => {}
+            Ok(a) => panic!(
+                "{backend:?}: .agentic/agents/ should NOT be searched; got: {}",
+                a.description
+            ),
+            Err(other) => panic!("{backend:?}: unexpected error: {other:?}"),
+        }
+    }
 }
 
 // ─── home-dir fallback per backend ───────────────────────────────────────────
@@ -470,7 +449,7 @@ fn default_discover_agent_resolves_real_home_without_panicking_claude() {
     let tmp = tempfile::tempdir().unwrap();
     write_agent(
         tmp.path(),
-        ".agentic/agents",
+        ".claude/agents",
         "architect.md",
         "architect",
         "REPO",
@@ -484,7 +463,7 @@ fn default_discover_agent_resolves_real_home_without_panicking_copilot() {
     let tmp = tempfile::tempdir().unwrap();
     write_agent(
         tmp.path(),
-        ".agentic/agents",
+        ".github/agents",
         "architect.md",
         "architect",
         "REPO",
@@ -493,7 +472,7 @@ fn default_discover_agent_resolves_real_home_without_panicking_copilot() {
     assert_eq!(agent.name, "architect");
 }
 
-// ─── error lists exactly the backend's 3 paths ───────────────────────────────
+// ─── error lists exactly the backend's 2 paths (strict 2-path scoping) ───────
 
 #[test]
 fn error_lists_all_searched_paths_for_claude_backend() {
@@ -511,21 +490,24 @@ fn error_lists_all_searched_paths_for_claude_backend() {
             assert_eq!(name, "nonexistent");
             assert_eq!(
                 searched.len(),
-                3,
-                "ClaudeCode should search exactly 3 paths; got: {searched:?}"
+                2,
+                "ClaudeCode should search exactly 2 paths (no .agentic/); got: {searched:?}"
             );
             let paths: Vec<String> = searched
                 .iter()
                 .map(|p| p.to_string_lossy().to_string())
                 .collect();
-            assert!(paths[0].contains(".agentic/agents"), "1st: {}", paths[0]);
-            assert!(paths[1].contains(".claude/agents"), "2nd: {}", paths[1]);
+            assert!(paths[0].contains(".claude/agents"), "1st: {}", paths[0]);
             assert!(
-                paths[2].contains(".claude/agents"),
-                "3rd (home): {}",
-                paths[2]
+                paths[1].contains(".claude/agents"),
+                "2nd (home): {}",
+                paths[1]
             );
-            // Must NOT contain .github or .copilot paths
+            // Must NOT contain .agentic, .github or .copilot paths
+            assert!(
+                !paths.iter().any(|p| p.contains(".agentic")),
+                "should not list .agentic paths; got: {paths:?}"
+            );
             assert!(
                 !paths.iter().any(|p| p.contains(".github")),
                 "should not list .github paths; got: {paths:?}"
@@ -556,21 +538,24 @@ fn error_lists_all_searched_paths_for_copilot_backend() {
             assert_eq!(name, "nonexistent");
             assert_eq!(
                 searched.len(),
-                3,
-                "CopilotCli should search exactly 3 paths; got: {searched:?}"
+                2,
+                "CopilotCli should search exactly 2 paths (no .agentic/); got: {searched:?}"
             );
             let paths: Vec<String> = searched
                 .iter()
                 .map(|p| p.to_string_lossy().to_string())
                 .collect();
-            assert!(paths[0].contains(".agentic/agents"), "1st: {}", paths[0]);
-            assert!(paths[1].contains(".github/agents"), "2nd: {}", paths[1]);
+            assert!(paths[0].contains(".github/agents"), "1st: {}", paths[0]);
             assert!(
-                paths[2].contains(".copilot/agents"),
-                "3rd (home): {}",
-                paths[2]
+                paths[1].contains(".copilot/agents"),
+                "2nd (home): {}",
+                paths[1]
             );
-            // Must NOT contain .claude paths
+            // Must NOT contain .agentic or .claude paths
+            assert!(
+                !paths.iter().any(|p| p.contains(".agentic")),
+                "should not list .agentic paths; got: {paths:?}"
+            );
             assert!(
                 !paths.iter().any(|p| p.contains(".claude")),
                 "should not list .claude paths for CopilotCli; got: {paths:?}"
