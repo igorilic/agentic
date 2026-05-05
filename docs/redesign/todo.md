@@ -4577,7 +4577,7 @@ rg -n "repo>/agents|legacy agents" docs/ crates/agentic-cli/src/
 
 ### Phase G status checklist
 
-- [ ] G.1 promote BackendKind to agentic-core
+- [x] G.1 promote BackendKind to agentic-core
 - [ ] G.2 backend-scoped `discover_agent`
 - [ ] G.3 pre-flight error lists searched paths
 - [ ] G.4 live copilot smoke test
