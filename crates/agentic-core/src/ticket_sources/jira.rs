@@ -62,8 +62,48 @@ fn parse_ref(reference: &str) -> Result<&str, TicketSourceError> {
 
 /// Recursively walk an ADF node tree and extract plain text.
 fn adf_to_plain_text(node: &serde_json::Value) -> String {
+    // Self-hosted Jira (v2 REST API) returns `description` as a plain wiki-
+    // markup string, not an ADF object. Atlassian Cloud (v3) returns ADF.
+    // Handle both: strings flow through unchanged, ADF objects walk the tree.
+    if let Some(s) = node.as_str() {
+        return normalize_wiki_headings(s);
+    }
     let mut out = String::new();
     walk_adf(node, &mut out);
+    out
+}
+
+/// Convert Jira wiki-markup headings (`h1.`, `h2.`, ... `h6.`) to markdown
+/// (`#`, `##`, ... `######`) so `parse_acceptance_criteria` can find them.
+/// Only operates on lines whose first non-whitespace token matches `hN.`;
+/// everything else passes through unchanged.
+fn normalize_wiki_headings(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for (i, line) in input.lines().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        let trimmed = line.trim_start();
+        let lead = &line[..line.len() - trimmed.len()];
+        // Match h1. .. h6. followed by space.
+        if trimmed.len() > 3
+            && trimmed.starts_with('h')
+            && trimmed[1..2]
+                .chars()
+                .next()
+                .is_some_and(|c| ('1'..='6').contains(&c))
+            && &trimmed[2..3] == "."
+            && trimmed[3..].starts_with(' ')
+        {
+            let level = (trimmed.as_bytes()[1] - b'0') as usize;
+            out.push_str(lead);
+            out.push_str(&"#".repeat(level));
+            out.push(' ');
+            out.push_str(trimmed[4..].trim_start());
+        } else {
+            out.push_str(line);
+        }
+    }
     out
 }
 
@@ -259,6 +299,41 @@ mod tests {
         let text = adf_to_plain_text(&doc);
         assert!(text.contains("Hello"));
         assert!(text.contains("World"));
+    }
+
+    #[test]
+    fn adf_walker_handles_plain_string_value() {
+        // Self-hosted Jira (v2 API) returns `description` as a plain string,
+        // not an ADF object. The walker must pass strings through unchanged
+        // (after wiki-heading normalization) so the body isn't silently empty.
+        let val = serde_json::json!("Plain description body.");
+        assert_eq!(adf_to_plain_text(&val), "Plain description body.");
+    }
+
+    #[test]
+    fn adf_walker_normalizes_wiki_headings_in_plain_strings() {
+        // Heidelberg's self-hosted Jira returns wiki markup. parse_acceptance_criteria
+        // expects markdown headings, so adf_to_plain_text normalizes h1.-h6. to # ... ######.
+        let val = serde_json::json!("h2. Acceptance Criteria\nMust work\nh3. Notes\nDone.");
+        let out = adf_to_plain_text(&val);
+        assert!(
+            out.contains("## Acceptance Criteria"),
+            "expected ## heading, got: {out:?}"
+        );
+        assert!(
+            out.contains("### Notes"),
+            "expected ### heading, got: {out:?}"
+        );
+        assert!(out.contains("Must work"));
+    }
+
+    #[test]
+    fn adf_walker_preserves_non_heading_content() {
+        // Lines without h1.-h6. prefix flow through unchanged, including
+        // lines that incidentally start with `h` (e.g. "hello").
+        let val = serde_json::json!("hello world\nh7. not a heading\nh3 missing dot");
+        let out = adf_to_plain_text(&val);
+        assert_eq!(out, "hello world\nh7. not a heading\nh3 missing dot");
     }
 
     #[test]
