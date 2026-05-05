@@ -1,5 +1,5 @@
 use agentic_core::events::{TicketKind, TicketRef};
-use agentic_core::ticket_sources::{JiraTicketSource, TicketSource, TicketSourceError};
+use agentic_core::ticket_sources::{JiraAuth, JiraTicketSource, TicketSource, TicketSourceError};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -8,6 +8,13 @@ fn jira_ref(reference: &str) -> TicketRef {
         kind: TicketKind::Jira,
         reference: reference.to_string(),
         title: None,
+    }
+}
+
+fn basic_auth() -> JiraAuth {
+    JiraAuth::Basic {
+        email: "user@example.com".into(),
+        token: "token".into(),
     }
 }
 
@@ -41,7 +48,7 @@ async fn fetch_returns_ticket_with_ac_from_description() {
         .mount(&server)
         .await;
 
-    let src = JiraTicketSource::new(server.uri(), "user@example.com", "token", None);
+    let src = JiraTicketSource::new(server.uri(), basic_auth(), None);
     let r = jira_ref("PROJ-1");
     let ticket = src.fetch(&r).await.unwrap();
     assert_eq!(ticket.title, "Add a feature");
@@ -88,7 +95,14 @@ async fn fetch_uses_ac_custom_field_when_configured() {
         .mount(&server)
         .await;
 
-    let src = JiraTicketSource::new(server.uri(), "u", "t", Some("customfield_10100".into()));
+    let src = JiraTicketSource::new(
+        server.uri(),
+        JiraAuth::Basic {
+            email: "u".into(),
+            token: "t".into(),
+        },
+        Some("customfield_10100".into()),
+    );
     let r = jira_ref("PROJ-2");
     let ticket = src.fetch(&r).await.unwrap();
     assert_eq!(ticket.ac_field.as_deref(), Some("AC from custom field."));
@@ -123,7 +137,14 @@ async fn fetch_returns_no_ac_when_custom_field_absent_from_response() {
         .mount(&server)
         .await;
 
-    let src = JiraTicketSource::new(server.uri(), "u", "t", Some("customfield_10100".into()));
+    let src = JiraTicketSource::new(
+        server.uri(),
+        JiraAuth::Basic {
+            email: "u".into(),
+            token: "t".into(),
+        },
+        Some("customfield_10100".into()),
+    );
     let r = jira_ref("PROJ-3");
     let ticket = src.fetch(&r).await.unwrap();
     assert!(
@@ -141,7 +162,14 @@ async fn fetch_returns_not_found_on_404() {
         .respond_with(ResponseTemplate::new(404))
         .mount(&server)
         .await;
-    let src = JiraTicketSource::new(server.uri(), "u", "t", None);
+    let src = JiraTicketSource::new(
+        server.uri(),
+        JiraAuth::Basic {
+            email: "u".into(),
+            token: "t".into(),
+        },
+        None,
+    );
     let r = jira_ref("PROJ-4");
     let err = src.fetch(&r).await.unwrap_err();
     assert!(
@@ -159,7 +187,14 @@ async fn fetch_returns_auth_error_on_401() {
         .respond_with(ResponseTemplate::new(401))
         .mount(&server)
         .await;
-    let src = JiraTicketSource::new(server.uri(), "u", "bad-token", None);
+    let src = JiraTicketSource::new(
+        server.uri(),
+        JiraAuth::Basic {
+            email: "u".into(),
+            token: "bad-token".into(),
+        },
+        None,
+    );
     let r = jira_ref("PROJ-401");
     let err = src.fetch(&r).await.unwrap_err();
     assert!(
@@ -195,7 +230,14 @@ async fn fetch_parses_comments_with_adf_bodies() {
         .mount(&server)
         .await;
 
-    let src = JiraTicketSource::new(server.uri(), "u", "t", None);
+    let src = JiraTicketSource::new(
+        server.uri(),
+        JiraAuth::Basic {
+            email: "u".into(),
+            token: "t".into(),
+        },
+        None,
+    );
     let r = jira_ref("PROJ-5");
     let ticket = src.fetch(&r).await.unwrap();
     assert_eq!(ticket.comments.len(), 1);
@@ -213,7 +255,14 @@ async fn fetch_parses_comments_with_adf_bodies() {
 // Test 6: invalid reference key
 #[tokio::test]
 async fn fetch_rejects_invalid_reference() {
-    let src = JiraTicketSource::new("https://example", "u", "t", None);
+    let src = JiraTicketSource::new(
+        "https://example",
+        JiraAuth::Basic {
+            email: "u".into(),
+            token: "t".into(),
+        },
+        None,
+    );
     for bad in ["", "noproject", "lower-123", "PROJ-", "-123", "PROJ-abc"] {
         let r = TicketRef {
             kind: TicketKind::Jira,
@@ -230,7 +279,14 @@ async fn fetch_rejects_invalid_reference() {
 // Test 7: kind mismatch
 #[tokio::test]
 async fn fetch_rejects_non_jira_kind() {
-    let src = JiraTicketSource::new("https://example", "u", "t", None);
+    let src = JiraTicketSource::new(
+        "https://example",
+        JiraAuth::Basic {
+            email: "u".into(),
+            token: "t".into(),
+        },
+        None,
+    );
     let r = TicketRef {
         kind: TicketKind::GithubIssue,
         reference: "PROJ-1".into(),
@@ -247,4 +303,35 @@ async fn fetch_rejects_non_jira_kind() {
         ),
         "expected KindMismatch, got: {err:?}"
     );
+}
+
+// Test 8 (NEW): Bearer auth sends correct Authorization header
+#[tokio::test]
+async fn fetch_with_bearer_auth_sends_bearer_header() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/issue/PROJ-8"))
+        .and(header("Authorization", "Bearer pat-xyz"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "key": "PROJ-8",
+            "self": "x",
+            "fields": {
+                "summary": "Bearer test",
+                "description": {"type": "doc", "version": 1, "content": []},
+                "comment": {"comments": []}
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let src = JiraTicketSource::new(
+        server.uri(),
+        JiraAuth::Bearer {
+            token: "pat-xyz".into(),
+        },
+        None,
+    );
+    let r = jira_ref("PROJ-8");
+    let ticket = src.fetch(&r).await.unwrap();
+    assert_eq!(ticket.title, "Bearer test");
 }

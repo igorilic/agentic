@@ -1,20 +1,23 @@
 //! Tauri IPC for fetching a Jira ticket by key.
 //!
-//! Reads `JIRA_URL`, `JIRA_USER_EMAIL`, `JIRA_API_TOKEN` (required) and
-//! optionally `JIRA_AC_FIELD_ID` **per call** so the user can export them
-//! in their shell and re-click "Pull" without restarting the binary.
+//! Reads `JIRA_URL`, `JIRA_API_TOKEN` (always required) and optionally
+//! `JIRA_USER_EMAIL`, `JIRA_AC_FIELD_ID`, `JIRA_AUTH_SCHEME` **per call** so
+//! the user can export them in their shell and re-click "Pull" without
+//! restarting the binary.
 //!
 //! The base URL is the bare host (e.g. `https://jira.heidelbergcement.com`).
 //! `/rest/api/2` is appended here (Server / Data Centre compatible).
 //!
-//! Auth assumption: JIRA_API_TOKEN is treated as a PAT or app-password
-//! usable with Basic auth (email:token base-64). Self-hosted Jira Server /
-//! Data Centre supports this when the token is generated as a personal access
-//! token. If a 401 is returned, Bearer auth may be needed — tracked
-//! separately; do not change the auth scheme here without a follow-up step.
+//! Auth scheme:
+//! - `bearer` (default): `Authorization: Bearer <JIRA_API_TOKEN>`.
+//!   Used by self-hosted Jira Server / Data Centre with PATs.
+//! - `basic`: `Authorization: Basic base64(<JIRA_USER_EMAIL>:<JIRA_API_TOKEN>)`.
+//!   Used by Atlassian Cloud. Requires `JIRA_USER_EMAIL` to be set.
+//!
+//! Set `JIRA_AUTH_SCHEME=basic` (case-insensitive) to switch to Basic auth.
 
 use agentic_core::{
-    JiraTicketSource, TicketRef,
+    JiraAuth, JiraTicketSource, TicketRef,
     events::TicketKind,
     ticket_sources::{Ticket, TicketSource},
 };
@@ -37,14 +40,21 @@ pub struct JiraTicketDto {
 
 /// Return the names of any required Jira environment variables that are not
 /// currently set. `JIRA_AC_FIELD_ID` is optional and is never listed.
+/// `JIRA_USER_EMAIL` is required only when `JIRA_AUTH_SCHEME=basic`.
 ///
 /// Reserved for future direct-from-IPC use (current Tauri command does the
 /// per-call read inline). Kept as a named API so a follow-up "show config
 /// status" command can reuse it without re-implementing the env-var list.
 #[allow(dead_code)]
 pub(crate) fn missing_env_vars() -> Vec<&'static str> {
-    const REQUIRED: &[&str] = &["JIRA_URL", "JIRA_USER_EMAIL", "JIRA_API_TOKEN"];
-    REQUIRED
+    let scheme = std::env::var("JIRA_AUTH_SCHEME")
+        .unwrap_or_default()
+        .to_lowercase();
+    let mut required: Vec<&'static str> = vec!["JIRA_URL", "JIRA_API_TOKEN"];
+    if scheme == "basic" {
+        required.push("JIRA_USER_EMAIL");
+    }
+    required
         .iter()
         .filter(|name| std::env::var(name).is_err())
         .copied()
@@ -97,6 +107,7 @@ pub(crate) async fn fetch_jira_ticket_inner<F>(
     env_email: Option<String>,
     env_token: Option<String>,
     env_ac_field: Option<String>,
+    env_auth_scheme: Option<String>,
     key: String,
 ) -> Result<JiraTicketDto, String>
 where
@@ -106,16 +117,23 @@ where
     //    returns the same error regardless of environment state.
     validate_key(&key)?;
 
-    // 2. Check required env vars; build a clear message listing every missing one.
+    // 2. Determine auth scheme first so we know which env vars are required.
+    let scheme = env_auth_scheme
+        .as_deref()
+        .unwrap_or("bearer")
+        .to_lowercase();
+
+    // 3. Check required env vars; build a clear message listing every missing one.
     let mut missing: Vec<&'static str> = Vec::new();
     if env_url.is_none() {
         missing.push("JIRA_URL");
     }
-    if env_email.is_none() {
-        missing.push("JIRA_USER_EMAIL");
-    }
     if env_token.is_none() {
         missing.push("JIRA_API_TOKEN");
+    }
+    // JIRA_USER_EMAIL is only required for basic auth.
+    if scheme == "basic" && env_email.is_none() {
+        missing.push("JIRA_USER_EMAIL");
     }
     if !missing.is_empty() {
         return Err(format!(
@@ -125,16 +143,30 @@ where
     }
 
     let raw_url = env_url.expect("checked above");
-    let email = env_email.expect("checked above");
     let token = env_token.expect("checked above");
     let base_url = build_base_url(&raw_url);
 
-    // 3. Fetch.
+    // 4. Build JiraAuth from the scheme.
+    let auth = match scheme.as_str() {
+        "basic" => {
+            let email = env_email
+                .ok_or_else(|| "missing JIRA_USER_EMAIL (required for basic auth)".to_string())?;
+            JiraAuth::Basic { email, token }
+        }
+        "bearer" | "" => JiraAuth::Bearer { token },
+        other => {
+            return Err(format!(
+                "unknown JIRA_AUTH_SCHEME: {other:?} (expected 'bearer' or 'basic')"
+            ));
+        }
+    };
+
+    // 5. Fetch.
     let ticket = fetcher
-        .fetch(base_url, email, token, env_ac_field, key.clone())
+        .fetch(base_url, auth, env_ac_field, key.clone())
         .await?;
 
-    // 4. Map Ticket → DTO. Append the AC section to body when present.
+    // 6. Map Ticket → DTO. Append the AC section to body when present.
     let body = match &ticket.ac_field {
         Some(ac) if !ac.is_empty() => {
             format!("{}\n\n## Acceptance Criteria\n{}", ticket.body, ac)
@@ -156,8 +188,7 @@ pub(crate) trait AsyncFetcher: Send + Sync {
     async fn fetch(
         &self,
         base_url: String,
-        email: String,
-        token: String,
+        auth: JiraAuth,
         ac_field: Option<String>,
         key: String,
     ) -> Result<Ticket, String>;
@@ -171,12 +202,11 @@ impl AsyncFetcher for LiveFetcher {
     async fn fetch(
         &self,
         base_url: String,
-        email: String,
-        token: String,
+        auth: JiraAuth,
         ac_field: Option<String>,
         key: String,
     ) -> Result<Ticket, String> {
-        let source = JiraTicketSource::new(base_url, email, token, ac_field);
+        let source = JiraTicketSource::new(base_url, auth, ac_field);
         let ticket_ref = TicketRef {
             kind: TicketKind::Jira,
             reference: key,
@@ -192,16 +222,19 @@ impl AsyncFetcher for LiveFetcher {
 
 /// Pull a Jira ticket by key and return a flat DTO.
 ///
-/// Env vars read at call time: `JIRA_URL` (bare host), `JIRA_USER_EMAIL`,
-/// `JIRA_API_TOKEN`, optionally `JIRA_AC_FIELD_ID` (e.g. `customfield_10100`).
-/// When `JIRA_AC_FIELD_ID` is absent, `JiraTicketSource`'s description-parse
-/// fallback is used instead.
+/// Env vars read at call time:
+/// - `JIRA_URL` (required): bare host, e.g. `https://jira.example.com`.
+/// - `JIRA_API_TOKEN` (required): PAT or API token.
+/// - `JIRA_AUTH_SCHEME` (optional, default `bearer`): `bearer` or `basic`.
+/// - `JIRA_USER_EMAIL` (required only when `JIRA_AUTH_SCHEME=basic`).
+/// - `JIRA_AC_FIELD_ID` (optional): custom field id, e.g. `customfield_10100`.
 #[tauri::command]
 pub async fn fetch_jira_ticket(key: String) -> Result<JiraTicketDto, String> {
     let env_url = std::env::var("JIRA_URL").ok();
     let env_email = std::env::var("JIRA_USER_EMAIL").ok();
     let env_token = std::env::var("JIRA_API_TOKEN").ok();
     let env_ac_field = std::env::var("JIRA_AC_FIELD_ID").ok();
+    let env_auth_scheme = std::env::var("JIRA_AUTH_SCHEME").ok();
 
     fetch_jira_ticket_inner(
         LiveFetcher,
@@ -209,6 +242,7 @@ pub async fn fetch_jira_ticket(key: String) -> Result<JiraTicketDto, String> {
         env_email,
         env_token,
         env_ac_field,
+        env_auth_scheme,
         key,
     )
     .await
@@ -246,8 +280,7 @@ mod tests {
         async fn fetch(
             &self,
             _base_url: String,
-            _email: String,
-            _token: String,
+            _auth: JiraAuth,
             _ac_field: Option<String>,
             _key: String,
         ) -> Result<Ticket, String> {
@@ -255,11 +288,32 @@ mod tests {
         }
     }
 
-    fn all_env(
+    /// Helper: produces env-var tuple (url, email, token, ac_field, auth_scheme).
+    fn bearer_env(
+        url: &str,
+        token: &str,
+    ) -> (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) {
+        (
+            Some(url.to_string()),
+            None, // no email needed for bearer
+            Some(token.to_string()),
+            None,
+            None, // defaults to bearer
+        )
+    }
+
+    fn basic_env(
         url: &str,
         email: &str,
         token: &str,
     ) -> (
+        Option<String>,
         Option<String>,
         Option<String>,
         Option<String>,
@@ -270,6 +324,7 @@ mod tests {
             Some(email.to_string()),
             Some(token.to_string()),
             None,
+            Some("basic".to_string()),
         )
     }
 
@@ -278,12 +333,13 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn missing_env_vars_returns_unset_names() {
+    fn missing_env_vars_returns_unset_names_for_bearer() {
         temp_env::with_vars(
             [
                 ("JIRA_URL", None::<&str>),
                 ("JIRA_USER_EMAIL", None::<&str>),
                 ("JIRA_API_TOKEN", None::<&str>),
+                ("JIRA_AUTH_SCHEME", None::<&str>),
             ],
             || {
                 let missing = missing_env_vars();
@@ -292,24 +348,45 @@ mod tests {
                     "expected JIRA_URL in {missing:?}"
                 );
                 assert!(
-                    missing.contains(&"JIRA_USER_EMAIL"),
-                    "expected JIRA_USER_EMAIL in {missing:?}"
-                );
-                assert!(
                     missing.contains(&"JIRA_API_TOKEN"),
                     "expected JIRA_API_TOKEN in {missing:?}"
+                );
+                // Bearer mode: JIRA_USER_EMAIL is NOT required
+                assert!(
+                    !missing.contains(&"JIRA_USER_EMAIL"),
+                    "JIRA_USER_EMAIL should not be required for bearer mode, got {missing:?}"
                 );
             },
         );
     }
 
     #[test]
-    fn missing_env_vars_returns_empty_when_all_set() {
+    fn missing_env_vars_includes_email_for_basic_scheme() {
+        temp_env::with_vars(
+            [
+                ("JIRA_URL", None::<&str>),
+                ("JIRA_USER_EMAIL", None::<&str>),
+                ("JIRA_API_TOKEN", None::<&str>),
+                ("JIRA_AUTH_SCHEME", Some("basic")),
+            ],
+            || {
+                let missing = missing_env_vars();
+                assert!(
+                    missing.contains(&"JIRA_USER_EMAIL"),
+                    "expected JIRA_USER_EMAIL in {missing:?} for basic scheme"
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn missing_env_vars_returns_empty_when_all_set_bearer() {
         temp_env::with_vars(
             [
                 ("JIRA_URL", Some("https://jira.example.com")),
-                ("JIRA_USER_EMAIL", Some("user@example.com")),
+                ("JIRA_USER_EMAIL", None::<&str>),
                 ("JIRA_API_TOKEN", Some("tok")),
+                ("JIRA_AUTH_SCHEME", None::<&str>),
             ],
             || {
                 let missing = missing_env_vars();
@@ -420,10 +497,10 @@ mod tests {
     async fn fetch_jira_ticket_returns_dto_for_valid_key() {
         let ticket = make_ticket("Fix the bug", "Some description", None);
         let fetcher = FakeFetcher { result: Ok(ticket) };
-        let (url, email, token, ac) =
-            all_env("https://jira.example.com", "user@example.com", "tok");
+        let (url, email, token, ac, scheme) =
+            bearer_env("https://jira.example.com", "tok");
 
-        let dto = fetch_jira_ticket_inner(fetcher, url, email, token, ac, "PROJ-1".to_string())
+        let dto = fetch_jira_ticket_inner(fetcher, url, email, token, ac, scheme, "PROJ-1".to_string())
             .await
             .expect("should succeed");
 
@@ -437,10 +514,10 @@ mod tests {
     async fn fetch_jira_ticket_appends_ac_to_body_when_present() {
         let ticket = make_ticket("Title", "Description body", Some("Must work"));
         let fetcher = FakeFetcher { result: Ok(ticket) };
-        let (url, email, token, ac) =
-            all_env("https://jira.example.com", "user@example.com", "tok");
+        let (url, email, token, ac, scheme) =
+            bearer_env("https://jira.example.com", "tok");
 
-        let dto = fetch_jira_ticket_inner(fetcher, url, email, token, ac, "ABC-10".to_string())
+        let dto = fetch_jira_ticket_inner(fetcher, url, email, token, ac, scheme, "ABC-10".to_string())
             .await
             .expect("should succeed");
 
@@ -456,10 +533,10 @@ mod tests {
     async fn fetch_jira_ticket_omits_ac_section_when_absent() {
         let ticket = make_ticket("Title", "Raw description", None);
         let fetcher = FakeFetcher { result: Ok(ticket) };
-        let (url, email, token, ac) =
-            all_env("https://jira.example.com", "user@example.com", "tok");
+        let (url, email, token, ac, scheme) =
+            bearer_env("https://jira.example.com", "tok");
 
-        let dto = fetch_jira_ticket_inner(fetcher, url, email, token, ac, "XY1-42".to_string())
+        let dto = fetch_jira_ticket_inner(fetcher, url, email, token, ac, scheme, "XY1-42".to_string())
             .await
             .expect("should succeed");
 
@@ -475,10 +552,10 @@ mod tests {
         let fetcher = FakeFetcher {
             result: Ok(make_ticket("T", "B", None)),
         };
-        let (url, email, token, ac) =
-            all_env("https://jira.example.com", "user@example.com", "tok");
+        let (url, email, token, ac, scheme) =
+            bearer_env("https://jira.example.com", "tok");
 
-        let err = fetch_jira_ticket_inner(fetcher, url, email, token, ac, "lowercase".to_string())
+        let err = fetch_jira_ticket_inner(fetcher, url, email, token, ac, scheme, "lowercase".to_string())
             .await
             .unwrap_err();
 
@@ -489,18 +566,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fetch_jira_ticket_rejects_missing_env_vars() {
+    async fn fetch_jira_ticket_rejects_missing_url_and_token() {
         let fetcher = FakeFetcher {
             result: Ok(make_ticket("T", "B", None)),
         };
 
-        // Pass None for all required env vars.
+        // Pass None for JIRA_URL and JIRA_API_TOKEN (bearer mode — email not required).
         let err = fetch_jira_ticket_inner(
             fetcher,
             None, // JIRA_URL missing
-            None, // JIRA_USER_EMAIL missing
+            None, // JIRA_USER_EMAIL missing (not required for bearer)
             None, // JIRA_API_TOKEN missing
             None,
+            None, // bearer by default
             "PROJ-1".to_string(),
         )
         .await
@@ -515,12 +593,170 @@ mod tests {
             "expected JIRA_URL listed, got: {err}"
         );
         assert!(
-            err.contains("JIRA_USER_EMAIL"),
-            "expected JIRA_USER_EMAIL listed, got: {err}"
-        );
-        assert!(
             err.contains("JIRA_API_TOKEN"),
             "expected JIRA_API_TOKEN listed, got: {err}"
+        );
+        // Bearer mode: JIRA_USER_EMAIL should NOT be in the missing list
+        assert!(
+            !err.contains("JIRA_USER_EMAIL"),
+            "JIRA_USER_EMAIL should not be listed for bearer mode, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_jira_ticket_rejects_basic_without_email() {
+        let fetcher = FakeFetcher {
+            result: Ok(make_ticket("T", "B", None)),
+        };
+
+        let err = fetch_jira_ticket_inner(
+            fetcher,
+            Some("https://jira.example.com".to_string()),
+            None, // JIRA_USER_EMAIL missing
+            Some("tok".to_string()),
+            None,
+            Some("basic".to_string()), // basic scheme requires email
+            "PROJ-1".to_string(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            err.contains("JIRA_USER_EMAIL"),
+            "expected JIRA_USER_EMAIL listed for basic auth error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_jira_ticket_rejects_unknown_auth_scheme() {
+        let fetcher = FakeFetcher {
+            result: Ok(make_ticket("T", "B", None)),
+        };
+
+        let err = fetch_jira_ticket_inner(
+            fetcher,
+            Some("https://jira.example.com".to_string()),
+            None,
+            Some("tok".to_string()),
+            None,
+            Some("digest".to_string()), // unknown scheme
+            "PROJ-1".to_string(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            err.contains("unknown JIRA_AUTH_SCHEME"),
+            "expected 'unknown JIRA_AUTH_SCHEME' error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_jira_ticket_uses_bearer_auth_by_default() {
+        // Capture the JiraAuth passed to the fetcher and assert it's Bearer.
+        struct CaptureAuthFetcher {
+            captured_auth: std::sync::Arc<std::sync::Mutex<Option<String>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl AsyncFetcher for CaptureAuthFetcher {
+            async fn fetch(
+                &self,
+                _base_url: String,
+                auth: JiraAuth,
+                _ac_field: Option<String>,
+                _key: String,
+            ) -> Result<Ticket, String> {
+                let kind = match &auth {
+                    JiraAuth::Bearer { .. } => "bearer".to_string(),
+                    JiraAuth::Basic { .. } => "basic".to_string(),
+                };
+                *self.captured_auth.lock().unwrap() = Some(kind);
+                Ok(Ticket {
+                    title: "T".to_string(),
+                    body: "B".to_string(),
+                    comments: vec![],
+                    ac_field: None,
+                    url: None,
+                })
+            }
+        }
+
+        let captured = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let fetcher = CaptureAuthFetcher {
+            captured_auth: captured.clone(),
+        };
+
+        let _ = fetch_jira_ticket_inner(
+            fetcher,
+            Some("https://jira.example.com".to_string()),
+            None, // no email — bearer doesn't need it
+            Some("my-pat".to_string()),
+            None,
+            None, // no auth scheme → defaults to bearer
+            "PROJ-1".to_string(),
+        )
+        .await
+        .expect("should succeed");
+
+        let auth_kind = captured.lock().unwrap().clone().expect("fetcher was called");
+        assert_eq!(
+            auth_kind, "bearer",
+            "default auth scheme should be bearer, got: {auth_kind}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_jira_ticket_uses_basic_when_scheme_is_basic() {
+        struct CaptureAuthFetcher {
+            captured_auth: std::sync::Arc<std::sync::Mutex<Option<String>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl AsyncFetcher for CaptureAuthFetcher {
+            async fn fetch(
+                &self,
+                _base_url: String,
+                auth: JiraAuth,
+                _ac_field: Option<String>,
+                _key: String,
+            ) -> Result<Ticket, String> {
+                let kind = match &auth {
+                    JiraAuth::Bearer { .. } => "bearer".to_string(),
+                    JiraAuth::Basic { .. } => "basic".to_string(),
+                };
+                *self.captured_auth.lock().unwrap() = Some(kind);
+                Ok(Ticket {
+                    title: "T".to_string(),
+                    body: "B".to_string(),
+                    comments: vec![],
+                    ac_field: None,
+                    url: None,
+                })
+            }
+        }
+
+        let captured = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let fetcher = CaptureAuthFetcher {
+            captured_auth: captured.clone(),
+        };
+
+        let _ = fetch_jira_ticket_inner(
+            fetcher,
+            Some("https://jira.example.com".to_string()),
+            Some("user@example.com".to_string()),
+            Some("tok".to_string()),
+            None,
+            Some("basic".to_string()),
+            "PROJ-1".to_string(),
+        )
+        .await
+        .expect("should succeed");
+
+        let auth_kind = captured.lock().unwrap().clone().expect("fetcher was called");
+        assert_eq!(
+            auth_kind, "basic",
+            "auth scheme should be basic when JIRA_AUTH_SCHEME=basic, got: {auth_kind}"
         );
     }
 
@@ -537,8 +773,7 @@ mod tests {
             async fn fetch(
                 &self,
                 base_url: String,
-                _email: String,
-                _token: String,
+                _auth: JiraAuth,
                 _ac_field: Option<String>,
                 _key: String,
             ) -> Result<Ticket, String> {
@@ -561,9 +796,10 @@ mod tests {
         let _ = fetch_jira_ticket_inner(
             fetcher,
             Some("https://jira.example.com/".to_string()),
-            Some("user@example.com".to_string()),
+            None,
             Some("tok".to_string()),
             None,
+            None, // bearer by default
             "PROJ-1".to_string(),
         )
         .await;
