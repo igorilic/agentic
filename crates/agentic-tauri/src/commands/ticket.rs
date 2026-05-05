@@ -81,7 +81,13 @@ pub async fn start_ticket_run(
     // discover_agent fails on the first step), and the user sees a
     // cryptic RunComplete(failed) buried in EventList. The chat IPC
     // surfaces a clear "install …" / "run agentic-cli init" message.
-    pre_flight_check(&ws_root, &backend_kind)?;
+    //
+    // TODO(I.5): replace this hardcoded list with agents from the IPC payload.
+    let default_agents: Vec<String> = ["architect", "tdd-developer", "qa", "reviewer"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    pre_flight_check(&ws_root, &backend_kind, &default_agents)?;
 
     let ws_id = stable_workspace_id(&ws_root);
     let run_id = Ulid::new().to_string().to_lowercase();
@@ -215,16 +221,20 @@ pub async fn start_ticket_run(
 ///    CopilotCli) is on PATH. Honors the same env-var overrides the
 ///    backend runners use (`CLAUDE_CODE_BIN`, `COPILOT_CLI_BIN`) so
 ///    integration tests can point at a missing path.
-/// 2. All four required agent files are discoverable from `ws_root`
-///    using the same search order the pipeline itself uses
-///    (`.agentic/agents`, `.claude/agents`, `.github/agents`, …).
+/// 2. All agents in `agents` are discoverable from `ws_root` using the
+///    same search order the pipeline itself uses (`.agentic/agents`,
+///    `.claude/agents`, `.github/agents`, …).
 ///
 /// Errors are short, actionable strings the chat surfaces verbatim.
-fn pre_flight_check(ws_root: &std::path::Path, backend_kind: &BackendKind) -> Result<(), String> {
+fn pre_flight_check(
+    ws_root: &std::path::Path,
+    backend_kind: &BackendKind,
+    agents: &[String],
+) -> Result<(), String> {
     // Resolve the home directory once and delegate to the injectable variant.
     let base = directories::BaseDirs::new();
     let home = base.as_ref().map(|b| b.home_dir());
-    pre_flight_check_with_home(ws_root, backend_kind, home)
+    pre_flight_check_with_home(ws_root, backend_kind, home, agents)
 }
 
 /// Same as [`pre_flight_check`] but accepts an injectable home directory so
@@ -234,7 +244,17 @@ pub fn pre_flight_check_with_home(
     ws_root: &std::path::Path,
     backend_kind: &BackendKind,
     home: Option<&std::path::Path>,
+    agents: &[String],
 ) -> Result<(), String> {
+    // 0. Reject empty agent list immediately with an actionable error.
+    if agents.is_empty() {
+        return Err(
+            "pre-flight: agents list is empty — pass at least one agent in \
+             start_ticket_run.agents"
+                .to_string(),
+        );
+    }
+
     // 1. Backend binary on PATH.
     let (binary_env, binary_default, install_hint) = match backend_kind {
         BackendKind::ClaudeCode => (
@@ -256,8 +276,8 @@ pub fn pre_flight_check_with_home(
     }
 
     // 2. Agent files. Use the same discovery the pipeline does.
-    for name in ["architect", "tdd-developer", "qa", "reviewer"] {
-        match agentic_core::discover_agent_with_home(*backend_kind, ws_root, home, name) {
+    for agent_name in agents {
+        match agentic_core::discover_agent_with_home(*backend_kind, ws_root, home, agent_name) {
             Ok(_) => {}
             Err(agentic_core::CoreError::AgentNotFound { name, searched }) => {
                 return Err(format_agent_not_found_error(
@@ -268,7 +288,7 @@ pub fn pre_flight_check_with_home(
             }
             Err(e) => {
                 return Err(format!(
-                    "pre-flight: agent '{name}' in agents/ could not be parsed: {e}. \
+                    "pre-flight: agent '{agent_name}' in agents/ could not be parsed: {e}. \
                      Run `agentic-cli init` to re-scaffold the required agents."
                 ));
             }
