@@ -1,8 +1,22 @@
 import SpecDialog from "../components/SpecDialog";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi } from "vitest";
+import { vi, beforeEach } from "vitest";
 import React from "react";
+
+// Default mock for useJiraFetch — overridden per-test where needed.
+const mockFetch = vi.fn();
+vi.mock("../hooks/useJiraFetch", () => ({
+  useJiraFetch: () => ({
+    fetch: mockFetch,
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+beforeEach(() => {
+  mockFetch.mockReset();
+});
 
 function makeProps(overrides: Partial<React.ComponentProps<typeof SpecDialog>> = {}) {
   return {
@@ -158,6 +172,172 @@ describe("SpecDialog", () => {
       render(<SpecDialog {...makeProps()} />);
       const panel = screen.getByTestId("spec-dialog");
       expect(panel.className).toContain("w-[560px]");
+    });
+  });
+
+  describe("jira-pull row", () => {
+    it("renders the jira-pull row above the title input", () => {
+      render(<SpecDialog {...makeProps()} />);
+      const keyInput = screen.getByTestId("spec-dialog-jira-key-input");
+      const pullButton = screen.getByTestId("spec-dialog-jira-pull-button");
+      const titleInput = screen.getByTestId("spec-dialog-title-input");
+      expect(keyInput).toBeInTheDocument();
+      expect(pullButton).toBeInTheDocument();
+      // Assert DOM order: key input comes before pull button, which comes before title input
+      expect(
+        keyInput.compareDocumentPosition(pullButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        pullButton.compareDocumentPosition(titleInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("disables the pull button when key is empty", () => {
+      render(<SpecDialog {...makeProps()} />);
+      const pullButton = screen.getByTestId("spec-dialog-jira-pull-button") as HTMLButtonElement;
+      expect(pullButton.disabled).toBe(true);
+    });
+
+    it("disables the pull button for invalid keys", async () => {
+      render(<SpecDialog {...makeProps()} />);
+      const keyInput = screen.getByTestId("spec-dialog-jira-key-input");
+      const pullButton = screen.getByTestId("spec-dialog-jira-pull-button") as HTMLButtonElement;
+
+      await userEvent.type(keyInput, "proj-1");
+      expect(pullButton.disabled).toBe(true);
+
+      await userEvent.clear(keyInput);
+      await userEvent.type(keyInput, "-1");
+      expect(pullButton.disabled).toBe(true);
+
+      await userEvent.clear(keyInput);
+      await userEvent.type(keyInput, "PROJ");
+      expect(pullButton.disabled).toBe(true);
+    });
+
+    it("enables the pull button for valid keys", async () => {
+      render(<SpecDialog {...makeProps()} />);
+      const keyInput = screen.getByTestId("spec-dialog-jira-key-input");
+      const pullButton = screen.getByTestId("spec-dialog-jira-pull-button") as HTMLButtonElement;
+
+      await userEvent.type(keyInput, "PROJ-1");
+      expect(pullButton.disabled).toBe(false);
+    });
+
+    it("populates title and body on successful pull", async () => {
+      const dto = {
+        key: "PROJ-1",
+        title: "Fix bug",
+        body: "Steps:\n1. …",
+        ac: "Given X, when Y, then Z",
+      };
+      mockFetch.mockResolvedValueOnce(dto);
+
+      render(<SpecDialog {...makeProps()} />);
+      const keyInput = screen.getByTestId("spec-dialog-jira-key-input");
+      await userEvent.type(keyInput, "PROJ-1");
+      await userEvent.click(screen.getByTestId("spec-dialog-jira-pull-button"));
+
+      await waitFor(() => {
+        const titleInput = screen.getByTestId("spec-dialog-title-input") as HTMLInputElement;
+        expect(titleInput.value).toBe("Fix bug");
+      });
+
+      const bodyTextarea = screen.getByTestId("spec-dialog-body-textarea") as HTMLTextAreaElement;
+      expect(bodyTextarea.value).toBe(
+        "Steps:\n1. …\n\n## Acceptance Criteria\nGiven X, when Y, then Z",
+      );
+    });
+
+    it("appends only body when ac is null", async () => {
+      const dto = {
+        key: "PROJ-1",
+        title: "Fix bug",
+        body: "Steps:\n1. …",
+        ac: null,
+      };
+      mockFetch.mockResolvedValueOnce(dto);
+
+      render(<SpecDialog {...makeProps()} />);
+      const keyInput = screen.getByTestId("spec-dialog-jira-key-input");
+      await userEvent.type(keyInput, "PROJ-1");
+      await userEvent.click(screen.getByTestId("spec-dialog-jira-pull-button"));
+
+      await waitFor(() => {
+        const titleInput = screen.getByTestId("spec-dialog-title-input") as HTMLInputElement;
+        expect(titleInput.value).toBe("Fix bug");
+      });
+
+      const bodyTextarea = screen.getByTestId("spec-dialog-body-textarea") as HTMLTextAreaElement;
+      expect(bodyTextarea.value).toBe("Steps:\n1. …");
+    });
+
+    it("renders the missing-env error inline", async () => {
+      const errMsg = "missing environment variables: JIRA_URL, JIRA_EMAIL";
+      mockFetch.mockRejectedValueOnce(errMsg);
+
+      render(<SpecDialog {...makeProps()} />);
+      const keyInput = screen.getByTestId("spec-dialog-jira-key-input");
+      await userEvent.type(keyInput, "PROJ-1");
+      await userEvent.click(screen.getByTestId("spec-dialog-jira-pull-button"));
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("spec-dialog-jira-pull-error"),
+        ).toHaveTextContent(/missing environment variables: JIRA_URL, JIRA_EMAIL/);
+      });
+    });
+
+    it("does not clear existing title/body fields on error", async () => {
+      const errMsg = "missing environment variables: JIRA_URL, JIRA_EMAIL";
+      mockFetch.mockRejectedValueOnce(errMsg);
+
+      render(<SpecDialog {...makeProps()} />);
+      await userEvent.type(screen.getByTestId("spec-dialog-title-input"), "Existing title");
+      await userEvent.type(screen.getByTestId("spec-dialog-body-textarea"), "Existing body");
+
+      const keyInput = screen.getByTestId("spec-dialog-jira-key-input");
+      await userEvent.type(keyInput, "PROJ-1");
+      await userEvent.click(screen.getByTestId("spec-dialog-jira-pull-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("spec-dialog-jira-pull-error")).toBeInTheDocument();
+      });
+
+      const titleInput = screen.getByTestId("spec-dialog-title-input") as HTMLInputElement;
+      const bodyTextarea = screen.getByTestId("spec-dialog-body-textarea") as HTMLTextAreaElement;
+      expect(titleInput.value).toBe("Existing title");
+      expect(bodyTextarea.value).toBe("Existing body");
+    });
+
+    it("disables the button while fetch is in flight", async () => {
+      let resolvePromise!: (value: unknown) => void;
+      const deferred = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+      mockFetch.mockReturnValueOnce(deferred);
+
+      render(<SpecDialog {...makeProps()} />);
+      const keyInput = screen.getByTestId("spec-dialog-jira-key-input");
+      await userEvent.type(keyInput, "PROJ-1");
+
+      const pullButton = screen.getByTestId("spec-dialog-jira-pull-button") as HTMLButtonElement;
+      expect(pullButton.disabled).toBe(false);
+
+      await userEvent.click(pullButton);
+
+      // While in-flight, button should be disabled
+      await waitFor(() => {
+        expect(pullButton.disabled).toBe(true);
+      });
+
+      // Resolve the promise
+      resolvePromise({ key: "PROJ-1", title: "Done", body: "body", ac: null });
+
+      // After resolution, button should be re-enabled
+      await waitFor(() => {
+        expect(pullButton.disabled).toBe(false);
+      });
     });
   });
 });
