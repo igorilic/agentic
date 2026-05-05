@@ -341,4 +341,20 @@ describe("ChatColumn", () => {
       expect(screen.queryByTestId("chat-error")).toBeNull();
     });
   });
+
+  // I.7 — pipelineAgents required + disabled state
+  describe("I.7 — disabled Create-spec button when pipelineAgents is empty", () => {
+    it("disables the new-spec button when pipelineAgents is empty", () => {
+      render(<ChatColumn {...makeProps({ pipelineAgents: [] })} />);
+      const btn = screen.getByTestId("chat-composer-new-spec");
+      expect(btn).toBeDisabled();
+      expect(btn).toHaveAttribute("title", "Pick agents in the pipeline rail first");
+    });
+
+    it("enables the new-spec button when pipelineAgents has at least one agent", () => {
+      render(<ChatColumn {...makeProps({ pipelineAgents: ["architect"] })} />);
+      const btn = screen.getByTestId("chat-composer-new-spec");
+      expect(btn).not.toBeDisabled();
+    });
+  });
 });

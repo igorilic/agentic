@@ -317,4 +317,38 @@ describe("IssueColumn", () => {
       expect(screen.queryByTestId("issue-section-acceptance")).toBeNull();
     });
   });
+
+  // I.7 — pipelineAgents required + disabled state
+  describe("I.7 — disabled Create-spec button when pipelineAgents is empty", () => {
+    it("disables Create & run button when pipelineAgents is empty", () => {
+      render(
+        <IssueColumn
+          ticket={fixture}
+          runState="completed"
+          actionItems={[
+            { id: "a1", kind: "issue", title: "Something", fromAgent: "docs" },
+          ]}
+          pipelineAgents={[]}
+        />,
+      );
+      const btn = screen.getByTestId("issue-create-spec");
+      expect(btn).toBeDisabled();
+      expect(btn).toHaveAttribute("title", "Pick agents in the pipeline rail first");
+    });
+
+    it("enables Create spec button when pipelineAgents has agents", () => {
+      render(
+        <IssueColumn
+          ticket={fixture}
+          runState="completed"
+          actionItems={[
+            { id: "a1", kind: "issue", title: "Something", fromAgent: "docs" },
+          ]}
+          pipelineAgents={["architect"]}
+        />,
+      );
+      const btn = screen.getByTestId("issue-create-spec");
+      expect(btn).not.toBeDisabled();
+    });
+  });
 });

@@ -198,6 +198,31 @@ describe("PipelineBar", () => {
       );
       expect(screen.getByTestId("pipeline-add-agent")).toBeInTheDocument();
     });
+
+    // I.7 — empty-state UX
+    it("renders pipeline-empty-state with 'Add an agent to get started' when agents is empty", () => {
+      render(
+        <PipelineBar
+          agents={[]}
+          statuses={{}}
+          activeIndex={-1}
+        />
+      );
+      const emptyState = screen.getByTestId("pipeline-empty-state");
+      expect(emptyState).toBeInTheDocument();
+      expect(emptyState).toHaveTextContent("Add an agent to get started");
+    });
+
+    it("does NOT render pipeline-empty-state when agents is non-empty", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+        />
+      );
+      expect(screen.queryByTestId("pipeline-empty-state")).toBeNull();
+    });
   });
 
   describe("insert chips", () => {

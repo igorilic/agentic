@@ -4,9 +4,9 @@
  * All mutations are local-only per spec §6.8.3. No backend IPC. Tech-debt #7
  * tracks eventual persistence.
  *
- * Re-seed contract: `pipelineAgents` is seeded from `runState.steps` on
- * `activeRunId` change ONLY — not on every `runState` tick. That way user
- * edits persist between runs; a new run starts fresh.
+ * I.7 change: DEFAULT_AGENTS no longer exported from run.ts.
+ * derivePipelineSeed returns [] when steps is empty (no fallback).
+ * App integration tests now pre-seed localStorage so the pipeline has agents.
  *
  * Drag-reorder index contract (from W.2.7 / PipelineBar.tsx):
  *   finalToIndex = dragFromIndex < gapIndex ? gapIndex - 1 : gapIndex
@@ -19,11 +19,14 @@ import { renderHook } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import App from "../App";
-import { DEFAULT_AGENTS } from "../types/run";
 import { derivePipelineSeed } from "../utils/derivePipelineSeed";
 import { usePipelineMutation } from "../hooks/usePipelineMutation";
 import type { RunState } from "../types/run";
 import type { AgentInfoDto } from "../types/agents";
+
+// The canonical 4-agent pipeline used by these tests.
+// No longer imported from types/run (DEFAULT_AGENTS dropped in I.7).
+const DEFAULT_AGENTS = ["architect", "tdd-developer", "qa", "reviewer"];
 
 // AgentPicker now calls useDiscoverableAgents. Mock it here so App tests
 // do not require Tauri IPC infrastructure beyond the basic invoke mock.
@@ -55,7 +58,13 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn().mockResolvedValue([]),
+  invoke: vi.fn().mockImplementation(async (cmd: string) => {
+    if (cmd === "get_workspace_id") return "ws-test-mutation";
+    if (cmd === "list_runs") return [];
+    if (cmd === "list_findings") return [];
+    if (cmd === "get_event_history") return [];
+    return [];
+  }),
 }));
 
 // window.matchMedia stub required by HeaderBar → useTheme
@@ -99,6 +108,9 @@ beforeEach(() => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
   vi.clearAllMocks();
+  // Pre-seed localStorage with the 4-agent pipeline so tests that need
+  // an initialized pipeline work as expected. I.7: no DEFAULT_AGENTS fallback.
+  localStorage.setItem("agentic.pipeline.ws-test-mutation", JSON.stringify(DEFAULT_AGENTS));
 });
 
 // ===========================================================================
@@ -107,8 +119,8 @@ beforeEach(() => {
 describe("derivePipelineSeed", () => {
   const emptyRunState: RunState = { steps: [], totalTokens: 0, totalCostUsd: 0 };
 
-  it("returns DEFAULT_AGENTS when runState.steps is empty", () => {
-    expect(derivePipelineSeed(emptyRunState)).toEqual([...DEFAULT_AGENTS]);
+  it("returns [] when runState.steps is empty (no DEFAULT_AGENTS fallback — I.7)", () => {
+    expect(derivePipelineSeed(emptyRunState)).toEqual([]);
   });
 
   it("returns agents from runState.steps when non-empty", () => {
@@ -138,7 +150,7 @@ describe("derivePipelineSeed", () => {
 });
 
 // ===========================================================================
-// 2. App integration — initial render uses DEFAULT_AGENTS
+// 2. App integration — initial render uses persisted localStorage pipeline
 // ===========================================================================
 describe("App pipeline mutation — W.9.1", () => {
   beforeEach(() => {
@@ -150,19 +162,25 @@ describe("App pipeline mutation — W.9.1", () => {
     });
   });
 
-  it("initial render shows DEFAULT_AGENTS in order", () => {
+  it("initial render shows persisted DEFAULT_AGENTS from localStorage in order", async () => {
     render(<App />);
-    const ids = getCardTestIds();
-    expect(ids).toEqual(DEFAULT_AGENTS.map((a) => `agent-card-${a}`));
+    // Wait for wsId to be fetched and pipeline to hydrate from localStorage
+    await vi.waitFor(() => {
+      const ids = getCardTestIds();
+      expect(ids).toEqual(DEFAULT_AGENTS.map((a) => `agent-card-${a}`));
+    });
   });
 
   // =========================================================================
   // 3. Reorder via drag (scenario 1)
   // =========================================================================
-  it("reorder: drag architect(0) to gap-3 moves architect to index 2", () => {
+  it("reorder: drag architect(0) to gap-3 moves architect to index 2", async () => {
     // drag(0) → gap-3: adjusted = 0 < 3 ? 2 : 3 = 2
     // Result: [tdd-developer, qa, architect, reviewer]
     render(<App />);
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("agent-card-architect")).toBeInTheDocument();
+    });
 
     const architectCard = screen.getByTestId("agent-card-architect");
     const gap3 = screen.getByTestId("pipeline-gap-3");
@@ -185,6 +203,9 @@ describe("App pipeline mutation — W.9.1", () => {
   // =========================================================================
   it("append insert: click pipeline-add-agent, pick researcher → appended at end", async () => {
     render(<App />);
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("agent-card-architect")).toBeInTheDocument();
+    });
 
     await userEvent.click(screen.getByTestId("pipeline-add-agent"));
     expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
@@ -203,6 +224,9 @@ describe("App pipeline mutation — W.9.1", () => {
   // =========================================================================
   it("mid-insert: click pipeline-insert-2, pick security → security at index 2", async () => {
     render(<App />);
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("agent-card-architect")).toBeInTheDocument();
+    });
 
     await userEvent.click(screen.getByTestId("pipeline-insert-2"));
     expect(screen.getByTestId("agent-picker")).toBeInTheDocument();
@@ -222,8 +246,11 @@ describe("App pipeline mutation — W.9.1", () => {
   // =========================================================================
   // 6. Remove via kebab (scenario 4)
   // =========================================================================
-  it("remove: open qa kebab → click Remove → qa card gone, rest in order", () => {
+  it("remove: open qa kebab → click Remove → qa card gone, rest in order", async () => {
     render(<App />);
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("agent-card-qa")).toBeInTheDocument();
+    });
 
     fireEvent.click(screen.getByTestId("agent-card-qa-menu"));
     fireEvent.click(screen.getByTestId("agent-card-qa-menu-remove"));
@@ -241,8 +268,11 @@ describe("App pipeline mutation — W.9.1", () => {
   // =========================================================================
   // 7. Skip via kebab (scenario 5)
   // =========================================================================
-  it("skip: open reviewer kebab → click Skip this run → card gets data-skipped='true' and opacity-50", () => {
+  it("skip: open reviewer kebab → click Skip this run → card gets data-skipped='true' and opacity-50", async () => {
     render(<App />);
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("agent-card-reviewer")).toBeInTheDocument();
+    });
 
     fireEvent.click(screen.getByTestId("agent-card-reviewer-menu"));
     fireEvent.click(screen.getByTestId("agent-card-reviewer-menu-skip"));
@@ -252,8 +282,11 @@ describe("App pipeline mutation — W.9.1", () => {
     expect(reviewerCard.className).toContain("opacity-50");
   });
 
-  it("skip: card name has line-through class when skipped", () => {
+  it("skip: card name has line-through class when skipped", async () => {
     render(<App />);
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("agent-card-reviewer")).toBeInTheDocument();
+    });
 
     fireEvent.click(screen.getByTestId("agent-card-reviewer-menu"));
     fireEvent.click(screen.getByTestId("agent-card-reviewer-menu-skip"));
@@ -264,8 +297,11 @@ describe("App pipeline mutation — W.9.1", () => {
     expect(nameSpan).not.toBeNull();
   });
 
-  it("non-skipped card has data-skipped='false' by default", () => {
+  it("non-skipped card has data-skipped='false' by default", async () => {
     render(<App />);
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("agent-card-architect")).toBeInTheDocument();
+    });
     const architectCard = screen.getByTestId("agent-card-architect");
     expect(architectCard).toHaveAttribute("data-skipped", "false");
   });
@@ -277,9 +313,11 @@ describe("App pipeline mutation — W.9.1", () => {
   //    (Full IPC mock for activeRunId change is in tech-debt #7's scope;
   //     the pure-helper tests above cover the seed logic directly.)
   // =========================================================================
-  it("on initial mount with no active run, seeds pipelineAgents from DEFAULT_AGENTS", () => {
-    // Simulate a re-mount (no run id active, so seed = DEFAULT_AGENTS)
+  it("on initial mount with localStorage pipeline, seeds pipelineAgents from it", async () => {
     const { unmount } = render(<App />);
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("agent-card-qa")).toBeInTheDocument();
+    });
 
     // Remove qa
     fireEvent.click(screen.getByTestId("agent-card-qa-menu"));
@@ -288,11 +326,13 @@ describe("App pipeline mutation — W.9.1", () => {
 
     unmount();
 
-    // Fresh mount — state resets because it's a new React tree
+    // Fresh mount — localStorage now has the updated 3-agent list (qa removed was persisted)
+    // so we get 3 agents
     render(<App />);
-    expect(screen.getByTestId("agent-card-qa")).toBeInTheDocument();
-    const ids = getCardTestIds();
-    expect(ids).toEqual(DEFAULT_AGENTS.map((a) => `agent-card-${a}`));
+    await vi.waitFor(() => {
+      const ids = getCardTestIds();
+      expect(ids).toHaveLength(3);
+    });
   });
 
   // =========================================================================

@@ -91,4 +91,12 @@ describe("createSpec", () => {
 
     await expect(createSpec("Spec title", "claude-code", DEFAULT_AGENTS)).rejects.toThrow("ipc failure");
   });
+
+  // I.7 — reject empty agents before invoking IPC
+  it("rejects empty agents with a clear error before invoking IPC", async () => {
+    await expect(
+      createSpec("My spec", "claude-code", []),
+    ).rejects.toThrow("Pick at least one agent before creating a spec");
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
 });
