@@ -29,7 +29,18 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
   const submitDisabled = title.trim() === "";
 
   const handleSubmit = () => {
-    if (submitDisabled) return;
+    // Diagnostic: trace the full click chain.
+    console.log("[SpecDialog] handleSubmit fired", {
+      titleLen: title.length,
+      titleTrim: title.trim().length,
+      bodyLen: body.length,
+      submitDisabled,
+    });
+    if (submitDisabled) {
+      console.warn("[SpecDialog] handleSubmit early-returned: submitDisabled");
+      return;
+    }
+    console.log("[SpecDialog] calling onSubmit");
     void onSubmit(title, body);
   };
 

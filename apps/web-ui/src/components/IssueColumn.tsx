@@ -34,11 +34,15 @@ export default function IssueColumn({ ticket, runState, actionItems, onTicketRun
   const { backend } = useBackend();
 
   const handleCreateSpecSubmit = async (title: string, body: string) => {
+    console.log("[IssueColumn] handleCreateSpecSubmit", { title, backend, bodyLen: body.length });
     try {
       const runId = await createSpec(title, backend);
+      console.log("[IssueColumn] createSpec returned", { runId });
       if (runId !== undefined) {
         const description = body.trim().length > 0 ? body.trim() : undefined;
         onTicketRunStarted?.({ runId, ticketLabel: title, description });
+      } else {
+        console.warn("[IssueColumn] createSpec returned undefined — run not started; closing dialog silently");
       }
       setSpecDialogOpen(false);
     } catch (err) {

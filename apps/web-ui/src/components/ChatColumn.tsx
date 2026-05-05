@@ -45,11 +45,15 @@ export default function ChatColumn({
   const { backend } = useBackend();
 
   const handleSpecSubmit = async (title: string, body: string) => {
+    console.log("[ChatColumn] handleSpecSubmit", { title, backend, bodyLen: body.length });
     try {
       const runId = await createSpec(title, backend);
+      console.log("[ChatColumn] createSpec returned", { runId });
       if (runId !== undefined) {
         const description = body.trim().length > 0 ? body.trim() : undefined;
         onTicketRunStarted?.({ runId, ticketLabel: title, description });
+      } else {
+        console.warn("[ChatColumn] createSpec returned undefined — run not started; closing dialog silently");
       }
       setSpecOpen(false);
     } catch (err) {
