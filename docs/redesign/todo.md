@@ -5697,7 +5697,7 @@ cargo fmt --all -- --check
 - [ ] I.5 `start_ticket_run` IPC adds `agents` (breaking)
 - [x] I.6 `list_agents` IPC + `useDiscoverableAgents` hook
 - [ ] I.7 per-project pipeline persistence in localStorage
-- [ ] I.8 AgentPicker consumes `useDiscoverableAgents`
+- [x] I.8 AgentPicker consumes `useDiscoverableAgents`
 - [ ] I.9 drop `RunStep.role` everywhere
 - [ ] I.10 end-to-end dynamic pipeline integration smoke
 
