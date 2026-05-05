@@ -3946,7 +3946,7 @@ successfully invoke).
 
 ---
 
-### [ ] Step F.2.4: SpecDialog Jira-pull row + tooltip + validation
+### [x] Step F.2.4: SpecDialog Jira-pull row + tooltip + validation
 
 **Goal**: Add a new row **above the title input** in `SpecDialog`
 containing a key input + "Pull from Jira" button. Wire to
