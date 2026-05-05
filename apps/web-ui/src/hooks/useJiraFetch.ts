@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { JiraTicketDto } from "../types/jira";
 
@@ -8,15 +8,16 @@ export interface UseJiraFetchResult {
   fetch: (key: string) => Promise<JiraTicketDto>;
   isLoading: boolean;
   error: string | null;
-  /** Always true for v1 — env-var presence is surfaced via error message. */
-  isAvailable: boolean;
 }
 
 export function useJiraFetch(): UseJiraFetchResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function fetchTicket(key: string): Promise<JiraTicketDto> {
+  // useCallback with empty deps: setters are stable, no closed-over state.
+  // Stable identity prevents re-render loops when consumers put `fetch` in
+  // a useEffect / memo dependency array (e.g. F.2.4's SpecDialog row).
+  const fetchTicket = useCallback(async (key: string): Promise<JiraTicketDto> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -29,7 +30,7 @@ export function useJiraFetch(): UseJiraFetchResult {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
 
-  return { fetch: fetchTicket, isLoading, error, isAvailable: true };
+  return { fetch: fetchTicket, isLoading, error };
 }
