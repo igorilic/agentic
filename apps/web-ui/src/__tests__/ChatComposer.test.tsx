@@ -2,8 +2,40 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import ChatComposer from "../components/ChatComposer";
+import type { AgentInfoDto } from "../types/agents";
+
+// AgentPicker now calls useDiscoverableAgents. Mock it here so ChatComposer
+// tests do not require Tauri IPC infrastructure.
+vi.mock("../hooks/useDiscoverableAgents", () => ({
+  useDiscoverableAgents: vi.fn(),
+}));
+import { useDiscoverableAgents } from "../hooks/useDiscoverableAgents";
+
+const CHAT_COMPOSER_AGENTS: AgentInfoDto[] = [
+  { name: "architect",  description: "Designs system & breaks down work",  source: "project" },
+  { name: "developer",  description: "Writes code & tests",                source: "project" },
+  { name: "qa",         description: "Runs tests, checks edge cases",      source: "project" },
+  { name: "reviewer",   description: "Code review & feedback",             source: "project" },
+  { name: "researcher", description: "Gathers context, reads docs",        source: "project" },
+  { name: "security",   description: "Audits for vulnerabilities",         source: "project" },
+  { name: "perf",       description: "Profiles & optimises hot paths",     source: "project" },
+  { name: "docs",       description: "Updates README, API docs",           source: "project" },
+  { name: "designer",   description: "UX & visual review",                 source: "project" },
+  { name: "db",         description: "Schema migrations & data",           source: "project" },
+  { name: "devops",     description: "CI/CD & deploy config",              source: "project" },
+  { name: "a11y",       description: "WCAG compliance pass",               source: "project" },
+];
 
 describe("ChatComposer", () => {
+  beforeEach(() => {
+    vi.mocked(useDiscoverableAgents).mockReturnValue({
+      agents: CHAT_COMPOSER_AGENTS,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+  });
+
   describe("rendering", () => {
     it("renders the composer root element", () => {
       render(<ChatComposer onSend={vi.fn()} />);

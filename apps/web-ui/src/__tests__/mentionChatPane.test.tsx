@@ -14,10 +14,23 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
+// AgentPicker now calls useDiscoverableAgents. Mock it so this test file
+// does not depend on the Tauri IPC invoke chain for agent discovery.
+vi.mock("../hooks/useDiscoverableAgents", () => ({
+  useDiscoverableAgents: vi.fn(),
+}));
+import { useDiscoverableAgents } from "../hooks/useDiscoverableAgents";
+
 describe("ChatPane @mention routing", () => {
   beforeEach(() => {
     invokeMock.mockReset();
     capturedMentionHandler = null;
+    vi.mocked(useDiscoverableAgents).mockReturnValue({
+      agents: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
   });
 
   it("submitting @architect hello calls invoke(mention_agent, { agent, body })", async () => {

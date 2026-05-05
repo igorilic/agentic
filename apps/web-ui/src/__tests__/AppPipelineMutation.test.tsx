@@ -23,6 +23,29 @@ import { DEFAULT_AGENTS } from "../types/run";
 import { derivePipelineSeed } from "../utils/derivePipelineSeed";
 import { usePipelineMutation } from "../hooks/usePipelineMutation";
 import type { RunState } from "../types/run";
+import type { AgentInfoDto } from "../types/agents";
+
+// AgentPicker now calls useDiscoverableAgents. Mock it here so App tests
+// do not require Tauri IPC infrastructure beyond the basic invoke mock.
+vi.mock("../hooks/useDiscoverableAgents", () => ({
+  useDiscoverableAgents: vi.fn(),
+}));
+import { useDiscoverableAgents } from "../hooks/useDiscoverableAgents";
+
+const APP_AGENTS: AgentInfoDto[] = [
+  { name: "architect",  description: "Designs system & breaks down work",  source: "project" },
+  { name: "developer",  description: "Writes code & tests",                source: "project" },
+  { name: "qa",         description: "Runs tests, checks edge cases",      source: "project" },
+  { name: "reviewer",   description: "Code review & feedback",             source: "project" },
+  { name: "researcher", description: "Gathers context, reads docs",        source: "project" },
+  { name: "security",   description: "Audits for vulnerabilities",         source: "project" },
+  { name: "perf",       description: "Profiles & optimises hot paths",     source: "project" },
+  { name: "docs",       description: "Updates README, API docs",           source: "project" },
+  { name: "designer",   description: "UX & visual review",                 source: "project" },
+  { name: "db",         description: "Schema migrations & data",           source: "project" },
+  { name: "devops",     description: "CI/CD & deploy config",              source: "project" },
+  { name: "a11y",       description: "WCAG compliance pass",               source: "project" },
+];
 
 // ---------------------------------------------------------------------------
 // Tauri API mocks — mirror app.test.tsx / AppSettingsModal.test.tsx pattern
@@ -118,6 +141,15 @@ describe("derivePipelineSeed", () => {
 // 2. App integration — initial render uses DEFAULT_AGENTS
 // ===========================================================================
 describe("App pipeline mutation — W.9.1", () => {
+  beforeEach(() => {
+    vi.mocked(useDiscoverableAgents).mockReturnValue({
+      agents: APP_AGENTS,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+  });
+
   it("initial render shows DEFAULT_AGENTS in order", () => {
     render(<App />);
     const ids = getCardTestIds();
