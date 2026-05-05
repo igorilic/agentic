@@ -100,7 +100,7 @@ describe("ChatPane", () => {
     invokeMock.mockResolvedValueOnce("01abc"); // start_ticket_run returns run_id
     const onStart = vi.fn();
     const user = userEvent.setup();
-    render(<ChatPane onTicketRunStarted={onStart} />);
+    render(<ChatPane onTicketRunStarted={onStart} pipelineAgents={["architect", "tdd-developer", "qa", "reviewer"]} />);
 
     await user.type(screen.getByTestId("chat-input"), "/plan #42");
     await user.click(screen.getByTestId("chat-send"));
@@ -165,7 +165,7 @@ describe("ChatPane", () => {
     localStorage.setItem("agentic.backend", "copilot-cli");
     invokeMock.mockResolvedValueOnce("run-hook-1");
     const user = userEvent.setup();
-    render(<ChatPane />);
+    render(<ChatPane pipelineAgents={["architect", "tdd-developer", "qa", "reviewer"]} />);
 
     await user.type(screen.getByTestId("chat-input"), "/plan #42 ticket text");
     await user.click(screen.getByTestId("chat-send"));
@@ -183,7 +183,7 @@ describe("ChatPane", () => {
   it("/plan --backend=copilot-cli forwards the parsed backend to the IPC", async () => {
     invokeMock.mockResolvedValueOnce("01def");
     const user = userEvent.setup();
-    render(<ChatPane />);
+    render(<ChatPane pipelineAgents={["architect", "tdd-developer", "qa", "reviewer"]} />);
 
     await user.type(
       screen.getByTestId("chat-input"),

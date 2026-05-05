@@ -37,9 +37,15 @@ function stubMatchMedia() {
 beforeEach(() => {
   stubMatchMedia();
   localStorage.clear();
+  // I.7: pre-seed localStorage with 4-agent pipeline so App renders cards on mount.
+  localStorage.setItem(
+    "agentic.pipeline.ws-polish-test",
+    JSON.stringify(["architect", "tdd-developer", "qa", "reviewer"]),
+  );
   document.documentElement.removeAttribute("data-theme");
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string): Promise<unknown> => {
+    if (cmd === "get_workspace_id") return "ws-polish-test";
     if (cmd === "list_runs") return [];
     if (cmd === "list_findings") return [];
     if (cmd === "get_event_history") return [];
@@ -54,9 +60,10 @@ afterEach(() => {
 });
 
 describe("App polish (W.9.8)", () => {
-  it("agent cards render with the per-agent SVG glyph (W.9.2)", () => {
+  it("agent cards render with the per-agent SVG glyph (W.9.2)", async () => {
     render(<App />);
-    const cards = screen.getAllByTestId(/^agent-card-/);
+    // Wait for get_workspace_id to resolve and pipeline to hydrate from localStorage.
+    const cards = await vi.waitFor(() => screen.getAllByTestId(/^agent-card-/));
     // At least one card contains an SVG with viewBox 0 0 20 20.
     const hasIcon = cards.some(
       (card) => card.querySelector('svg[viewBox="0 0 20 20"]') !== null,
@@ -91,6 +98,7 @@ describe("App polish (W.9.8)", () => {
 
   it("after SpecDialog submit, IssueColumn title updates to the typed title (B1)", async () => {
     invokeMock.mockImplementation(async (cmd: string): Promise<unknown> => {
+      if (cmd === "get_workspace_id") return "ws-polish-test";
       if (cmd === "start_ticket_run") return "run-b1-test";
       if (cmd === "list_runs") return [];
       if (cmd === "list_findings") return [];
@@ -100,8 +108,14 @@ describe("App polish (W.9.8)", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    // Wait for pipeline to hydrate before clicking the new-spec button.
+    const btn = await vi.waitFor(() => {
+      const b = screen.getByTestId("chat-composer-new-spec");
+      if (b.hasAttribute("disabled")) throw new Error("button still disabled");
+      return b;
+    });
     // Open SpecDialog from the chat composer new-spec button
-    await user.click(screen.getByTestId("chat-composer-new-spec"));
+    await user.click(btn);
     await user.type(screen.getByTestId("spec-dialog-title-input"), "fix issue 88");
     await user.click(screen.getByTestId("spec-dialog-submit"));
 
@@ -112,6 +126,7 @@ describe("App polish (W.9.8)", () => {
 
   it("after SpecDialog submit with body, IssueColumn body paragraph reflects the body field (B1-body)", async () => {
     invokeMock.mockImplementation(async (cmd: string): Promise<unknown> => {
+      if (cmd === "get_workspace_id") return "ws-polish-test";
       if (cmd === "start_ticket_run") return "run-b1-body-test";
       if (cmd === "list_runs") return [];
       if (cmd === "list_findings") return [];
@@ -121,7 +136,13 @@ describe("App polish (W.9.8)", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByTestId("chat-composer-new-spec"));
+    // Wait for pipeline to hydrate before clicking the new-spec button.
+    const btn = await vi.waitFor(() => {
+      const b = screen.getByTestId("chat-composer-new-spec");
+      if (b.hasAttribute("disabled")) throw new Error("button still disabled");
+      return b;
+    });
+    await user.click(btn);
     await user.type(screen.getByTestId("spec-dialog-title-input"), "fix issue 88");
     await user.type(screen.getByTestId("spec-dialog-body-textarea"), "This is the description.");
     await user.click(screen.getByTestId("spec-dialog-submit"));
@@ -159,7 +180,13 @@ describe("App polish (W.9.8)", () => {
   it("clicking New-spec opens SpecDialog; Esc closes it (W.9.4)", async () => {
     render(<App />);
     expect(screen.queryByTestId("spec-dialog")).toBeNull();
-    fireEvent.click(screen.getByTestId("chat-composer-new-spec"));
+    // Wait for get_workspace_id to resolve so the button is enabled.
+    const btn = await vi.waitFor(() => {
+      const b = screen.getByTestId("chat-composer-new-spec");
+      if (b.hasAttribute("disabled")) throw new Error("button still disabled");
+      return b;
+    });
+    fireEvent.click(btn);
     expect(screen.getByTestId("spec-dialog")).toBeInTheDocument();
 
     // Esc closes — dispatch keyDown on the dialog panel itself, since W.6.5's

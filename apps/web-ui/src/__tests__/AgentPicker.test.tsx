@@ -98,10 +98,10 @@ describe("AgentPicker", () => {
     expect(screen.getByTestId("agent-picker-row-reviewer")).toBeInTheDocument();
   });
 
-  it("search matches by name substring: typing 'db' returns DB row", () => {
+  it("search matches by name substring: typing 'schema' returns only DB row", () => {
     render(<AgentPicker {...defaultProps} />);
     const input = screen.getByPlaceholderText("Search agents…");
-    fireEvent.change(input, { target: { value: "db" } });
+    fireEvent.change(input, { target: { value: "schema" } });
     const rows = screen.queryAllByTestId(/^agent-picker-row-/);
     expect(rows).toHaveLength(1);
     expect(screen.getByTestId("agent-picker-row-db")).toBeInTheDocument();

@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use agentic_tauri::commands::workspace::{resolve_with_home, get_workspace_id_inner};
+use agentic_tauri::commands::workspace::{get_workspace_id_inner, resolve_with_home};
 
 // ─── tilde expansion ─────────────────────────────────────────────────────────
 
@@ -113,7 +113,10 @@ fn get_workspace_id_is_stable_for_same_path() {
     let id1 = get_workspace_id_inner(tmp.path()).unwrap();
     let id2 = get_workspace_id_inner(tmp.path()).unwrap();
 
-    assert_eq!(id1, id2, "workspace id must be deterministic for the same path");
+    assert_eq!(
+        id1, id2,
+        "workspace id must be deterministic for the same path"
+    );
 }
 
 /// Two different paths produce different ids.
@@ -125,7 +128,10 @@ fn get_workspace_id_differs_for_different_paths() {
     let id1 = get_workspace_id_inner(tmp1.path()).unwrap();
     let id2 = get_workspace_id_inner(tmp2.path()).unwrap();
 
-    assert_ne!(id1, id2, "different paths must produce different workspace ids");
+    assert_ne!(
+        id1, id2,
+        "different paths must produce different workspace ids"
+    );
 }
 
 /// `get_workspace_id_inner` with AGENTIC_WORKSPACE_ROOT set returns a ws- prefixed string.
@@ -135,8 +141,8 @@ fn get_workspace_id_with_env_var() {
     let ws_path = tmp.path().to_str().unwrap();
 
     temp_env::with_var("AGENTIC_WORKSPACE_ROOT", Some(ws_path), || {
-        let result = get_workspace_id_inner(tmp.path())
-            .expect("should succeed with valid directory");
+        let result =
+            get_workspace_id_inner(tmp.path()).expect("should succeed with valid directory");
         assert!(result.starts_with("ws-"));
         assert_eq!(result.len(), 19);
     });

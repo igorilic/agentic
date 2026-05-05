@@ -6,8 +6,6 @@ import { createSpec } from "../utils/createSpec";
 import { useBackend } from "../hooks/useBackend";
 import type { ChatMessage } from "../types/chat";
 
-const DEFAULT_PIPELINE_AGENTS = ["architect", "tdd-developer", "qa", "reviewer"];
-
 export type ChatColumnProps = {
   messages: ChatMessage[];
   systemMessages: string[];
@@ -43,7 +41,7 @@ export default function ChatColumn({
   onSend,
   error,
   onTicketRunStarted,
-  pipelineAgents = DEFAULT_PIPELINE_AGENTS,
+  pipelineAgents = [],
 }: ChatColumnProps) {
   const [specOpen, setSpecOpen] = useState(false);
   const { backend } = useBackend();
@@ -167,6 +165,7 @@ export default function ChatColumn({
           inputTestId="chat-input"
           sendTestId="chat-send"
           onCreateSpec={() => setSpecOpen(true)}
+          createSpecDisabled={pipelineAgents.length === 0}
         />
       </form>
       <SpecDialog

@@ -29,17 +29,9 @@ export type RunState = {
   totalCostUsd: number;
 };
 
-/** Default agents for the standard 4-step pipeline. */
-export const DEFAULT_AGENTS: readonly string[] = [
-  "architect",
-  "tdd-developer",
-  "qa",
-  "reviewer",
-];
-
 /** Build the initial RunState — all steps pending, zero tokens. */
 export function emptyRunState(
-  agents: readonly string[] = DEFAULT_AGENTS,
+  agents: readonly string[],
 ): RunState {
   return {
     steps: agents.map((agent) => ({
@@ -62,7 +54,7 @@ export function emptyRunState(
  */
 export function deriveRunState(
   events: EventEnvelope[],
-  agents: readonly string[] = DEFAULT_AGENTS,
+  agents: readonly string[] = [],
 ): RunState {
   const state = emptyRunState(agents);
   // Index by agent name for O(1) lookups.

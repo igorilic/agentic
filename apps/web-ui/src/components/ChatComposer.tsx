@@ -21,6 +21,8 @@ export type ChatComposerProps = {
   sendTestId?: string;
   /** When provided, renders a doc-icon button left of send that opens the New Spec dialog. */
   onCreateSpec?: () => void;
+  /** When true, disables the create-spec button with a tooltip. */
+  createSpecDisabled?: boolean;
 };
 
 const QUICK_PICK_CHIPS = [
@@ -30,7 +32,7 @@ const QUICK_PICK_CHIPS = [
   { id: "spec", label: "Spec", command: "/spec " },
 ] as const;
 
-export default function ChatComposer({ onSend, inputTestId, sendTestId, onCreateSpec }: ChatComposerProps) {
+export default function ChatComposer({ onSend, inputTestId, sendTestId, onCreateSpec, createSpecDisabled = false }: ChatComposerProps) {
   const [value, setValue] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [escClosedForValue, setEscClosedForValue] = useState<string | null>(null);
@@ -172,10 +174,11 @@ export default function ChatComposer({ onSend, inputTestId, sendTestId, onCreate
             <button
               type="button"
               data-testid="chat-composer-new-spec"
-              onClick={onCreateSpec}
+              onClick={createSpecDisabled ? undefined : onCreateSpec}
+              disabled={createSpecDisabled}
               aria-label="Create spec"
-              title="Create spec"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:text-fg hover:bg-bg-surface-2"
+              title={createSpecDisabled ? "Pick agents in the pipeline rail first" : "Create spec"}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:text-fg hover:bg-bg-surface-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M5 3h7l3 3v11H5zM12 3v3h3M7 9h6M7 12h6M7 15h4" />

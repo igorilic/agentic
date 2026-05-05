@@ -11,6 +11,7 @@ import { useFindings } from "./hooks/useFindings";
 import { useTauriEvents } from "./hooks/useTauriEvents";
 import { useRunStateOverall } from "./hooks/useRunStateOverall";
 import { usePipelineFromRunState } from "./hooks/usePipelineFromRunState";
+import { usePipelinePersistence } from "./hooks/usePipelinePersistence";
 import { deriveRunState } from "./types/run";
 import type { ActivityFilter } from "./components/ActivityHeader";
 import type { IssueTicket } from "./types/pipeline";
@@ -34,6 +35,16 @@ export default function App() {
   const [findingsRunId, setFindingsRunId] = useState<string | undefined>(undefined);
   const [findingsRefetchKey, setFindingsRefetchKey] = useState(0);
 
+  // Resolve workspace id once on mount — used as the localStorage key.
+  const [wsId, setWsId] = useState<string | null>(null);
+  useEffect(() => {
+    invoke<string>("get_workspace_id")
+      .then((id) => setWsId(id))
+      .catch((err) => {
+        console.warn("[App] get_workspace_id failed:", err);
+      });
+  }, []);
+
   const { events } = useTauriEvents(activeRunId);
   const { findings } = useFindings(findingsRunId, findingsRefetchKey);
   const { backend } = useBackend();
@@ -53,9 +64,7 @@ export default function App() {
   const runState = useMemo(() => deriveRunState(events), [events]);
 
   // Scan from the tail to find the most recent envelope with a non-null step_id
-  // that belongs to a StepStarted event. step_id lives on EventEnvelope (envelope-level
-  // field), not on the variant. We filter by StepStarted so that tool-call or
-  // permission envelopes sharing a step_id do not accidentally update the cursor.
+  // that belongs to a StepStarted event.
   const latestStepId = useMemo(() => {
     for (let i = events.length - 1; i >= 0; i--) {
       const env = events[i];
@@ -69,15 +78,18 @@ export default function App() {
   const { overallRunState, elapsedMs } = useRunStateOverall(events, activeRunId);
   const { pipelineStatuses, activeIndex } = usePipelineFromRunState(runState);
 
-  // Local-only pipeline state (spec §6.8.3). Re-seeds on activeRunId change.
+  // Persistence — canonical source of truth for pipeline agents list.
+  const { pipelineAgents, setPipelineAgents } = usePipelinePersistence(wsId);
+
+  // Local mutation state (reorder, insert, remove, skip).
+  // Persistence state is passed in so mutations write through to localStorage.
   const {
-    pipelineAgents,
     pipelineSkipped,
     onReorder,
     onInsert,
     onRemove,
     onSkip,
-  } = usePipelineMutation(runState, activeRunId);
+  } = usePipelineMutation(runState, activeRunId, pipelineAgents, setPipelineAgents);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -96,8 +108,6 @@ export default function App() {
   }, []);
 
   const handleRunPipeline = useCallback(() => {
-    // Minimal placeholder: invokes start_ticket_run directly.
-    // A SpecDialog-driven Run flow is tracked for a future W.8.x step.
     void invoke("start_ticket_run", {
       ticket: "Untitled run",
       backend,

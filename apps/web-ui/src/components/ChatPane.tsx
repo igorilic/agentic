@@ -15,19 +15,17 @@ type MentionResult = {
   dispatched: boolean;
 };
 
-const DEFAULT_PIPELINE_AGENTS = ["architect", "tdd-developer", "qa", "reviewer"];
-
 export type ChatPaneProps = {
   /// Called when `/plan <ticket>` or SpecDialog successfully kicks off a real ticket run.
   onTicketRunStarted?: (info: { runId: string; ticketLabel: string; description?: string }) => void;
-  /// The user's currently selected pipeline agents (from usePipelineMutation).
+  /// The user's currently selected pipeline agents (from usePipelinePersistence).
   /// Forwarded to start_ticket_run so the user's selection is respected.
   pipelineAgents?: string[];
 };
 
 export default function ChatPane({
   onTicketRunStarted,
-  pipelineAgents = DEFAULT_PIPELINE_AGENTS,
+  pipelineAgents = [],
 }: ChatPaneProps = {}) {
   const { messages, send, sending, error } = useChat();
   const [systemMessages, setSystemMessages] = useState<string[]>([]);

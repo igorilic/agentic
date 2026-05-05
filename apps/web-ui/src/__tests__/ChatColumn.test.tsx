@@ -13,6 +13,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 afterEach(() => invokeMock.mockReset());
 
 // Minimal prop factory — keeps each test focused on only what it varies.
+// Default pipelineAgents to ["architect"] so the create-spec button is enabled
+// unless explicitly testing the disabled state.
 function makeProps(overrides: Partial<ChatColumnProps> = {}): ChatColumnProps {
   return {
     messages: [],
@@ -21,6 +23,7 @@ function makeProps(overrides: Partial<ChatColumnProps> = {}): ChatColumnProps {
     activeAgent: null,
     onSend: vi.fn(),
     error: null,
+    pipelineAgents: ["architect"],
     ...overrides,
   };
 }

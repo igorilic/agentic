@@ -154,6 +154,8 @@ async function mockInvoke(cmd: string, args?: Record<string, unknown>): Promise<
         },
       };
     }
+    case "get_workspace_id":
+      return "ws-dev-mock-1234567";
     case "list_runs":
     case "list_auth_accounts":
     case "get_event_history":

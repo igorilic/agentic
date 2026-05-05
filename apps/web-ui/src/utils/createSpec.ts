@@ -16,6 +16,9 @@ export async function createSpec(
   backend: BackendKind,
   agents: string[],
 ): Promise<string | undefined> {
+  if (agents.length === 0) {
+    throw new Error("Pick at least one agent before creating a spec");
+  }
   const result = await invoke("start_ticket_run", {
     ticket: title,
     backend,

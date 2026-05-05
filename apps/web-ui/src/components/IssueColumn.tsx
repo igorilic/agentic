@@ -12,8 +12,6 @@ const RUN_STATE_TO_AGENT_STATUS: Record<RunStateOverall, AgentStatus> = {
   failed: "failed",
 };
 
-const DEFAULT_PIPELINE_AGENTS = ["architect", "tdd-developer", "qa", "reviewer"];
-
 export type IssueColumnProps = {
   ticket: IssueTicket;
   runState?: RunStateOverall;
@@ -33,7 +31,7 @@ export default function IssueColumn({
   runState,
   actionItems,
   onTicketRunStarted,
-  pipelineAgents = DEFAULT_PIPELINE_AGENTS,
+  pipelineAgents = [],
 }: IssueColumnProps) {
   const acceptanceChecked = runState === "completed";
   const completedItems: ActionItem[] =
@@ -183,7 +181,9 @@ export default function IssueColumn({
             type="button"
             data-testid="issue-create-spec"
             onClick={() => setSpecDialogOpen(true)}
-            className="mt-2 self-start rounded-md bg-[#18181b] px-3 py-1.5 text-xs font-semibold text-white"
+            disabled={pipelineAgents.length === 0}
+            title={pipelineAgents.length === 0 ? "Pick agents in the pipeline rail first" : undefined}
+            className="mt-2 self-start rounded-md bg-[#18181b] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Create spec
           </button>

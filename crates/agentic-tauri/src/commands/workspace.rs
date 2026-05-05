@@ -11,6 +11,8 @@
 
 use std::path::{Path, PathBuf};
 
+use agentic_core::stable_workspace_id;
+
 /// Resolve the workspace root for an IPC call.
 ///
 /// Uses the real home directory from [`directories::BaseDirs`] for tilde
@@ -43,6 +45,26 @@ pub fn resolve_with_home(env_val: Option<&str>, home: &Path) -> Result<PathBuf, 
         ));
     }
     Ok(ws_root)
+}
+
+/// Testable inner implementation for `get_workspace_id` IPC.
+///
+/// Returns the stable workspace id derived from `ws_root`.
+/// Exposed `pub` so integration tests in `crates/agentic-tauri/tests/`
+/// can call it directly without going through the full Tauri IPC stack.
+pub fn get_workspace_id_inner(ws_root: &Path) -> Result<String, String> {
+    Ok(stable_workspace_id(ws_root))
+}
+
+/// IPC command: returns the stable workspace id for the resolved workspace root.
+///
+/// The id is `ws-` followed by the first 16 hex characters of a blake3 hash
+/// of the canonicalized workspace path.  Stable across restarts for the same
+/// project directory.
+#[tauri::command]
+pub fn get_workspace_id() -> Result<String, String> {
+    let ws_root = resolve_workspace_root()?;
+    get_workspace_id_inner(&ws_root)
 }
 
 /// Replace a leading `~` with `home`. Handles `~/...` and bare `~`.

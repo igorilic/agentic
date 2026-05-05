@@ -69,6 +69,8 @@ pub use permissions::{
     OnTimeout, PermissionRule, PermissionsConfig, PermissionsConfigError, PermissionsSettings,
 };
 mod time;
+pub mod workspace;
+pub use workspace::stable_workspace_id;
 
 /// The semver version string of the `agentic-core` crate.
 ///

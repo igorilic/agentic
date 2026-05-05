@@ -148,23 +148,32 @@ export default function PipelineBar({
       data-testid="pipeline-bar"
       className="relative flex h-[84px] items-center gap-3 bg-bg-surface border-b border-border-soft px-[18px]"
     >
-      {agents.map((agent, i) => (
-        <div key={agent} className="contents">
-          <AgentCard
-            agent={agent}
-            status={statuses[agent] ?? "queued"}
-            index={i}
-            skipped={skipped?.has(agent) ?? false}
-            draggable={true}
-            dragging={dragFromIndex === i}
-            onDragStart={() => onCardDragStart(i)}
-            onDragEnd={() => onCardDragEnd()}
-            onRemove={() => onRemove?.(i)}
-            onSkip={() => onSkip?.(i)}
-          />
-          {i < agents.length - 1 && renderInterCardGap(i + 1)}
+      {agents.length === 0 ? (
+        <div
+          data-testid="pipeline-empty-state"
+          className="flex items-center gap-3 rounded-md border border-dashed border-border-strong px-4 py-2 text-xs text-fg-muted"
+        >
+          <span>Add an agent to get started</span>
         </div>
-      ))}
+      ) : (
+        agents.map((agent, i) => (
+          <div key={agent} className="contents">
+            <AgentCard
+              agent={agent}
+              status={statuses[agent] ?? "queued"}
+              index={i}
+              skipped={skipped?.has(agent) ?? false}
+              draggable={true}
+              dragging={dragFromIndex === i}
+              onDragStart={() => onCardDragStart(i)}
+              onDragEnd={() => onCardDragEnd()}
+              onRemove={() => onRemove?.(i)}
+              onSkip={() => onSkip?.(i)}
+            />
+            {i < agents.length - 1 && renderInterCardGap(i + 1)}
+          </div>
+        ))
+      )}
       {/* gap-N after the last card, before + Add agent */}
       {agents.length > 0 && renderEndGap()}
       <button

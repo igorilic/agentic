@@ -305,7 +305,13 @@ describe("App — P.4.3 runId/stepId threading into permission_decide", () => {
 
   it("Run-pipeline button uses selected backend from useBackend()", async () => {
     localStorage.setItem("agentic.backend", "copilot-cli");
+    // I.7: pre-seed pipeline agents so the run-pipeline button sends non-empty agents.
+    localStorage.setItem(
+      "agentic.pipeline.ws-app-test",
+      JSON.stringify(["architect", "tdd-developer", "qa", "reviewer"]),
+    );
     mockInvoke.mockImplementation(async (cmd: string): Promise<unknown> => {
+      if (cmd === "get_workspace_id") return "ws-app-test";
       if (cmd === "start_ticket_run") return "run-btn-1";
       if (cmd === "list_runs") return [];
       if (cmd === "list_findings") return [];

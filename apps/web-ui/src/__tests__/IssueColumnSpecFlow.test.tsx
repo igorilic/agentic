@@ -33,6 +33,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         ticket={ticket}
         runState="completed"
         actionItems={actionItems}
+        pipelineAgents={["architect"]}
       />
     );
     expect(screen.queryByTestId("spec-dialog")).toBeNull();
@@ -51,6 +52,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         ticket={ticket}
         runState="completed"
         actionItems={actionItems}
+        pipelineAgents={["architect"]}
       />
     );
 
@@ -64,7 +66,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         ticket: "New spec",
         backend: "claude-code",
         model: null,
-        agents: expect.arrayContaining(["architect"]),
+        agents: ["architect"],
       });
     });
   });
@@ -78,6 +80,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         ticket={ticket}
         runState="completed"
         actionItems={actionItems}
+        pipelineAgents={["architect"]}
       />
     );
 
@@ -96,6 +99,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         ticket={ticket}
         runState="completed"
         actionItems={actionItems}
+        pipelineAgents={["architect"]}
       />
     );
 
@@ -114,6 +118,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         ticket={ticket}
         runState="completed"
         actionItems={actionItems}
+        pipelineAgents={["architect"]}
       />
     );
 
@@ -134,6 +139,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         ticket={ticket}
         runState="completed"
         actionItems={actionItems}
+        pipelineAgents={["architect"]}
       />
     );
 
@@ -160,6 +166,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         ticket={ticket}
         runState="completed"
         actionItems={actionItems}
+        pipelineAgents={["architect"]}
       />
     );
 
@@ -188,6 +195,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         runState="completed"
         actionItems={actionItems}
         onTicketRunStarted={onTicketRunStarted}
+        pipelineAgents={["architect"]}
       />
     );
 
@@ -215,6 +223,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         runState="completed"
         actionItems={actionItems}
         onTicketRunStarted={onTicketRunStarted}
+        pipelineAgents={["architect"]}
       />
     );
 

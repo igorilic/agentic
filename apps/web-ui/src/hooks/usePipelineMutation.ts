@@ -15,42 +15,52 @@ export type UsePipelineMutationResult = {
 /**
  * Manages the local-only mutable pipeline state (spec §6.8.3).
  *
- * State is re-seeded from `runState` whenever `activeRunId` changes
- * (new run starts or page loads). User edits made between re-seeds are
- * preserved because the dependency array only contains `activeRunId`.
+ * When `externalAgents` + `setExternalAgents` are provided (from
+ * `usePipelinePersistence`), they are used as the canonical state. Otherwise
+ * an internal `useState` is used (backward-compatible for tests / contexts
+ * without persistence).
  *
- * Tech-debt #7 tracks eventual backend persistence of these mutations.
+ * Re-seeds `pipelineAgents` from `runState` whenever `activeRunId` changes
+ * from undefined → string. If the run's steps are non-empty, they override
+ * the current list (e.g. re-attaching to an in-progress run).
  */
 export function usePipelineMutation(
   runState: RunState,
   activeRunId: string | undefined,
+  externalAgents?: string[],
+  setExternalAgents?: (next: string[]) => void,
 ): UsePipelineMutationResult {
-  const [pipelineAgents, setPipelineAgents] = useState<string[]>(() =>
-    derivePipelineSeed(runState),
-  );
+  // Internal fallback state — only used when no external state is provided.
+  const [internalAgents, setInternalAgents] = useState<string[]>(() => []);
   const [pipelineSkipped, setPipelineSkipped] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
+
+  const pipelineAgents = externalAgents ?? internalAgents;
+  const setPipelineAgents = setExternalAgents ?? setInternalAgents;
 
   // Re-seed on run-id change only. Not on every runState tick — that would
   // clobber user edits made between run start and run completion.
   useEffect(() => {
     if (!activeRunId) return;  // only re-seed on undefined → string per spec §6.8.3
-    setPipelineAgents(derivePipelineSeed(runState));
+    const seed = derivePipelineSeed(runState);
+    if (seed.length > 0) {
+      setPipelineAgents(seed);
+    }
     setPipelineSkipped(new Set<string>());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRunId]);
 
   function onReorder(from: number, to: number) {
-    setPipelineAgents((prev) => reorderArray(prev, from, to));
+    setPipelineAgents(reorderArray(pipelineAgents, from, to));
   }
 
   function onInsert(at: number, id: string) {
-    setPipelineAgents((prev) => insertAt(prev, at, id));
+    setPipelineAgents(insertAt(pipelineAgents, at, id));
   }
 
   function onRemove(at: number) {
-    setPipelineAgents((prev) => prev.filter((_, i) => i !== at));
+    setPipelineAgents(pipelineAgents.filter((_, i) => i !== at));
   }
 
   function onSkip(at: number) {

@@ -42,20 +42,8 @@ pub struct PipelineRunContext<'a> {
     pub external_cancel: Option<CancellationToken>,
 }
 
-/// Derive a stable workspace id from the canonical absolute path.
-///
-/// Uses the first 16 hex chars of a blake3 hash of the canonicalized path,
-/// prefixed with `ws-`.  If `canonicalize` fails (e.g. the directory does not
-/// exist yet), the raw path bytes are hashed instead — this is a safe fallback
-/// for relative or not-yet-created paths.
-pub fn stable_workspace_id(ws_root: &Path) -> String {
-    let canonical = ws_root
-        .canonicalize()
-        .unwrap_or_else(|_| ws_root.to_path_buf());
-    let hash = blake3::hash(canonical.to_string_lossy().as_bytes());
-    let hex = hash.to_hex();
-    format!("ws-{}", &hex.as_str()[..16])
-}
+/// Re-export the core implementation so existing callers don't break.
+pub use agentic_core::stable_workspace_id;
 
 /// Context for executing a single pipeline step, derived from [`PipelineRunContext`].
 struct SingleStepCtx<'a> {
