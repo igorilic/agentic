@@ -84,6 +84,7 @@ async fn start_ticket_run_rejects_unknown_backend() {
         "fix the bug".to_string(),
         "made-up-backend".to_string(),
         None,
+        vec!["architect".to_string()],
     )
     .await;
     assert!(result.is_err());
@@ -104,6 +105,7 @@ async fn start_ticket_run_rejects_empty_ticket() {
         "   ".to_string(),
         "claude-code".to_string(),
         None,
+        vec!["architect".to_string()],
     )
     .await;
     assert!(result.is_err());
@@ -121,6 +123,12 @@ async fn start_ticket_run_seeds_workspace_and_run_rows_then_returns_run_id() {
         "fix the auth race".to_string(),
         "claude-code".to_string(),
         None,
+        vec![
+            "architect".to_string(),
+            "tdd-developer".to_string(),
+            "qa".to_string(),
+            "reviewer".to_string(),
+        ],
     )
     .await
     .expect("start_ticket_run should succeed on the seed-and-spawn path");
@@ -168,6 +176,12 @@ async fn start_ticket_run_honors_agentic_workspace_root_env_var() {
         "do the thing".to_string(),
         "claude-code".to_string(),
         None,
+        vec![
+            "architect".to_string(),
+            "tdd-developer".to_string(),
+            "qa".to_string(),
+            "reviewer".to_string(),
+        ],
     )
     .await;
     teardown_happy_path_workspace();
@@ -213,6 +227,7 @@ async fn start_ticket_run_rejects_workspace_root_that_is_not_a_directory() {
         "x".to_string(),
         "claude-code".to_string(),
         None,
+        vec!["architect".to_string()],
     )
     .await;
 
@@ -238,6 +253,12 @@ async fn start_ticket_run_registers_cancel_token_so_cancel_run_finds_it() {
         "fix it".to_string(),
         "claude-code".to_string(),
         None,
+        vec![
+            "architect".to_string(),
+            "tdd-developer".to_string(),
+            "qa".to_string(),
+            "reviewer".to_string(),
+        ],
     )
     .await
     .expect("start_ticket_run");
@@ -289,6 +310,12 @@ async fn start_ticket_run_fails_fast_when_claude_binary_is_missing() {
         "fix something".to_string(),
         "claude-code".to_string(),
         None,
+        vec![
+            "architect".to_string(),
+            "tdd-developer".to_string(),
+            "qa".to_string(),
+            "reviewer".to_string(),
+        ],
     )
     .await;
 
@@ -322,6 +349,12 @@ async fn start_ticket_run_fails_fast_when_agent_files_are_missing() {
         "fix it".to_string(),
         "claude-code".to_string(),
         None,
+        vec![
+            "architect".to_string(),
+            "tdd-developer".to_string(),
+            "qa".to_string(),
+            "reviewer".to_string(),
+        ],
     )
     .await;
 
@@ -349,6 +382,18 @@ async fn start_ticket_run_passes_through_the_model_override() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&copilot_path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
+    // copilot-cli looks in .github/agents/ — scaffold those too.
+    let github_agents = _ws.path().join(".github").join("agents");
+    std::fs::create_dir_all(&github_agents).unwrap();
+    for name in ["architect", "tdd-developer", "qa", "reviewer"] {
+        std::fs::write(
+            github_agents.join(format!("{name}.md")),
+            format!(
+                "+++\nname = \"{name}\"\ndescription = \"stub\"\npipeline_role = \"step\"\n+++\nbody"
+            ),
+        )
+        .unwrap();
+    }
     unsafe {
         std::env::set_var("COPILOT_CLI_BIN", &copilot_path);
     }
@@ -360,6 +405,12 @@ async fn start_ticket_run_passes_through_the_model_override() {
         "implement export".to_string(),
         "copilot-cli".to_string(),
         Some("claude-sonnet-4-6".to_string()),
+        vec![
+            "architect".to_string(),
+            "tdd-developer".to_string(),
+            "qa".to_string(),
+            "reviewer".to_string(),
+        ],
     )
     .await
     .expect("start_ticket_run");
@@ -378,4 +429,153 @@ async fn start_ticket_run_passes_through_the_model_override() {
         .unwrap();
     assert_eq!(model, "claude-sonnet-4-6");
     assert_eq!(backend, "copilot-cli");
+}
+
+// ---------------------------------------------------------------------------
+// I.5: start_ticket_run accepts user-supplied agents list
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "multi_thread")]
+async fn start_ticket_run_rejects_empty_agents_list() {
+    let _g = ENV_LOCK.lock().await;
+    // Use a valid workspace root so the empty-agents check fires
+    // before the workspace-resolution error.
+    let tmp = tempfile::tempdir().unwrap();
+    unsafe {
+        std::env::set_var("AGENTIC_WORKSPACE_ROOT", tmp.path());
+        std::env::set_var("CLAUDE_CODE_BIN", "/nope/no-binary");
+    }
+    let (app, db) = build_app();
+    let result = start_ticket_run(
+        app.state::<EventBusState>(),
+        app.state::<Db>(),
+        "fix the thing".to_string(),
+        "claude-code".to_string(),
+        None,
+        vec![], // empty agents list
+    )
+    .await;
+    unsafe {
+        std::env::remove_var("AGENTIC_WORKSPACE_ROOT");
+        std::env::remove_var("CLAUDE_CODE_BIN");
+    }
+
+    let err = result.expect_err("empty agents list must be rejected");
+    assert!(
+        err.to_lowercase().contains("agents") && err.to_lowercase().contains("empty"),
+        "error should mention agents and empty; got: {err}"
+    );
+
+    // Assert no run row was inserted.
+    let conn = db.conn().unwrap();
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM runs", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 0, "no run row should have been seeded on agents-empty error");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn start_ticket_run_with_two_agent_list_seeds_and_returns_run_id() {
+    let _g = ENV_LOCK.lock().await;
+
+    // Set up a workspace with only "architect" and "reviewer" agent files.
+    let tmp = tempfile::tempdir().unwrap();
+    let agents_dir = tmp.path().join(".claude").join("agents");
+    std::fs::create_dir_all(&agents_dir).unwrap();
+    for name in ["architect", "reviewer"] {
+        std::fs::write(
+            agents_dir.join(format!("{name}.md")),
+            format!(
+                "+++\nname = \"{name}\"\ndescription = \"stub\"\npipeline_role = \"step\"\n+++\nbody"
+            ),
+        )
+        .unwrap();
+    }
+    let bin_dir = tmp.path().join("bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    let fake_claude = bin_dir.join("claude");
+    std::fs::write(&fake_claude, "#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake_claude, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    unsafe {
+        std::env::set_var("AGENTIC_WORKSPACE_ROOT", tmp.path());
+        std::env::set_var("CLAUDE_CODE_BIN", &fake_claude);
+    }
+
+    let (app, db) = build_app();
+    let result = start_ticket_run(
+        app.state::<EventBusState>(),
+        app.state::<Db>(),
+        "implement feature".to_string(),
+        "claude-code".to_string(),
+        None,
+        vec!["architect".to_string(), "reviewer".to_string()],
+    )
+    .await;
+    unsafe {
+        std::env::remove_var("AGENTIC_WORKSPACE_ROOT");
+        std::env::remove_var("CLAUDE_CODE_BIN");
+    }
+
+    let run_id = result.expect("2-agent list should succeed when both files exist");
+    assert_eq!(run_id.len(), 26, "run_id should be a 26-char ULID");
+
+    // Run row was seeded.
+    let conn = db.conn().unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM runs WHERE id = ?1",
+            [&run_id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1, "run row should be seeded");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn start_ticket_run_rejects_agents_that_dont_resolve() {
+    let _g = ENV_LOCK.lock().await;
+
+    // Workspace with no agent files at all (but a valid claude binary).
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(tmp.path().join(".claude").join("agents")).unwrap();
+    let bin_dir = tmp.path().join("bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    let fake_claude = bin_dir.join("claude");
+    std::fs::write(&fake_claude, "#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake_claude, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    unsafe {
+        std::env::set_var("AGENTIC_WORKSPACE_ROOT", tmp.path());
+        std::env::set_var("CLAUDE_CODE_BIN", &fake_claude);
+    }
+
+    let (app, _db) = build_app();
+    let result = start_ticket_run(
+        app.state::<EventBusState>(),
+        app.state::<Db>(),
+        "some task".to_string(),
+        "claude-code".to_string(),
+        None,
+        vec!["nope".to_string()],
+    )
+    .await;
+    unsafe {
+        std::env::remove_var("AGENTIC_WORKSPACE_ROOT");
+        std::env::remove_var("CLAUDE_CODE_BIN");
+    }
+
+    let err = result.expect_err("unresolvable agent names must fail pre-flight");
+    // pre_flight_check_with_home formats: "pre-flight: agent 'nope' not found…"
+    // and lists the searched paths.
+    assert!(
+        err.contains("nope") && err.contains("not found"),
+        "error should name the missing agent and say not found; got: {err}"
+    );
 }

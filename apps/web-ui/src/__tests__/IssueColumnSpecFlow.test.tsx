@@ -64,6 +64,7 @@ describe("IssueColumn — Create spec flow (W.6.6)", () => {
         ticket: "New spec",
         backend: "claude-code",
         model: null,
+        agents: expect.arrayContaining(["architect"]),
       });
     });
   });

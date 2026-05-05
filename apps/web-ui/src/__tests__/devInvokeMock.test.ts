@@ -51,7 +51,12 @@ describe("installDevInvokeMock", () => {
     });
 
     it("start_ticket_run returns a bare run_id string starting with dev-mock-", async () => {
-      const result = (await invoke("start_ticket_run", {})) as string;
+      const result = (await invoke("start_ticket_run", {
+        ticket: "test",
+        backend: "claude-code",
+        model: null,
+        agents: ["architect", "tdd-developer", "qa", "reviewer"],
+      })) as string;
       expect(typeof result).toBe("string");
       expect(result).toMatch(/^dev-mock-\d+$/);
     });
@@ -132,7 +137,7 @@ describe("installDevInvokeMock", () => {
       // Register listener for "agentic://event"
       await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
       // Now emit an event — handler should be called
-      await invoke("start_ticket_run", { ticket: "test", backend: "claude-code", model: null });
+      await invoke("start_ticket_run", { ticket: "test", backend: "claude-code", model: null, agents: ["architect", "tdd-developer", "qa", "reviewer"] });
       // Advance timers to fire the first scheduled event (RunStarted at 250ms)
       vi.advanceTimersByTime(300);
       expect(handler).toHaveBeenCalled();
@@ -145,7 +150,7 @@ describe("installDevInvokeMock", () => {
       // Unlisten immediately
       await invoke("plugin:event|unlisten", { eventId: cbId });
       // Start a run and advance timers
-      await invoke("start_ticket_run", { ticket: "test", backend: "claude-code", model: null });
+      await invoke("start_ticket_run", { ticket: "test", backend: "claude-code", model: null, agents: ["architect", "tdd-developer", "qa", "reviewer"] });
       vi.advanceTimersByTime(5000);
       expect(handler).not.toHaveBeenCalled();
     });
@@ -154,7 +159,7 @@ describe("installDevInvokeMock", () => {
       const received: unknown[] = [];
       const cbId = internals.transformCallback!((event) => received.push(event));
       await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
-      const runId = await invoke("start_ticket_run", { ticket: "fix issue 88", backend: "claude-code", model: null }) as string;
+      const runId = await invoke("start_ticket_run", { ticket: "fix issue 88", backend: "claude-code", model: null, agents: ["architect", "tdd-developer", "qa", "reviewer"] }) as string;
 
       vi.advanceTimersByTime(300); // fire RunStarted at 250ms
 
@@ -168,7 +173,7 @@ describe("installDevInvokeMock", () => {
       const received: unknown[] = [];
       const cbId = internals.transformCallback!((event) => received.push(event));
       await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
-      await invoke("start_ticket_run", { ticket: "task", backend: "claude-code", model: null });
+      await invoke("start_ticket_run", { ticket: "task", backend: "claude-code", model: null, agents: ["architect", "tdd-developer", "qa", "reviewer"] });
 
       // Advance past RunStarted + all 4 StepStarted+StepComplete pairs (no RunComplete yet)
       // RunStarted: 250ms, then per-agent: start at N, complete at N+800, next start at N+1000
@@ -186,7 +191,7 @@ describe("installDevInvokeMock", () => {
       const received: unknown[] = [];
       const cbId = internals.transformCallback!((event) => received.push(event));
       await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
-      await invoke("start_ticket_run", { ticket: "task", backend: "claude-code", model: null });
+      await invoke("start_ticket_run", { ticket: "task", backend: "claude-code", model: null, agents: ["architect", "tdd-developer", "qa", "reviewer"] });
 
       vi.advanceTimersByTime(10000); // well past all events
 
@@ -200,7 +205,7 @@ describe("installDevInvokeMock", () => {
       const received: unknown[] = [];
       const cbId = internals.transformCallback!((event) => received.push(event));
       await invoke("plugin:event|listen", { event: "agentic://event", handler: cbId, target: "any" });
-      await invoke("start_ticket_run", { ticket: "task", backend: "claude-code", model: null });
+      await invoke("start_ticket_run", { ticket: "task", backend: "claude-code", model: null, agents: ["architect", "tdd-developer", "qa", "reviewer"] });
       vi.advanceTimersByTime(10000);
 
       const stepCompletes = received

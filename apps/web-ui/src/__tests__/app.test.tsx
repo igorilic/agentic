@@ -323,6 +323,7 @@ describe("App — P.4.3 runId/stepId threading into permission_decide", () => {
         ticket: "Untitled run",
         backend: "copilot-cli",
         model: null,
+        agents: expect.arrayContaining(["architect"]),
       });
     });
   });

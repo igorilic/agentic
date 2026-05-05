@@ -215,7 +215,7 @@ describe("ChatColumn", () => {
       expect(screen.getByTestId("spec-dialog")).toBeInTheDocument();
     });
 
-    it("typing a title and submitting calls invoke with start_ticket_run", async () => {
+    it("typing a title and submitting calls invoke with start_ticket_run including agents", async () => {
       invokeMock.mockResolvedValueOnce({ run_id: "run-1" });
       const user = userEvent.setup();
 
@@ -230,6 +230,7 @@ describe("ChatColumn", () => {
           ticket: "My spec",
           backend: "claude-code",
           model: null,
+          agents: expect.arrayContaining(["architect"]),
         });
       });
     });

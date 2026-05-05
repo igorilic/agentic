@@ -110,6 +110,7 @@ describe("ChatPane", () => {
         ticket: "#42",
         backend: "claude-code",
         model: null,
+        agents: expect.arrayContaining(["architect"]),
       });
     });
     await waitFor(() => {
@@ -174,6 +175,7 @@ describe("ChatPane", () => {
         ticket: "#42 ticket text",
         backend: "copilot-cli",
         model: null,
+        agents: expect.arrayContaining(["architect"]),
       });
     });
   });
@@ -194,6 +196,7 @@ describe("ChatPane", () => {
         ticket: "implement export",
         backend: "copilot-cli",
         model: null,
+        agents: expect.arrayContaining(["architect"]),
       });
     });
     expect(screen.getByTestId("chat-message-system")).toHaveTextContent(
