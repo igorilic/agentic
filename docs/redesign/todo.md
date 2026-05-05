@@ -5208,7 +5208,7 @@ cargo clippy -p agentic-cli --all-features --all-targets -- -D warnings
 
 ---
 
-### Step I.5: `start_ticket_run` IPC takes `agents: Vec<String>` (breaking)
+### [x] Step I.5: `start_ticket_run` IPC takes `agents: Vec<String>` (breaking)
 
 **Goal**: The Tauri IPC signature changes to:
 ```rust
