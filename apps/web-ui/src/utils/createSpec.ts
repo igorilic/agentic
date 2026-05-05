@@ -6,16 +6,21 @@ import type { BackendKind } from "../slash/types";
  * label. Used by IssueColumn's "Create spec" action and ChatColumn's
  * "New spec" composer affordance.
  *
- * The body parameter is captured at the SpecDialog boundary but
- * intentionally dropped at the IPC layer — start_ticket_run accepts
- * only { ticket, backend, model }. Tracked in GH #92 for when the
- * backend gains a body/description field.
+ * The `agents` parameter is the user's selected pipeline agents list
+ * (from `usePipelineMutation().pipelineAgents` in App.tsx). Pass the
+ * live list rather than a hardcoded default so the user's pipeline
+ * configuration is respected.
  */
-export async function createSpec(title: string, backend: BackendKind): Promise<string | undefined> {
+export async function createSpec(
+  title: string,
+  backend: BackendKind,
+  agents: string[],
+): Promise<string | undefined> {
   const result = await invoke("start_ticket_run", {
     ticket: title,
     backend,
     model: null,
+    agents,
   });
   return typeof result === "string" ? result : undefined;
 }

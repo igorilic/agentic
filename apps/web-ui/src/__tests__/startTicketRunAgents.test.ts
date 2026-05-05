@@ -32,12 +32,12 @@ describe("invoke('start_ticket_run') agents parameter", () => {
     const invoke = (window as WindowWithTauri).__TAURI_INTERNALS__!.invoke;
 
     // No agents field → should reject (empty agents is invalid per I.5 contract)
-    const result = await invoke("start_ticket_run", {
+    await invoke("start_ticket_run", {
       ticket: "test",
       backend: "claude-code",
       model: null,
       agents: [],
-    }).catch((e: unknown) => e);
+    }).catch((_e: unknown) => { /* swallowed — testing that the mock doesn't crash */ });
 
     // Either throws or returns an error — the mock should surface that empty
     // agents is invalid so integration tests catch regressions.

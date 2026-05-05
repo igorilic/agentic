@@ -102,6 +102,7 @@ export default function App() {
       ticket: "Untitled run",
       backend,
       model: null,
+      agents: pipelineAgents,
     })
       .then((result: unknown) => {
         if (typeof result === "string") {
@@ -113,7 +114,7 @@ export default function App() {
       .catch(() => {
         /* no-op; failure surfaces via the run-state pill remaining idle */
       });
-  }, [backend]);
+  }, [backend, pipelineAgents]);
 
   const dense = isTauriDense();
   const ticket: IssueTicket = useMemo(() => {
@@ -167,6 +168,7 @@ export default function App() {
       >
         <ChatPane
           onTicketRunStarted={handleTicketRunStarted}
+          pipelineAgents={pipelineAgents}
         />
         <ActivityColumn
           events={events}
@@ -180,6 +182,7 @@ export default function App() {
           runState={overallRunState}
           actionItems={actionItems}
           onTicketRunStarted={handleTicketRunStarted}
+          pipelineAgents={pipelineAgents}
         />
       </AppShell>
       <SettingsModal

@@ -471,7 +471,10 @@ async fn start_ticket_run_rejects_empty_agents_list() {
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM runs", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(count, 0, "no run row should have been seeded on agents-empty error");
+    assert_eq!(
+        count, 0,
+        "no run row should have been seeded on agents-empty error"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -526,11 +529,9 @@ async fn start_ticket_run_with_two_agent_list_seeds_and_returns_run_id() {
     // Run row was seeded.
     let conn = db.conn().unwrap();
     let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM runs WHERE id = ?1",
-            [&run_id],
-            |r| r.get(0),
-        )
+        .query_row("SELECT COUNT(*) FROM runs WHERE id = ?1", [&run_id], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(count, 1, "run row should be seeded");
 }

@@ -15,13 +15,19 @@ type MentionResult = {
   dispatched: boolean;
 };
 
+const DEFAULT_PIPELINE_AGENTS = ["architect", "tdd-developer", "qa", "reviewer"];
+
 export type ChatPaneProps = {
   /// Called when `/plan <ticket>` or SpecDialog successfully kicks off a real ticket run.
   onTicketRunStarted?: (info: { runId: string; ticketLabel: string; description?: string }) => void;
+  /// The user's currently selected pipeline agents (from usePipelineMutation).
+  /// Forwarded to start_ticket_run so the user's selection is respected.
+  pipelineAgents?: string[];
 };
 
 export default function ChatPane({
   onTicketRunStarted,
+  pipelineAgents = DEFAULT_PIPELINE_AGENTS,
 }: ChatPaneProps = {}) {
   const { messages, send, sending, error } = useChat();
   const [systemMessages, setSystemMessages] = useState<string[]>([]);
@@ -42,6 +48,7 @@ export default function ChatPane({
           ticket,
           backend: backend ?? selectedBackend,
           model: null,
+          agents: pipelineAgents,
         })) as string;
         const { ticketLabel, description } = splitTicketText(ticket);
         onTicketRunStarted?.({ runId, ticketLabel, description });
@@ -58,7 +65,7 @@ export default function ChatPane({
         );
       },
     }),
-    [onTicketRunStarted, selectedBackend],
+    [onTicketRunStarted, selectedBackend, pipelineAgents],
   );
 
   // Project mention envelopes into renderable chat messages.
@@ -170,6 +177,7 @@ export default function ChatPane({
         onSend={onSend}
         error={error}
         onTicketRunStarted={onTicketRunStarted}
+        pipelineAgents={pipelineAgents}
       />
     </section>
   );

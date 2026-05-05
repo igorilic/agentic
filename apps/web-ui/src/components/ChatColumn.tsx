@@ -6,6 +6,8 @@ import { createSpec } from "../utils/createSpec";
 import { useBackend } from "../hooks/useBackend";
 import type { ChatMessage } from "../types/chat";
 
+const DEFAULT_PIPELINE_AGENTS = ["architect", "tdd-developer", "qa", "reviewer"];
+
 export type ChatColumnProps = {
   messages: ChatMessage[];
   systemMessages: string[];
@@ -14,6 +16,7 @@ export type ChatColumnProps = {
   onSend: (text: string) => void;
   error?: string | null;
   onTicketRunStarted?: (info: { runId: string; ticketLabel: string; description?: string }) => void;
+  pipelineAgents?: string[];
 };
 
 /**
@@ -40,6 +43,7 @@ export default function ChatColumn({
   onSend,
   error,
   onTicketRunStarted,
+  pipelineAgents = DEFAULT_PIPELINE_AGENTS,
 }: ChatColumnProps) {
   const [specOpen, setSpecOpen] = useState(false);
   const { backend } = useBackend();
@@ -47,7 +51,7 @@ export default function ChatColumn({
   const handleSpecSubmit = async (title: string, body: string) => {
     console.log("[ChatColumn] handleSpecSubmit", { title, backend, bodyLen: body.length });
     try {
-      const runId = await createSpec(title, backend);
+      const runId = await createSpec(title, backend, pipelineAgents);
       console.log("[ChatColumn] createSpec returned", { runId });
       if (runId !== undefined) {
         const description = body.trim().length > 0 ? body.trim() : undefined;

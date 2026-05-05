@@ -12,11 +12,14 @@ const RUN_STATE_TO_AGENT_STATUS: Record<RunStateOverall, AgentStatus> = {
   failed: "failed",
 };
 
+const DEFAULT_PIPELINE_AGENTS = ["architect", "tdd-developer", "qa", "reviewer"];
+
 export type IssueColumnProps = {
   ticket: IssueTicket;
   runState?: RunStateOverall;
   actionItems?: ActionItem[];
   onTicketRunStarted?: (info: { runId: string; ticketLabel: string; description?: string }) => void;
+  pipelineAgents?: string[];
 };
 
 const ACTION_ITEM_ICON: Record<ActionItem["kind"], string> = {
@@ -25,7 +28,13 @@ const ACTION_ITEM_ICON: Record<ActionItem["kind"], string> = {
   followup: "↗",
 };
 
-export default function IssueColumn({ ticket, runState, actionItems, onTicketRunStarted }: IssueColumnProps) {
+export default function IssueColumn({
+  ticket,
+  runState,
+  actionItems,
+  onTicketRunStarted,
+  pipelineAgents = DEFAULT_PIPELINE_AGENTS,
+}: IssueColumnProps) {
   const acceptanceChecked = runState === "completed";
   const completedItems: ActionItem[] =
     runState === "completed" ? (actionItems ?? []) : [];
@@ -36,7 +45,7 @@ export default function IssueColumn({ ticket, runState, actionItems, onTicketRun
   const handleCreateSpecSubmit = async (title: string, body: string) => {
     console.log("[IssueColumn] handleCreateSpecSubmit", { title, backend, bodyLen: body.length });
     try {
-      const runId = await createSpec(title, backend);
+      const runId = await createSpec(title, backend, pipelineAgents);
       console.log("[IssueColumn] createSpec returned", { runId });
       if (runId !== undefined) {
         const description = body.trim().length > 0 ? body.trim() : undefined;

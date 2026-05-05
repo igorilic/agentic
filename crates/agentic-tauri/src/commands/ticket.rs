@@ -54,11 +54,28 @@ pub async fn start_ticket_run(
     ticket: String,
     backend: String,
     model: Option<String>,
+    agents: Vec<String>,
 ) -> Result<String, String> {
+    // Validate backend first so a malformed backend doesn't get masked by
+    // an empty-agents complaint.
     let backend_kind = BackendKind::parse(&backend)?;
+
     let ticket = ticket.trim().to_string();
     if ticket.is_empty() {
         return Err("ticket text is empty".to_string());
+    }
+
+    // Validate agents: trim whitespace per entry; reject if empty after trim.
+    // Duplicates are intentional (e.g. two tdd-developer steps) — not deduped.
+    let agents: Vec<String> = agents
+        .into_iter()
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty())
+        .collect();
+    if agents.is_empty() {
+        return Err(
+            "agents list is empty — pass at least one agent in start_ticket_run.agents".to_string(),
+        );
     }
 
     // Workspace root resolution: honours AGENTIC_WORKSPACE_ROOT env var
@@ -66,18 +83,8 @@ pub async fn start_ticket_run(
     let ws_root = resolve_workspace_root()?;
 
     // Pre-flight: fail fast with an actionable message if the backend
-    // binary or any required agent file is missing. Without this, the
-    // pipeline starts, the first claude/copilot subprocess crashes (or
-    // discover_agent fails on the first step), and the user sees a
-    // cryptic RunComplete(failed) buried in EventList. The chat IPC
-    // surfaces a clear "install …" / "run agentic-cli init" message.
-    //
-    // TODO(I.5): replace this hardcoded list with agents from the IPC payload.
-    let default_agents: Vec<String> = ["architect", "tdd-developer", "qa", "reviewer"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    pre_flight_check(&ws_root, &backend_kind, &default_agents)?;
+    // binary or any required agent file is missing.
+    pre_flight_check(&ws_root, &backend_kind, &agents)?;
 
     let ws_id = stable_workspace_id(&ws_root);
     let run_id = Ulid::new().to_string().to_lowercase();
@@ -149,9 +156,8 @@ pub async fn start_ticket_run(
     // sub-flows like file snapshots).
     let paths = Paths::from_os().map_err(|e| format!("resolve paths: {e}"))?;
 
-    let pipeline_config = PipelineConfig::load(&ws_root)
-        .map_err(|e| format!("load pipeline config from {}: {e}", ws_root.display()))?;
-    let pipeline = pipeline_config.default_pipeline().clone();
+    let pipeline = PipelineConfig::from_agents(&agents)
+        .map_err(|e| format!("build pipeline from agents: {e}"))?;
 
     let model_id = model.map(ModelId);
 
