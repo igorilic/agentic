@@ -31,38 +31,17 @@ use agentic_core::db::workspaces::{Workspace, WorkspaceRepo};
 use agentic_core::events::{EventBus, RunStatus};
 use agentic_core::pipeline::PipelineConfig;
 use agentic_core::{
-    Backend, ClaudeCodeBackend, CopilotCliBackend, Db, ModelId, Paths, PipelineStep, Run, RunRepo,
+    Backend, BackendKind, ClaudeCodeBackend, CopilotCliBackend, Db, ModelId, Paths, PipelineStep,
+    Run, RunRepo,
 };
 use tauri::State;
 use ulid::Ulid;
 
 use super::events::EventBusState;
 
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum BackendKind {
-    ClaudeCode,
-    CopilotCli,
-}
-
-impl BackendKind {
-    fn id_str(&self) -> &'static str {
-        match self {
-            BackendKind::ClaudeCode => "claude-code",
-            BackendKind::CopilotCli => "copilot-cli",
-        }
-    }
-
-    fn parse(raw: &str) -> Result<Self, String> {
-        match raw {
-            "claude-code" => Ok(BackendKind::ClaudeCode),
-            "copilot-cli" => Ok(BackendKind::CopilotCli),
-            other => Err(format!(
-                "invalid backend: {other:?} (expected 'claude-code' or 'copilot-cli')"
-            )),
-        }
-    }
-}
+// BackendKind is the canonical `agentic_core::BackendKind`. It serialises
+// as kebab-case strings (e.g. "claude-code") which matches the Tauri IPC
+// contract. The local definition has been removed.
 
 /// Tauri command. Kicks off a real ticket-driven pipeline run against the
 /// process working directory. Returns the run_id immediately; the pipeline

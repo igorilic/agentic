@@ -18,6 +18,10 @@ use anyhow::{Context, Result};
 use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 use tokio_util::sync::CancellationToken;
 
+/// Thin clap wrapper around `agentic_core::BackendKind`.
+///
+/// Keeps `clap::ValueEnum` out of `agentic-core` (which has no clap
+/// dependency). Conversion to the canonical core type is via `From`.
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum BackendKind {
     #[value(name = "claude-code")]
@@ -28,9 +32,15 @@ enum BackendKind {
 
 impl BackendKind {
     fn id_str(self) -> &'static str {
-        match self {
-            BackendKind::ClaudeCode => "claude-code",
-            BackendKind::CopilotCli => "copilot-cli",
+        agentic_core::BackendKind::from(self).id_str()
+    }
+}
+
+impl From<BackendKind> for agentic_core::BackendKind {
+    fn from(cli: BackendKind) -> Self {
+        match cli {
+            BackendKind::ClaudeCode => agentic_core::BackendKind::ClaudeCode,
+            BackendKind::CopilotCli => agentic_core::BackendKind::CopilotCli,
         }
     }
 }
@@ -517,7 +527,22 @@ mod tests {
 
     #[test]
     fn backend_kind_id_str_matches_clap_value_name() {
+        // id_str delegates to core::BackendKind via From, so this also
+        // validates the From conversion is wired correctly.
         assert_eq!(BackendKind::ClaudeCode.id_str(), "claude-code");
         assert_eq!(BackendKind::CopilotCli.id_str(), "copilot-cli");
+    }
+
+    #[test]
+    fn cli_backend_kind_converts_to_core_backend_kind() {
+        use agentic_core::BackendKind as CoreKind;
+        assert_eq!(
+            CoreKind::from(BackendKind::ClaudeCode),
+            CoreKind::ClaudeCode
+        );
+        assert_eq!(
+            CoreKind::from(BackendKind::CopilotCli),
+            CoreKind::CopilotCli
+        );
     }
 }

@@ -38,11 +38,9 @@ fn backend_kind_serializes_via_serde_to_id_str() {
 
 #[test]
 fn backend_kind_deserializes_from_kebab_case_strings() {
-    let kind: BackendKind =
-        serde_json::from_value(serde_json::json!("claude-code")).unwrap();
+    let kind: BackendKind = serde_json::from_value(serde_json::json!("claude-code")).unwrap();
     assert_eq!(kind, BackendKind::ClaudeCode);
 
-    let kind: BackendKind =
-        serde_json::from_value(serde_json::json!("copilot-cli")).unwrap();
+    let kind: BackendKind = serde_json::from_value(serde_json::json!("copilot-cli")).unwrap();
     assert_eq!(kind, BackendKind::CopilotCli);
 }

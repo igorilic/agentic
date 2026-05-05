@@ -18,6 +18,44 @@ use tokio_util::sync::CancellationToken;
 use crate::Result;
 use crate::events::{EventEnvelope, StepStatus};
 
+/// Canonical backend discriminant shared by CLI, Tauri and core.
+///
+/// Serialises/deserialises with kebab-case strings (e.g. `"claude-code"`)
+/// so the value round-trips through Tauri IPC without conversion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BackendKind {
+    ClaudeCode,
+    CopilotCli,
+}
+
+impl BackendKind {
+    /// Stable kebab-case identifier string (e.g. `"claude-code"`).
+    pub fn id_str(self) -> &'static str {
+        match self {
+            BackendKind::ClaudeCode => "claude-code",
+            BackendKind::CopilotCli => "copilot-cli",
+        }
+    }
+
+    /// Parse from a stable id string; returns an error listing valid options.
+    pub fn parse(raw: &str) -> std::result::Result<Self, String> {
+        match raw {
+            "claude-code" => Ok(BackendKind::ClaudeCode),
+            "copilot-cli" => Ok(BackendKind::CopilotCli),
+            other => Err(format!(
+                "invalid backend: {other:?} (expected 'claude-code' or 'copilot-cli')"
+            )),
+        }
+    }
+}
+
+impl std::fmt::Display for BackendKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.id_str())
+    }
+}
+
 /// Stable identifier for a backend adapter (e.g., "claude-code").
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]

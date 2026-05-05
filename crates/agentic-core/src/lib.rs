@@ -13,8 +13,8 @@ pub use backends::file_snapshots::{
     FileSnapshotter, FileState, FinalizeReport, MAX_DIFF_FILE_SIZE, SkipReason,
 };
 pub use backends::{
-    Backend, BackendId, EventSink, ExecuteOutcome, ExecuteRequest, HealthStatus, ModelId, RunId,
-    StepId, TokenUsage, ToolName, WorkspaceRef,
+    Backend, BackendId, BackendKind, EventSink, ExecuteOutcome, ExecuteRequest, HealthStatus,
+    ModelId, RunId, StepId, TokenUsage, ToolName, WorkspaceRef,
 };
 pub use events::{
     ActionRequired, CURRENT_SCHEMA_VERSION, DEFAULT_CAPACITY, DEFAULT_HISTORY_CAP, Event, EventBus,
