@@ -240,8 +240,7 @@ fn agentic_dir_not_searched_for_either_backend() {
     );
 
     for backend in [BackendKind::ClaudeCode, BackendKind::CopilotCli] {
-        let result =
-            discover_agent_with_home(backend, root, Some(home.path()), "architect");
+        let result = discover_agent_with_home(backend, root, Some(home.path()), "architect");
         match result {
             Err(CoreError::AgentNotFound { .. }) => {}
             Ok(a) => panic!(

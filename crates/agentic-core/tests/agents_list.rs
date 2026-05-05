@@ -419,8 +419,8 @@ fn list_strict_2_path_scope_excludes_agentic_dir() {
     );
 
     for backend in [BackendKind::ClaudeCode, BackendKind::CopilotCli] {
-        let result = list_discoverable(backend, tmp.path(), Some(home.path()))
-            .expect("list_discoverable");
+        let result =
+            list_discoverable(backend, tmp.path(), Some(home.path())).expect("list_discoverable");
         assert!(
             result.is_empty(),
             "{backend:?}: .agentic/agents/ should NOT be searched under strict 2-path scoping; got: {result:?}"
@@ -441,7 +441,11 @@ fn list_accepts_files_without_frontmatter() {
     let result = list_discoverable(BackendKind::ClaudeCode, tmp.path(), Some(home.path()))
         .expect("list_discoverable");
 
-    assert_eq!(result.len(), 1, "fenceless agent should appear; got: {result:?}");
+    assert_eq!(
+        result.len(),
+        1,
+        "fenceless agent should appear; got: {result:?}"
+    );
     assert_eq!(result[0].name, "requirements-engineer");
     assert_eq!(
         result[0].description, None,
@@ -468,7 +472,11 @@ fn list_strips_agent_extension() {
     let result = list_discoverable(BackendKind::CopilotCli, tmp.path(), Some(home.path()))
         .expect("list_discoverable");
 
-    assert_eq!(result.len(), 1, "agent.md file should appear; got: {result:?}");
+    assert_eq!(
+        result.len(),
+        1,
+        "agent.md file should appear; got: {result:?}"
+    );
     assert_eq!(
         result[0].name, "requirements-engineer",
         "name should strip the .agent suffix; got: {:?}",

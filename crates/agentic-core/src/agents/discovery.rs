@@ -8,23 +8,18 @@ use crate::{CoreError, Result};
 /// using the user's real home directory (via [`dirs::home_dir`]) for the
 /// global fallback paths.
 ///
-/// Search order (first match wins):
-///
-/// **Universal (both backends):**
-///   1. `<repo_root>/.agentic/agents/<name>.md` — explicit project override
+/// Strict 2-path scoping per backend (first match wins):
 ///
 /// **ClaudeCode:**
-///   2. `<repo_root>/.claude/agents/<name>.md`  — Claude Code project convention
-///   3. `$HOME/.claude/agents/<name>.md`         — Claude Code global
+///   1. `<repo_root>/.claude/agents/<name>.md`  — Claude Code project convention
+///   2. `$HOME/.claude/agents/<name>.md`         — Claude Code global
 ///
 /// **CopilotCli:**
-///   2. `<repo_root>/.github/agents/<name>.md`  — Copilot project convention
-///   3. `$HOME/.copilot/agents/<name>.md`        — Copilot global
-///
-/// The legacy `<repo_root>/agents/` path is no longer searched.
+///   1. `<repo_root>/.github/agents/<name>.md`  — Copilot project convention
+///   2. `$HOME/.copilot/agents/<name>.md`        — Copilot global
 ///
 /// Returns `CoreError::AgentNotFound` with every probed path listed in
-/// `searched` (exactly 3 paths per call) if none of the candidates exist.
+/// `searched` (exactly 2 paths per call) if none of the candidates exist.
 pub fn discover_agent(backend: BackendKind, repo_root: &Path, name: &str) -> Result<Agent> {
     let base = directories::BaseDirs::new();
     let home = base.as_ref().map(|b| b.home_dir());
@@ -61,8 +56,8 @@ fn candidate_paths(
     name: &str,
 ) -> Vec<PathBuf> {
     let filename = format!("{name}.md");
-    // Universal first-priority override.
-    let mut paths = vec![repo_root.join(".agentic").join("agents").join(&filename)];
+    // Strict 2-path scoping: project dir first, then home dir for the backend.
+    let mut paths: Vec<PathBuf> = Vec::new();
 
     match backend {
         BackendKind::ClaudeCode => {

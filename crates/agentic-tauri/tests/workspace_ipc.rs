@@ -19,8 +19,8 @@ fn resolve_workspace_root_expands_tilde() {
 
     // Simulate AGENTIC_WORKSPACE_ROOT=~/some/dir.
     let env_value = "~/some/dir";
-    let result = resolve_with_home(Some(env_value), fake_home)
-        .expect("resolve_with_home should succeed");
+    let result =
+        resolve_with_home(Some(env_value), fake_home).expect("resolve_with_home should succeed");
 
     assert!(
         result.starts_with(fake_home),
