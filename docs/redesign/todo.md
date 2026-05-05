@@ -4095,3 +4095,646 @@ edge case, the fix lands here as a small refinement to
 - [x] F.2.3 useJiraFetch() hook + JiraTicketDto type
 - [x] F.2.4 SpecDialog jira-pull row + validation
 - [x] F.2.5 SpecDialog → IPC integration smoke test
+
+---
+
+## Phase G — Backend-scoped agent discovery + Copilot end-to-end
+
+**Goal**: Today's `discover_agent(repo_root, name)` blends Claude Code and
+Copilot project conventions into a single hard-coded search list, with no
+backend awareness. When a user runs the Copilot backend, the chat
+pre-flight still complains about missing files in `.claude/agents/` even
+when they have valid `.github/agents/` files. Phase G makes discovery
+backend-aware, promotes `BackendKind` to `agentic-core`, and adds a live
+Copilot smoke test mirroring the existing claude-code one.
+
+**Triage outcomes baked in (from architect / user Q&A)**:
+- Q1=b: drop the legacy `<repo>/agents/` path entirely. `.agentic/agents/`
+  remains the universal first-priority override (backend-agnostic).
+- Q2=a: breaking change — `discover_agent` gains a `BackendKind` argument.
+  All callers (CLI `ticket_run.rs`, Tauri `pre_flight_check`) and the
+  ~12 invocations across the discovery test suite are updated in the
+  same step.
+- Q3=a: promote `BackendKind` to `agentic-core` (`backends::BackendKind`).
+  CLI + Tauri private enums collapse to a thin wrapper (`clap::ValueEnum`
+  derive in CLI; `serde::Deserialize` derive in Tauri) — or the wrappers
+  are deleted if the core enum can carry both derives behind feature
+  flags.
+- Q4=a: error message lists every path checked **for the current
+  backend** (verbose, unambiguous).
+- Q5=b: H.x DnD bug fixed inline — no GH issue.
+- Q6=a: H.1 RED test code-only against the real `usePipelineMutation`
+  hook. Existing test at `AppPipelineMutation.test.tsx:130` already
+  passes; agent must add a NEW failing test that reproduces the live
+  failure mode, or document a hypothesis if JSDOM cannot reproduce
+  HTML5-DnD-only bugs.
+- Q7=merge: single Phase G with 5 sub-steps + Phase H with 2.
+
+### Open implementation questions (defer to user before G.1 dispatch)
+
+1. **`BackendKind` derive macros across crates**: the core enum needs
+   `serde::{Serialize, Deserialize}` (for Tauri IPC) + `clap::ValueEnum`
+   (for the CLI). Adding `clap` as a `agentic-core` dependency is
+   undesirable — `clap` is a binary-tier crate, not a library
+   dependency. Three options:
+   a. Keep the CLI's local `BackendKind` as a thin wrapper deriving
+      `ValueEnum` and `From<core::BackendKind>` / `Into`. Tauri uses
+      the core enum directly with `serde`.
+   b. Gate `clap::ValueEnum` behind a `clap` feature in `agentic-core`
+      (compiles cleanly without it for non-CLI consumers).
+   c. Both crates keep their own enums but each impls
+      `From<&core::BackendKind>` + a parser that delegates to core.
+   **Recommendation**: option (a) — minimum coupling, no new feature
+   gates. Confirm before G.1.
+
+2. **Tauri pre-flight backend wiring**: G.3 changes the signature to
+   accept `BackendKind`, which is already the case. The change is the
+   *discovery call* now also takes `BackendKind`. Confirm: should the
+   error message in `pre_flight_check` enumerate the four searched
+   paths verbatim (e.g. ``checked: .agentic/agents/architect.md,
+   .claude/agents/architect.md, $HOME/.claude/agents/architect.md``)
+   or just say "checked 3 locations under <root>"? Q4=a implies
+   verbatim — confirm format.
+
+3. **G.4 Copilot live test scope**: the existing
+   `e2e_permissions_live.rs` is 200+ lines of palindrome scaffolding
+   (git init, fixture files, permission gate exercise). For Copilot
+   we need a leaner version that just confirms `start_ticket_run`-like
+   wiring drives a real `CopilotCliBackend` for a one-step pipeline.
+   Confirm: full palindrome parity, or a minimal "execute one
+   reviewer agent against an empty sandbox and assert events flow"
+   test? **Recommendation**: minimal — the claude test already covers
+   permission-gate semantics; the Copilot one is about backend
+   plumbing, not gate behaviour.
+
+4. **H.1 reproducibility risk**: the existing reorder test
+   (`AppPipelineMutation.test.tsx:130`) uses `fireEvent.dragStart /
+   dragOver / drop` and passes against `main`. If the live failure is
+   browser-only (HTML5 DnD effects, pointer-events CSS, z-index
+   stacking, native-vs-synthetic event mismatch), there may be no
+   deterministic JSDOM RED test. In that case H.1's Test-first step
+   becomes "diagnostic write-up and hypothesis", and H.2 lands the
+   fix + a tighter unit test that *does* fail before the fix. Confirm
+   this is acceptable as a fallback before dispatching tdd-developer
+   on H.1.
+
+---
+
+### Step G.1: Promote `BackendKind` to `agentic-core`
+
+**Goal**: One canonical `BackendKind` enum lives in
+`agentic-core::backends::BackendKind`. CLI + Tauri callers reuse it
+(directly or via thin wrappers — see open question 1). Eliminates
+the two near-identical private copies that today drift independently
+(today: CLI uses `Copy + Clone`, Tauri uses `Deserialize` only).
+
+**Depends on**: triage decisions above (specifically open question 1).
+
+**Test first** (RED):
+- New test file
+  `crates/agentic-core/tests/backend_kind.rs`:
+  - `it("BackendKind::id_str returns the stable backend id")`:
+    `assert_eq!(BackendKind::ClaudeCode.id_str(), "claude-code");`
+    and `assert_eq!(BackendKind::CopilotCli.id_str(), "copilot-cli");`.
+  - `it("BackendKind::parse round-trips id_str values")`:
+    `BackendKind::parse("claude-code").unwrap() == BackendKind::ClaudeCode`,
+    `BackendKind::parse("copilot-cli").unwrap() == BackendKind::CopilotCli`,
+    and `BackendKind::parse("scripted").is_err()` returns an error
+    string containing both valid options.
+  - `it("BackendKind serializes via serde to its id_str")`:
+    `serde_json::to_value(&BackendKind::ClaudeCode).unwrap() == json!("claude-code")`
+    (use `#[serde(rename_all = "kebab-case")]` to match Tauri's
+    existing IPC contract).
+  - `it("BackendKind deserializes from kebab-case strings")`:
+    `serde_json::from_value::<BackendKind>(json!("claude-code")).unwrap() == BackendKind::ClaudeCode`.
+- Migrate the existing CLI test
+  `crates/agentic-cli/src/main.rs:516-521` to assert that the
+  CLI wrapper round-trips correctly into `core::BackendKind` (or
+  delete the test if the wrapper is gone).
+
+**Implement** (GREEN):
+- Add `pub enum BackendKind { ClaudeCode, CopilotCli }` to
+  `crates/agentic-core/src/backends/mod.rs`. Derive
+  `Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize`
+  with `#[serde(rename_all = "kebab-case")]`.
+- Implement `id_str(self) -> &'static str` and
+  `pub fn parse(raw: &str) -> Result<Self, String>` on the new
+  enum (mirrors today's CLI/Tauri impls).
+- Re-export from `agentic-core/src/lib.rs` next to `BackendId`.
+- Update CLI `crates/agentic-cli/src/main.rs:21-36`:
+  - Keep a thin local `enum BackendKind` deriving `ValueEnum` with
+    the same two variants, plus
+    `impl From<BackendKind> for agentic_core::BackendKind`. Local
+    `id_str` delegates.
+  - Tests at `:520-521` updated to assert via the core enum's
+    `id_str` after conversion.
+- Update Tauri `crates/agentic-tauri/src/commands/ticket.rs:41-65`:
+  - Delete the local `BackendKind` enum entirely.
+  - `start_ticket_run` parses `backend: String` via
+    `agentic_core::BackendKind::parse(&backend)` directly.
+  - All `BackendKind::ClaudeCode | BackendKind::CopilotCli` matches
+    in `pre_flight_check` and the `start_ticket_run` body switch
+    onto the core enum (no signature change visible).
+- `pre_flight_check(ws_root, &BackendKind)` keeps the same signature;
+  the type is now the core type.
+
+**Refactor**:
+- If both old enums collapse cleanly, also collapse the
+  `id_str().to_string()` calls into a `Display` impl on
+  `core::BackendKind`. Optional — skip if tests pass without it.
+
+**Files**:
+- `crates/agentic-core/src/backends/mod.rs` (new enum)
+- `crates/agentic-core/src/lib.rs` (re-export)
+- `crates/agentic-core/tests/backend_kind.rs` (new)
+- `crates/agentic-cli/src/main.rs` (wrapper + delegation)
+- `crates/agentic-tauri/src/commands/ticket.rs` (delete local enum)
+
+**Commit**: `refactor(core): promote BackendKind to agentic-core`
+
+**Verification**:
+```
+cargo test -p agentic-core --test backend_kind
+cargo test -p agentic-cli --lib
+cargo test -p agentic-tauri --lib
+cargo clippy --workspace --all-features --all-targets -- -D warnings
+```
+
+---
+
+### Step G.2: Backend-scoped `discover_agent`
+
+**Goal**: Discovery searches only the paths relevant to the active
+backend, with `.agentic/agents/` as the universal first override.
+Drops the legacy `<repo>/agents/` path.
+
+**Depends on**: G.1 (consumes `core::BackendKind`).
+
+**Test first** (RED): the existing
+`crates/agentic-core/tests/agents_discovery.rs` (9 `#[test]` fns,
+12 `discover_agent*` invocations) is rewritten to thread
+`BackendKind` through every call. Each test asserts the new search
+order:
+
+  - **ClaudeCode order**: (1) `<repo>/.agentic/agents/`, (2)
+    `<repo>/.claude/agents/`, (3) `$HOME/.claude/agents/`.
+  - **CopilotCli order**: (1) `<repo>/.agentic/agents/`, (2)
+    `<repo>/.github/agents/`, (3) `$HOME/.copilot/agents/`.
+  - Legacy `<repo>/agents/` is **never** consulted.
+
+Specific test rewrites (each test passes a `BackendKind` matching its
+intent — DO NOT downgrade tests just to compile; each must assert
+the right backend's intent):
+- `agentic_agents_dir_wins_over_claude_github_and_legacy` →
+  `agentic_dir_wins_for_claude_code` (drop the legacy and github
+  arms; assert `.agentic/` beats `.claude/` for ClaudeCode) +
+  `agentic_dir_wins_for_copilot_cli` (assert `.agentic/` beats
+  `.github/` for CopilotCli).
+- The legacy `<repo>/agents/` test (line ~140-155 if present) is
+  deleted entirely; replace with
+  `legacy_repo_agents_dir_is_ignored` that writes a file there
+  and asserts `discover_agent` returns `AgentNotFound`.
+- `home_claude_agents_dir_resolves_when_repo_empty` → splits into
+  `home_claude_resolves_for_claude_code` (writes to
+  `$HOME/.claude/agents/`, calls discovery with `ClaudeCode`,
+  expects success) and
+  `home_claude_ignored_for_copilot_cli` (same setup, calls discovery
+  with `CopilotCli`, expects `AgentNotFound`).
+- `home_copilot_agents_dir_resolves_when_repo_empty` → mirror
+  twin: `home_copilot_resolves_for_copilot_cli` +
+  `home_copilot_ignored_for_claude_code`.
+- `default_discover_agent_resolves_real_home_without_panicking` →
+  parameterise the backend (call once with each variant); both
+  must not panic.
+- `agent_not_found_lists_searched_paths` → assert the returned
+  `searched: Vec<PathBuf>` contains exactly **3** entries (not 6)
+  and they are the backend's three paths in order.
+
+**Implement** (GREEN):
+- `crates/agentic-core/src/agents/discovery.rs`:
+  - `pub fn discover_agent(backend: BackendKind, repo_root: &Path, name: &str) -> Result<Agent>`
+  - `pub fn discover_agent_with_home(backend: BackendKind, repo_root: &Path, home: Option<&Path>, name: &str) -> Result<Agent>`
+  - `fn candidate_paths(backend: BackendKind, repo_root: &Path, home: Option<&Path>, name: &str) -> Vec<PathBuf>`:
+    - Always start with `<repo_root>/.agentic/agents/<name>.md`.
+    - For `ClaudeCode`: append `<repo_root>/.claude/agents/<name>.md`,
+      then (if home) `<home>/.claude/agents/<name>.md`.
+    - For `CopilotCli`: append `<repo_root>/.github/agents/<name>.md`,
+      then (if home) `<home>/.copilot/agents/<name>.md`.
+    - Drop the legacy `<repo_root>/agents/<name>.md` and the
+      cross-backend home paths.
+  - Update the doc comment to spell out the new search order per
+    backend.
+- Update both callers:
+  - `crates/agentic-cli/src/ticket_run.rs:235` —
+    `discover_agent(ws_root, &pipeline_step.agent)` →
+    `discover_agent(ctx.backend_kind, ws_root, &pipeline_step.agent)`
+    (the `PipelineRunContext` already carries the backend kind via
+    G.1's wrapper conversion; if not, add a field).
+  - `crates/agentic-tauri/src/commands/ticket.rs:266` —
+    `agentic_core::discover_agent(ws_root, name)` →
+    `agentic_core::discover_agent(*backend_kind, ws_root, name)`.
+
+**Refactor**:
+- If `candidate_paths` becomes a `match backend { … }` block more
+  than ~15 lines, extract per-backend helpers
+  (`claude_paths`, `copilot_paths`) — optional cosmetic.
+
+**Files**:
+- `crates/agentic-core/src/agents/discovery.rs`
+- `crates/agentic-core/tests/agents_discovery.rs` (rewrite all 9 tests)
+- `crates/agentic-cli/src/ticket_run.rs`
+- `crates/agentic-tauri/src/commands/ticket.rs`
+
+**Commit**: `feat(core): scope agent discovery by backend kind`
+
+**Verification**:
+```
+cargo test -p agentic-core --test agents_discovery
+cargo test -p agentic-cli
+cargo test -p agentic-tauri
+cargo clippy --workspace --all-features --all-targets -- -D warnings
+```
+
+---
+
+### Step G.3: Pre-flight error lists searched paths
+
+**Goal**: When pre-flight discovery fails, the chat error message
+lists every path checked **for the active backend** so the user
+knows exactly where to drop the file. Today's message just says
+`agent not found under <ws_root>`, which is not actionable when the
+user has files at `.github/agents/` and the backend is ClaudeCode
+(they can't tell why discovery isn't seeing them).
+
+**Depends on**: G.2.
+
+**Test first** (RED):
+- New test file (or section in the existing
+  `crates/agentic-tauri/tests/pre_flight_check.rs` if it exists; if
+  not, create `crates/agentic-tauri/tests/pre_flight.rs`):
+  - Pre-flight test infrastructure may need extracting
+    `pre_flight_check` from `commands/ticket.rs` into a `pub(crate)`
+    helper module so tests can call it directly. If that's a
+    significant refactor, add it as the first sub-action of GREEN.
+  - `it("error message for missing claude-code agent lists the three claude paths")`:
+    Empty tmpdir, empty home tmpdir (via env override or with a
+    test-only `pre_flight_check_with_home`). Call with
+    `BackendKind::ClaudeCode`. Assert the returned `Err(String)`
+    contains all three of:
+    `.agentic/agents/architect.md`, `.claude/agents/architect.md`,
+    `<home>/.claude/agents/architect.md`. Assert it does **not**
+    contain `.github/agents/` or `.copilot/`.
+  - `it("error message for missing copilot-cli agent lists the three copilot paths")`:
+    same setup with `BackendKind::CopilotCli`. Asserts the message
+    contains `.agentic/`, `.github/`, and `<home>/.copilot/` paths,
+    and does **not** contain `.claude/`.
+  - `it("error message still includes the install hint for the backend binary if missing")`:
+    regression guard for the existing binary-on-PATH check. Set
+    `CLAUDE_CODE_BIN=/nonexistent/path/to/claude`, call pre-flight,
+    assert message contains `Install Claude Code`.
+
+**Implement** (GREEN):
+- Modify `pre_flight_check` in
+  `crates/agentic-tauri/src/commands/ticket.rs` (~line 263-274):
+  - On `discover_agent(...).is_err()`, instead of returning a
+    pre-baked `format!`, downcast to the actual `CoreError` to
+    extract the `searched: Vec<PathBuf>` field. Format each path
+    on its own line (or comma-separated if a single line is
+    preferable for the chat surface).
+  - New error string template:
+    `"pre-flight: agent `{name}` not found for backend `{backend}`.
+    Checked:\n  - {path1}\n  - {path2}\n  - {path3}\n
+    Run `agentic-cli init{flag}` to scaffold the four required agents."`
+    where `{flag}` is `--copilot` for CopilotCli and empty for
+    ClaudeCode.
+- Apply the same change to any pre-flight in
+  `crates/agentic-cli/src/ticket_run.rs` (audit: there may not be
+  one — confirm during implementation).
+- Pull `pre_flight_check` into a `pub(crate)` testable helper if
+  needed.
+
+**Refactor**:
+- If the error formatter is more than ~10 lines, extract a free
+  function `format_agent_not_found_error(name, backend, searched)`
+  for testability.
+
+**Files**:
+- `crates/agentic-tauri/src/commands/ticket.rs` (or new helper module)
+- `crates/agentic-tauri/tests/pre_flight.rs` (new)
+
+**Commit**: `feat(tauri): pre-flight lists searched agent paths per backend`
+
+**Verification**:
+```
+cargo test -p agentic-tauri
+cargo clippy --workspace --all-features --all-targets -- -D warnings
+```
+
+---
+
+### Step G.4: Live Copilot end-to-end smoke test
+
+**Goal**: Mirror the existing `e2e_permissions_live.rs` (claude-code)
+with a Copilot equivalent, so we have an `#[ignore]`d smoke test that
+exercises the real `CopilotCliBackend` against a one-step pipeline.
+Skipped when `copilot --version` is unavailable (mirrors the claude
+test's binary guard). Confirms G.1+G.2's wiring against the actual
+binary the user has installed.
+
+**Depends on**: G.2 (backend-scoped discovery), G.3 optional but
+preferred (better failure messages while debugging).
+
+**Test first** (RED):
+- New test file
+  `crates/agentic-cli/tests/e2e_copilot_live.rs`:
+  - `#[ignore = "live: requires `copilot` CLI on PATH; run via:
+    cargo test -p agentic-cli --test e2e_copilot_live -- --ignored --nocapture"]`
+  - `#[tokio::test] async fn copilot_one_step_pipeline_runs_against_real_copilot_cli()`.
+  - Step 1: Skip guard.
+    `Command::new("copilot").arg("--version").output()` —
+    on `Err` or non-zero status, `eprintln!` and `return`.
+    (Use the same shape as
+    `e2e_permissions_live.rs:30-56` for consistency.)
+  - Step 2: Sandbox tmpdir + `.agentic/agents/reviewer.md` agent
+    file (writes a minimal valid TOML+frontmatter agent that asks
+    Copilot to print "ok"; the agent body is intentionally tiny
+    to keep the smoke test fast and deterministic).
+  - Step 3: git init the sandbox (Copilot may require it; mirror
+    the claude test's approach).
+  - Step 4: Construct a one-step `Pipeline` with the `reviewer`
+    agent and `BackendKind::CopilotCli`.
+  - Step 5: Use `execute_pipeline(...)` (the same helper the claude
+    test uses) with a `BackendFactory` that constructs
+    `CopilotCliBackend::default()`.
+  - Step 6: Assert the run completes (status `Completed` or
+    `Failed`; we accept either — this is a smoke test for *plumbing*,
+    not a quality gate). Assert at least one `Event::StepStarted`
+    and one `Event::StepCompleted` envelope was emitted via the
+    bus. If the run fails because Copilot rejects the prompt,
+    `eprintln!` the summary so the user can see why and the test
+    still completes (don't `panic!`) — the goal is "did our wiring
+    drive the binary?", not "did Copilot succeed?".
+
+**Implement** (GREEN):
+- The test itself IS the deliverable — the production code
+  shouldn't need changes if G.1+G.2 are correct.
+- If the test reveals a wiring gap (e.g., `BackendFactory` isn't
+  parameterised by `BackendKind` and silently constructs
+  `ClaudeCodeBackend` for both branches), fix it here. Likely
+  candidates: `crates/agentic-cli/src/main.rs:409-414` switch arms
+  or a missing `impl From<BackendKind> for Box<dyn Backend>`.
+- Update `crates/agentic-cli/Cargo.toml` `[dev-dependencies]` only
+  if a new test-only crate is needed (e.g., `tempfile` should
+  already be there — confirm).
+
+**Refactor**:
+- If most of `e2e_permissions_live.rs` and the new file are
+  duplicated, extract a `tests/common/live_smoke.rs` mod with the
+  shared sandbox + git-init helper. Optional — only if duplication
+  is more than ~30 lines.
+
+**Files**:
+- `crates/agentic-cli/tests/e2e_copilot_live.rs` (new)
+- `crates/agentic-cli/tests/common/` (only if shared helpers are
+  extracted)
+- `crates/agentic-cli/src/main.rs` (only if a wiring gap is
+  uncovered)
+
+**Commit**: `test(cli): add live e2e smoke test for copilot backend`
+
+**Verification**:
+```
+# Default (skipped when binary missing — should pass):
+cargo test -p agentic-cli --test e2e_copilot_live
+# Live (manual, user has copilot CLI on PATH):
+cargo test -p agentic-cli --test e2e_copilot_live -- --ignored --nocapture
+cargo clippy --workspace --all-features --all-targets -- -D warnings
+```
+
+---
+
+### Step G.5: Documentation update
+
+**Goal**: Bring `docs/SMOKE.md`, `docs/redesign/spec.md`, and
+`crates/agentic-cli/src/init.rs` help text in sync with the new
+backend-scoped discovery + dropped legacy path.
+
+**Depends on**: G.2, G.3, G.4.
+
+**Test first** (RED): Lightweight — a doc-link / contract test:
+- New test in
+  `crates/agentic-cli/tests/init.rs` (extend existing file):
+  - `it("init --copilot writes to .github/agents/")`: regression
+    guard that confirms `agentic-cli init --copilot` creates
+    `.github/agents/architect.md` (etc.) — assert the four agent
+    filenames exist after running init in a tmpdir.
+  - `it("init (default) writes to .claude/agents/")`: same shape
+    for the default flag.
+  - `it("init does NOT write to legacy <repo>/agents/")`: regression
+    guard for the dropped path.
+
+**Implement** (GREEN):
+- `docs/SMOKE.md`:
+  - Add a "Live Copilot smoke test" section that mirrors the
+    existing claude one, pointing at the new
+    `e2e_copilot_live.rs` invocation.
+  - Update the agent-discovery search-order section (if present)
+    to spell out the per-backend paths and the dropped legacy
+    path.
+- `docs/redesign/spec.md` §"Agent discovery" (or wherever the
+  search order is documented): rewrite to two enumerations
+  (ClaudeCode vs CopilotCli) sharing `.agentic/` as the universal
+  first override.
+- `crates/agentic-cli/src/init.rs` doc comment + `--help` text:
+  remove any mention of `<repo>/agents/` legacy path. Confirm
+  `--copilot` and `--global` flag descriptions align with G.2's
+  semantics (no behavioural change expected, just doc accuracy).
+- `crates/agentic-cli/src/main.rs:84-94` Init doc comment: same
+  cleanup.
+- README at repo root (if it documents agent paths): same update.
+
+**Refactor**: None — pure docs + assertion regressions.
+
+**Files**:
+- `docs/SMOKE.md`
+- `docs/redesign/spec.md`
+- `crates/agentic-cli/src/init.rs`
+- `crates/agentic-cli/src/main.rs` (Init doc comment only)
+- `crates/agentic-cli/tests/init.rs` (extend)
+- `README.md` (if it mentions agent paths)
+
+**Commit**: `docs(redesign): document backend-scoped agent discovery + copilot smoke`
+
+**Verification**:
+```
+cargo test -p agentic-cli --test init
+# Manual: skim docs/SMOKE.md and docs/redesign/spec.md for
+# remaining "<repo>/agents/" references; rg should find none.
+rg -n "repo>/agents|legacy agents" docs/ crates/agentic-cli/src/
+```
+
+---
+
+### Phase G status checklist
+
+- [ ] G.1 promote BackendKind to agentic-core
+- [ ] G.2 backend-scoped `discover_agent`
+- [ ] G.3 pre-flight error lists searched paths
+- [ ] G.4 live copilot smoke test
+- [ ] G.5 docs + init regression tests
+
+---
+
+## Phase H — Pipeline DnD reorder regression fix
+
+**Goal**: User reports that drag-and-drop reorder of pipeline cards
+produces wrong ordering in the live UI (Tauri shell + Vite dev). The
+existing unit test at
+`apps/web-ui/src/__tests__/AppPipelineMutation.test.tsx:130` simulates
+`fireEvent.dragStart / dragOver / drop` against the real
+`usePipelineMutation` hook and **passes**. So the bug is either:
+(a) a JSDOM ↔ HTML5 native DnD divergence the synthetic events
+don't reach, (b) a stale closure / ref bug in `PipelineBar`'s
+`useDragReorder` that only manifests after multiple drags, or (c) a
+wiring gap between `App.tsx`'s `onReorder={onReorder}` and the
+hook's `setPipelineAgents` (e.g., a memoisation that captures stale
+state).
+
+**Triage outcomes baked in**:
+- Q5=b: no GH issue — fixing inline.
+- Q6=a: code-only RED test against the real
+  `usePipelineMutation` hook in the existing test file. If unable
+  to reproduce in JSDOM, document the hypothesis in the plan (this
+  step) and let GREEN verify in dev mode.
+
+### Step H.1: RED test reproducing live failure mode (or hypothesis if JSDOM cannot)
+
+**Goal**: Write a failing test that reproduces the live failure, OR
+a diagnostic write-up explaining why JSDOM can't see it. Either way,
+H.2 has a pinpoint target.
+
+**Depends on**: nothing (independent of Phase G).
+
+**Test first** (RED):
+- New test cases in
+  `apps/web-ui/src/__tests__/AppPipelineMutation.test.tsx` (in the
+  same `describe("App pipeline mutation — W.9.1")` block, after the
+  existing `it("reorder: drag architect(0) to gap-3 …")`):
+  - **Hypothesis A — multi-drag stale state**:
+    `it("reorder: two consecutive drags both apply (state isn't stale)")`.
+    Render `<App />`. Drag architect(0) → gap-3 (assert order
+    becomes `[tdd-developer, qa, architect, reviewer]`). Then
+    immediately drag reviewer (now at index 3) → gap-1 (assert
+    order becomes `[tdd-developer, reviewer, qa, architect]`).
+    If the second drag doesn't apply (the visible order stays at
+    the post-first-drag state), the bug is a stale closure in
+    `useDragReorder` capturing `dragFromIndex` from the first
+    invocation.
+  - **Hypothesis B — adjusted-index off-by-one for backwards drag**:
+    `it("reorder: drag tdd-developer(1) to gap-0 moves it to index 0")`.
+    Render `<App />`. Drag the second card to gap-0. Expected:
+    `[tdd-developer, architect, qa, reviewer]`. The current
+    `PipelineBar:43` logic computes
+    `adjusted = dragFromIndex < rightIndex ? rightIndex - 1 : rightIndex`,
+    so `from=1, gap=0` → `1 < 0 ? -1 : 0 = 0` ✓. But the inverse
+    `from=0, gap=2` (forward drag *exactly past* the next card) is
+    untested and may be where the bug lives.
+  - **Hypothesis C — gap-after-self drag is a no-op or wrong**:
+    `it("reorder: drag architect(0) to gap-1 (the gap immediately after itself) is a no-op")`.
+    `from=0, gap=1` → `adjusted = 0 < 1 ? 0 : 1 = 0`. Assert order
+    is unchanged.
+- Add a comment block at the top of the new test cases explaining
+  which hypothesis each guards against. The agent's RED report
+  documents which (if any) of the three actually fails on `main`.
+- **Fallback if all three pass**: the agent must add a doc comment
+  block at the bottom of the test describe explaining that the
+  bug is not reproducible in JSDOM, and propose a console-level
+  reproduction recipe for the user to run in `pnpm tauri dev`
+  (e.g., "drag X then Y then Z; expected vs. actual"). H.2 then
+  becomes a hypothesis-driven fix without a unit-level RED.
+
+**Implement** (GREEN): None at H.1 — this step is RED-only. The
+commit is `test(web): …` and adds the failing test (or the
+hypothesis comment block).
+
+**Refactor**: None.
+
+**Files**:
+- `apps/web-ui/src/__tests__/AppPipelineMutation.test.tsx`
+
+**Commit**: `test(web): reproduce pipeline DnD reorder regression (or document hypothesis)`
+
+**Verification**:
+```
+pnpm -F @agentic/web-ui test AppPipelineMutation
+# RED case: at least one new test fails.
+# Fallback: tests pass + comment block added; surface to user
+# for manual repro in `pnpm tauri dev`.
+```
+
+---
+
+### Step H.2: Fix the regression
+
+**Goal**: Land the fix that turns H.1's RED green. Commit message
+references the symptom (which hypothesis fired) and the root cause.
+
+**Depends on**: H.1.
+
+**Test first** (RED): the test from H.1 — already in place. No new
+test in H.2 unless the fix uncovers a related case.
+
+**Implement** (GREEN): Driven by H.1's findings. Most likely
+candidates listed in priority order so the agent investigates them
+first:
+1. **`apps/web-ui/src/components/PipelineBar.tsx:18-54`
+   `useDragReorder`**: the `setDropGapIndex(null)` reset on drop
+   (line ~46) and the `dragFromIndex` clear may race with a
+   second drag's `dragstart` event if React batches them. Switch
+   to `useRef` for `dragFromIndex` to avoid the stale-closure
+   read inside `getGapHandlers().onDrop`.
+2. **`apps/web-ui/src/utils/arrayMove.ts:12`
+   `reorderArray`**: re-audit the `splice(from,1)` then
+   `splice(to,0,removed)` semantics for the case where
+   `from < to`. Today's logic: removing first shifts subsequent
+   indices left by 1, so the destination index `to` already
+   accounts for the removal. Verify this is consistent with
+   `PipelineBar`'s `adjusted = from < right ? right-1 : right`
+   — there may be a double-correction.
+3. **`apps/web-ui/src/hooks/usePipelineMutation.ts:44-46`
+   `onReorder`**: the closure captures `setPipelineAgents` (stable
+   via React) and calls `reorderArray(prev, from, to)`. Stable
+   today — but if `App.tsx:161` ever wraps it in `useCallback`
+   with stale deps, the indices passed in could be from a stale
+   render. Check the App-level wiring.
+4. **CSS pointer-events / drop-zone hit-testing**: only relevant
+   if H.1's fallback fires. Inspect `.flex h-[84px]` container
+   and `data-drop-active` styling.
+
+**Refactor**:
+- If the fix is a `useRef` swap, also add a brief inline comment
+  explaining the closure-staleness reason (so a future reader
+  doesn't "simplify" it back to `useState`).
+
+**Files** (likely subset, exact set determined by H.1 findings):
+- `apps/web-ui/src/components/PipelineBar.tsx`
+- `apps/web-ui/src/utils/arrayMove.ts`
+- `apps/web-ui/src/hooks/usePipelineMutation.ts`
+
+**Commit**: `fix(web): pipeline DnD reorder regression — <root cause>`
+
+**Verification**:
+```
+pnpm -F @agentic/web-ui test AppPipelineMutation
+pnpm -F @agentic/web-ui test arrayMove PipelineBar
+pnpm -F @agentic/web-ui test
+# Manual: pnpm tauri dev — drag pipeline cards in several
+# sequences, verify visible order matches expected.
+```
+
+---
+
+### Phase H status checklist
+
+- [ ] H.1 RED test (or hypothesis write-up)
+- [ ] H.2 fix the regression
