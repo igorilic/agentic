@@ -29,10 +29,10 @@ fn backend_kind_parse_round_trips_id_str_values() {
 
 #[test]
 fn backend_kind_serializes_via_serde_to_id_str() {
-    let val = serde_json::to_value(&BackendKind::ClaudeCode).unwrap();
+    let val = serde_json::to_value(BackendKind::ClaudeCode).unwrap();
     assert_eq!(val, serde_json::json!("claude-code"));
 
-    let val = serde_json::to_value(&BackendKind::CopilotCli).unwrap();
+    let val = serde_json::to_value(BackendKind::CopilotCli).unwrap();
     assert_eq!(val, serde_json::json!("copilot-cli"));
 }
 
