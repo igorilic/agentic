@@ -6,26 +6,22 @@ export type LibraryResult = { kind: "library"; iconKey: string };
 export type InitialResult = { kind: "initial"; initial: string; bgClass: string };
 export type AgentIconResult = LibraryResult | InitialResult;
 
-// ── Keyword table (priority: first matching entry wins) ───────────────────
+// ── Keyword table (priority: row order, first matching row wins) ──────────
 //
-// Priority rule: iterate tokens extracted from the agent name; for each
-// token, scan the table top-to-bottom. The first table row whose keyword
-// list contains any extracted token determines the icon.
+// Algorithm: for each table row (top-to-bottom), check whether ANY of the
+// name's tokens appears in that row's keyword list. The first row that
+// matches wins — the row's position in the table determines priority, NOT
+// the position of the matching token in the name.
 //
-// Consequence for multi-keyword names like 'perf_engineer':
-//   tokens = ['perf', 'engineer']
-//   'perf' hits the gauge row (row 7) before 'engineer' can hit code (row 2)
-//   → gauge wins.
-// Consequence for 'requirements-engineer':
-//   tokens = ['requirements', 'engineer']
-//   'requirements' hits book (row 5) before 'engineer' hits code (row 2)?
-//   No — we scan all tokens for each table row in row order. Row 2 (code) is
-//   checked before row 5 (book). 'requirements' doesn't match row 2; 'engineer'
-//   DOES match row 2 → code... unless we want book to win.
+// Examples:
+//   'perf_engineer' tokens = ['perf', 'engineer']
+//   Row "gauge" contains 'perf' and appears before row "code" → gauge wins.
 //
-// To make 'requirements-engineer' → book, the KEYWORD_TABLE must place the
-// research/book row BEFORE the code/engineer row. The table below is ordered
-// so that more-specific domain keywords come before the generic code row.
+//   'requirements-engineer' tokens = ['requirements', 'engineer']
+//   Row "book" contains 'requirements' and appears before row "code"
+//   → book wins.
+//
+// Rule of thumb: put more-specific domain rows above the generic "code" row.
 
 const KEYWORD_TABLE: [string[], string][] = [
   // architect / design — must be before code so 'architect' beats generic patterns
