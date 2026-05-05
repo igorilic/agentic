@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Modal from "./Modal";
 import { useJiraFetch } from "../hooks/useJiraFetch";
 
@@ -15,9 +15,15 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
   const [body, setBody] = useState("");
   const [jiraKey, setJiraKey] = useState("");
   const [pullError, setPullError] = useState<string | null>(null);
-  const [pulling, setPulling] = useState(false);
 
-  const { fetch: fetchJira } = useJiraFetch();
+  const { fetch: fetchJira, isLoading: pulling } = useJiraFetch();
+
+  useEffect(() => {
+    if (!open) {
+      setJiraKey("");
+      setPullError(null);
+    }
+  }, [open]);
 
   const keyValid = KEY_REGEX.test(jiraKey);
   const submitDisabled = title.trim() === "";
@@ -29,7 +35,6 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
 
   const handlePull = () => {
     if (!keyValid || pulling) return;
-    setPulling(true);
     setPullError(null);
     fetchJira(jiraKey)
       .then((dto) => {
@@ -39,9 +44,6 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
       })
       .catch((e: unknown) => {
         setPullError(typeof e === "string" ? e : String(e));
-      })
-      .finally(() => {
-        setPulling(false);
       });
   };
 

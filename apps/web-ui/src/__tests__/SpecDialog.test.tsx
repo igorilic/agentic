@@ -6,16 +6,21 @@ import React from "react";
 
 // Default mock for useJiraFetch — overridden per-test where needed.
 const mockFetch = vi.fn();
+// isLoading reflects the hook's internal state: toggled by the in-flight test.
+let mockIsLoading = false;
 vi.mock("../hooks/useJiraFetch", () => ({
   useJiraFetch: () => ({
     fetch: mockFetch,
-    isLoading: false,
+    get isLoading() {
+      return mockIsLoading;
+    },
     error: null,
   }),
 }));
 
 beforeEach(() => {
   mockFetch.mockReset();
+  mockIsLoading = false;
 });
 
 function makeProps(overrides: Partial<React.ComponentProps<typeof SpecDialog>> = {}) {
@@ -317,27 +322,30 @@ describe("SpecDialog", () => {
       });
       mockFetch.mockReturnValueOnce(deferred);
 
-      render(<SpecDialog {...makeProps()} />);
+      const props = makeProps();
+      const { rerender } = render(<SpecDialog {...props} />);
       const keyInput = screen.getByTestId("spec-dialog-jira-key-input");
       await userEvent.type(keyInput, "PROJ-1");
 
       const pullButton = screen.getByTestId("spec-dialog-jira-pull-button") as HTMLButtonElement;
       expect(pullButton.disabled).toBe(false);
 
+      // Set isLoading=true before clicking so next render picks it up
+      mockIsLoading = true;
       await userEvent.click(pullButton);
+      // Force re-render so component reads updated mockIsLoading from hook mock
+      rerender(<SpecDialog {...props} />);
 
-      // While in-flight, button should be disabled
-      await waitFor(() => {
-        expect(pullButton.disabled).toBe(true);
-      });
+      // While in-flight, button should be disabled (isLoading=true from hook)
+      expect(pullButton.disabled).toBe(true);
 
-      // Resolve the promise
+      // Resolve the promise and reset isLoading
+      mockIsLoading = false;
       resolvePromise({ key: "PROJ-1", title: "Done", body: "body", ac: null });
+      rerender(<SpecDialog {...props} />);
 
       // After resolution, button should be re-enabled
-      await waitFor(() => {
-        expect(pullButton.disabled).toBe(false);
-      });
+      expect(pullButton.disabled).toBe(false);
     });
 
     it("re-pull clears prior error before fetch settles", async () => {
