@@ -4581,7 +4581,7 @@ rg -n "repo>/agents|legacy agents" docs/ crates/agentic-cli/src/
 - [ ] G.2 backend-scoped `discover_agent`
 - [x] G.3 pre-flight error lists searched paths
 - [x] G.4 live copilot smoke test
-- [ ] G.5 docs + init regression tests
+- [x] G.5 docs + init regression tests
 
 ---
 
