@@ -87,6 +87,11 @@ enum Command {
         /// Only valid with --ticket.
         #[arg(long, value_enum, default_value_t = BackendKind::ClaudeCode, requires = "ticket")]
         backend: BackendKind,
+
+        /// Comma-separated agent names in pipeline order (requires --ticket).
+        /// Example: --agents architect,tdd-developer,qa,reviewer
+        #[arg(long, value_delimiter = ',', requires = "ticket")]
+        agents: Vec<String>,
     },
     /// Probe the environment for required tools. (Stub at Step 5.1;
     /// implemented in Step 5.2.)
@@ -160,14 +165,39 @@ async fn run_command(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Run {
             scripted: Some(path),
+            agents,
             ..
-        } => cmd_run(&paths, &path).await,
+        } => {
+            // --agents is only meaningful with --ticket. Clap's requires = "ticket"
+            // constraint on agents may not fire reliably when --scripted is in use
+            // due to ArgGroup interaction; enforce it explicitly here.
+            if !agents.is_empty() {
+                anyhow::bail!(
+                    "--agents is only valid with --ticket; it is not used with --scripted"
+                );
+            }
+            cmd_run(&paths, &path).await
+        }
         Command::Run {
             scripted: None,
             ticket: Some(ticket_text),
             model,
             backend,
-        } => cmd_run_ticket(&paths, ticket_text, model, backend).await,
+            agents,
+        } => {
+            // Filter whitespace-only entries from the comma-delimited list.
+            let filtered: Vec<String> = agents
+                .into_iter()
+                .filter(|s| !s.trim().is_empty())
+                .collect();
+            if filtered.is_empty() {
+                anyhow::bail!(
+                    "--agents is required: pass --agents architect,tdd-developer or see your \
+                    .claude/agents/ or .github/agents/ directory for discoverable agents"
+                );
+            }
+            cmd_run_ticket(&paths, ticket_text, model, backend, filtered).await
+        }
         Command::Run { .. } => {
             // clap ArgGroup ensures we can't get here; but the compiler needs exhaustiveness.
             anyhow::bail!("run requires exactly one of --scripted or --ticket")
@@ -355,6 +385,7 @@ async fn cmd_run_ticket(
     ticket_text: String,
     model_override: Option<String>,
     backend_kind: BackendKind,
+    agents: Vec<String>,
 ) -> Result<()> {
     let db = Db::open(paths).context("open sqlite database")?;
     let runs_repo = RunRepo::new(&db);
@@ -409,9 +440,10 @@ async fn cmd_run_ticket(
     let (orch_handle, pers_handle, printer_handle) =
         spawn_infra(&bus, &db, &runs_repo, &steps_repo);
 
-    // Load default pipeline config (from .agentic/pipeline.toml or built-in).
-    let pipeline_config = PipelineConfig::load(&ws_root).context("load pipeline config")?;
-    let pipeline = pipeline_config.default_pipeline().clone();
+    // Build pipeline from user-supplied agent list (Phase I: user picks, app orchestrates).
+    // PipelineConfig::load / pipeline.toml is no longer used in this path — deprecated by
+    // the --agents flag. A future phase may reconcile TOML-defined pipelines with this flag.
+    let pipeline = PipelineConfig::from_agents(&agents).context("build pipeline from --agents")?;
 
     let model_id = model_override.map(ModelId);
 

@@ -84,7 +84,13 @@ fn run_ticket_without_claude_binary_fails_with_clear_error() {
     let output = Command::new(cargo_bin())
         .arg("--data-dir")
         .arg(&data_dir)
-        .args(["run", "--ticket", "hello world"])
+        .args([
+            "run",
+            "--ticket",
+            "hello world",
+            "--agents",
+            "architect,tdd-developer,qa,reviewer",
+        ])
         .env("CLAUDE_CODE_BIN", "/nonexistent/bin/claude")
         .current_dir(tmp.path())
         .output()
@@ -130,7 +136,15 @@ fn run_default_backend_is_claude_code_when_flag_omitted() {
 #[test]
 fn run_rejects_invalid_backend_value() {
     let output = Command::new(cargo_bin())
-        .args(["run", "--ticket", "hi", "--backend", "bogus"])
+        .args([
+            "run",
+            "--ticket",
+            "hi",
+            "--backend",
+            "bogus",
+            "--agents",
+            "architect",
+        ])
         .output()
         .expect("spawn cli");
     assert!(!output.status.success(), "should reject invalid backend");
@@ -151,7 +165,15 @@ fn run_backend_copilot_with_missing_binary_fails_with_clear_error() {
     let output = Command::new(cargo_bin())
         .arg("--data-dir")
         .arg(&data_dir)
-        .args(["run", "--ticket", "hello world", "--backend", "copilot-cli"])
+        .args([
+            "run",
+            "--ticket",
+            "hello world",
+            "--backend",
+            "copilot-cli",
+            "--agents",
+            "architect,tdd-developer,qa,reviewer",
+        ])
         .env("COPILOT_CLI_BIN", "/nonexistent/bin/copilot")
         .current_dir(tmp.path())
         .output()
