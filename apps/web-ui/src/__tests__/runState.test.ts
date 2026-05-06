@@ -229,4 +229,66 @@ describe("deriveRunState", () => {
     expect(state.totalTokens).toBe(0);
     expect(state.totalCostUsd).toBe(0);
   });
+
+  // Issue 1: deriveRunState must seed steps from RunStarted.data.agents when present
+  it("seeds steps from RunStarted.data.agents when present", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        step_id: null,
+        event: {
+          type: "RunStarted",
+          data: { agents: ["a", "b", "c"] },
+        },
+      }),
+      envelope({
+        step_id: "s1",
+        event: { type: "StepStarted", data: { agent: "a", model: "m" } },
+      }),
+    ];
+    const state = deriveRunState(events);
+    expect(state.steps).toHaveLength(3);
+    expect(state.steps[0].agent).toBe("a");
+    expect(state.steps[0].status).toBe("running");
+    expect(state.steps[1].agent).toBe("b");
+    expect(state.steps[1].status).toBe("pending");
+    expect(state.steps[2].agent).toBe("c");
+    expect(state.steps[2].status).toBe("pending");
+  });
+
+  it("falls back to passed agents when RunStarted lacks agents (legacy event)", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        step_id: null,
+        // Legacy RunStarted with no agents field
+        event: { type: "RunStarted", data: { ticket: "ABC-1" } },
+      }),
+    ];
+    const state = deriveRunState(events, ["a", "b"]);
+    expect(state.steps).toHaveLength(2);
+    expect(state.steps[0].agent).toBe("a");
+    expect(state.steps[1].agent).toBe("b");
+  });
+
+  it("returns empty steps when no RunStarted and no agents arg", () => {
+    const events: EventEnvelope[] = [
+      envelope({ step_id: null, event: { type: "TextDelta", data: { content: "hi" } } }),
+    ];
+    const state = deriveRunState(events);
+    expect(state.steps).toHaveLength(0);
+  });
+
+  it("RunStarted agents with empty array produces zero steps (no fallback to arg)", () => {
+    // Explicit [] in RunStarted means the run has no steps — don't override with agents param
+    const events: EventEnvelope[] = [
+      envelope({
+        step_id: null,
+        event: { type: "RunStarted", data: { agents: [] } },
+      }),
+    ];
+    const state = deriveRunState(events, ["a", "b"]);
+    // An explicit empty agents array in the event should NOT use the fallback.
+    // This tests the distinction between "no agents field" (fallback applies)
+    // and "agents: []" (run genuinely has no agents configured).
+    expect(state.steps).toHaveLength(0);
+  });
 });

@@ -316,6 +316,62 @@ fn permission_resolved_round_trips_msgpack() {
     );
 }
 
+// Issue 1: RunStarted must carry agents field and round-trip correctly
+#[test]
+fn event_run_started_serializes_agents_field() {
+    let event = Event::RunStarted {
+        ticket: TicketRef {
+            kind: TicketKind::FreeText,
+            reference: "test-run".to_string(),
+            title: None,
+        },
+        profile: ProfileId("default".to_string()),
+        backend: BackendId("claude-code".to_string()),
+        model: ModelId("claude-sonnet-4-6".to_string()),
+        agents: vec![
+            "spec-writer".to_string(),
+            "planner".to_string(),
+            "implementer-tdd".to_string(),
+            "reviewer".to_string(),
+        ],
+    };
+    let envelope = EventEnvelope::now("run1".to_string(), None, event.clone());
+    let json = serde_json::to_string(&envelope).expect("serialize");
+    let back: EventEnvelope = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(back, envelope, "RunStarted with agents must round-trip through JSON");
+    // Verify the agents field is present in the JSON output
+    assert!(json.contains("\"agents\""), "JSON must contain 'agents' field");
+    assert!(json.contains("\"spec-writer\""), "JSON must contain agent names");
+}
+
+#[test]
+fn event_run_started_agents_defaults_to_empty_on_legacy_json() {
+    // Simulates deserializing old JSON that lacks the agents field
+    let legacy_json = r#"{
+        "schema_version": 1,
+        "event_id": "01J8RZYX1K3PQXGT1WJYR8AZ7Q",
+        "run_id": "run1",
+        "step_id": null,
+        "timestamp_ms": 1234567890,
+        "event": {
+            "type": "RunStarted",
+            "data": {
+                "ticket": {"kind": "free-text", "reference": "test", "title": null},
+                "profile": "default",
+                "backend": "claude-code",
+                "model": "claude-sonnet-4-6"
+            }
+        }
+    }"#;
+    let envelope: EventEnvelope = serde_json::from_str(legacy_json).expect("deserialize legacy");
+    match &envelope.event {
+        Event::RunStarted { agents, .. } => {
+            assert!(agents.is_empty(), "legacy RunStarted without agents field should default to []");
+        }
+        other => panic!("expected RunStarted, got {other:?}"),
+    }
+}
+
 #[test]
 fn permission_request_serializes_to_json_snake_case() {
     // Verifies: "type" tag is "PermissionRequest" (PascalCase per rename_all = "PascalCase"),

@@ -1149,6 +1149,76 @@ mod tests {
         );
     }
 
+    // Issue 1: execute_pipeline must populate RunStarted.agents from pipeline.steps
+    #[tokio::test]
+    async fn execute_pipeline_run_started_carries_pipeline_agents() {
+        let agent_names = ["architect", "tdd-developer", "qa", "reviewer"];
+        let (tmp, paths, db, bus, ws_id) = setup_workspace(&agent_names);
+        let ws_root = tmp.path().to_path_buf();
+
+        let run_id = "agents-field-run-01";
+        seed_run(&db, run_id, &ws_id);
+
+        // Subscribe BEFORE spawning infra so no events are lost.
+        let mut rx = bus.subscribe();
+
+        let orch_handle = agentic_core::PipelineOrchestrator::spawn(
+            bus.clone(),
+            RunRepo::new(&db),
+            StepRepo::new(&db),
+            passthrough_gate(&bus),
+        );
+        let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
+
+        let pipeline = PipelineConfig::builtin_default();
+        let pipeline = pipeline.default_pipeline();
+        let expected_agents: Vec<String> = pipeline.steps.iter().map(|s| s.agent.clone()).collect();
+
+        let result = execute_pipeline(
+            PipelineRunContext {
+                db: &db,
+                bus: &bus,
+                run_id,
+                ws_id: &ws_id,
+                ws_root: &ws_root,
+                ticket_text: "test agents field",
+                model_override: None,
+                paths: &paths,
+                backend_kind: BackendKind::ClaudeCode,
+                external_cancel: None,
+            },
+            pipeline,
+            passing_factory(),
+        )
+        .await;
+
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+
+        drop(bus);
+        orch_handle.await.unwrap();
+        pers_handle.await.unwrap();
+
+        // Drain the channel to find the RunStarted event.
+        let mut found_agents: Option<Vec<String>> = None;
+        loop {
+            match rx.try_recv() {
+                Ok(env) => {
+                    if let Event::RunStarted { agents, .. } = env.event {
+                        found_agents = Some(agents);
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
+        let agents = found_agents.expect("RunStarted event must have been published");
+        assert_eq!(
+            agents, expected_agents,
+            "RunStarted.agents must match pipeline step agents; got: {agents:?}"
+        );
+    }
+
     #[test]
     fn stable_workspace_id_is_deterministic_for_same_path() {
         let id1 = stable_workspace_id(Path::new("/tmp/foo"));

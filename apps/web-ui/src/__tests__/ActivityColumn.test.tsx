@@ -785,6 +785,70 @@ describe("ActivityColumn — real backend event classifier", () => {
     // The card's agent chip should contain "tdd-developer"
     expect(cards[0].textContent).toContain("tdd-developer");
   });
+
+  // Issue 2: resolveAgent must treat undefined step_id the same as null
+  it("resolveAgent treats undefined step_id same as null — returns 'system'", () => {
+    // Mimic Rust serde Option::None serialized as missing field (skip_serializing_if)
+    // so JS receives undefined instead of null.
+    const eventWithUndefinedStepId = {
+      schema_version: 1,
+      event_id: "e_undef",
+      run_id: "run-1",
+      // step_id intentionally omitted (undefined) — simulates Tauri IPC omitting the field
+      timestamp_ms: 1_700_000_001_000,
+      event: { type: "StepComplete", data: { status: "passed", duration_ms: 1000 } },
+    } as unknown as EventEnvelope;
+
+    render(<ControlledActivityColumn events={[eventWithUndefinedStepId]} />);
+    const agentLabel = screen.getByTestId("log-row-agent");
+    expect(agentLabel.textContent).toBe("system");
+  });
+
+  it("resolveAgent returns mapped agent name when step_id matches StepStarted", () => {
+    const events: EventEnvelope[] = [
+      envelope({
+        id: "ss_map",
+        type: "StepStarted",
+        stepId: STEP_ULID,
+        data: { agent: "spec-writer", model: "claude-sonnet" },
+      }),
+      envelope({
+        id: "sc_map",
+        type: "StepComplete",
+        stepId: STEP_ULID,
+        data: { status: "passed", duration_ms: 5000, summary: "done" },
+      }),
+    ];
+    render(<ControlledActivityColumn events={events} />);
+    const agentLabels = screen.getAllByTestId("log-row-agent");
+    // Both StepStarted and StepComplete rows should show "spec-writer"
+    expect(agentLabels.every((el) => el.textContent === "spec-writer")).toBe(true);
+  });
+
+  it("buildStepAgentMap handles undefined step_id on StepStarted gracefully", () => {
+    // A StepStarted with undefined step_id (from Tauri IPC missing field) should not
+    // register any mapping — downstream events with non-null step_id still fall back to system.
+    const stepStartedWithUndefinedStepId = {
+      schema_version: 1,
+      event_id: "e_ss_undef",
+      run_id: "run-1",
+      // step_id intentionally omitted
+      timestamp_ms: 1_700_000_000_000,
+      event: { type: "StepStarted", data: { agent: "spec-writer", model: "m" } },
+    } as unknown as EventEnvelope;
+    const toolUse = envelope({
+      id: "e_tool_undef",
+      type: "ToolUseStart",
+      stepId: STEP_ULID,
+      data: { tool_call_id: "tc_x", tool_name: "bash", input: "ls" },
+    });
+    render(<ControlledActivityColumn events={[stepStartedWithUndefinedStepId, toolUse]} />);
+    // ToolUseStart with STEP_ULID — StepStarted had undefined step_id → no map entry → "system"
+    const cards = screen.getAllByTestId("tool-call-card");
+    expect(cards).toHaveLength(1);
+    // Agent chip should be "system" since the map has no entry for STEP_ULID
+    expect(cards[0].textContent).toContain("system");
+  });
 });
 
 // --- P.4.2: ActivityColumn consumes live usePermissionRequests + dispatches IPC ---
