@@ -113,7 +113,10 @@ async fn lru_touch_on_new_envelope_prevents_eviction() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // r2 must be evicted
-    assert!(buffer.get("r2").await.is_empty(), "r2 should be evicted (was LRU)");
+    assert!(
+        buffer.get("r2").await.is_empty(),
+        "r2 should be evicted (was LRU)"
+    );
     // r1 has 2 envelopes (e1 + e3)
     assert_eq!(buffer.get("r1").await.len(), 2, "r1 must have 2 envelopes");
     // r3 has 1 envelope
@@ -140,7 +143,10 @@ async fn get_does_not_touch_lru_order() {
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    assert!(buffer.get("r1").await.is_empty(), "r1 should be evicted (get must not touch)");
+    assert!(
+        buffer.get("r1").await.is_empty(),
+        "r1 should be evicted (get must not touch)"
+    );
     assert_eq!(buffer.get("r2").await.len(), 1, "r2 must survive");
     assert_eq!(buffer.get("r3").await.len(), 1, "r3 must survive");
 }
