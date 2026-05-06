@@ -48,15 +48,48 @@ export function emptyRunState(
 }
 
 /**
+ * Scan events for a RunStarted envelope and extract its agents list.
+ * Returns the agents array if RunStarted is found AND the field is a
+ * proper array (even if empty — that's authoritative).
+ * Returns null if RunStarted is absent or its data lacks the agents field.
+ */
+function extractAgentsFromEvents(events: EventEnvelope[]): string[] | null {
+  for (const env of events) {
+    if (env.event.type === "RunStarted") {
+      const data = (env.event.data ?? {}) as Record<string, unknown>;
+      if (Array.isArray(data.agents)) {
+        return data.agents as string[];
+      }
+      // RunStarted found but no agents field — signal caller to fall back.
+      return null;
+    }
+  }
+  // No RunStarted found — fall back.
+  return null;
+}
+
+/**
  * Derive a fresh RunState from a stream of envelopes for a single run.
  * Idempotent over re-application: replaying the same events produces
  * the same state.
+ *
+ * Agent list resolution (Issue 1):
+ * 1. If a RunStarted event with an agents array is present, use it
+ *    (even if empty — that's authoritative: the run has no steps).
+ * 2. If RunStarted is present but lacks agents (legacy event), fall back
+ *    to the `agents` parameter.
+ * 3. If no RunStarted at all, fall back to the `agents` parameter.
  */
 export function deriveRunState(
   events: EventEnvelope[],
   agents: readonly string[] = [],
 ): RunState {
-  const state = emptyRunState(agents);
+  const eventAgents = extractAgentsFromEvents(events);
+  // eventAgents is null when: no RunStarted, or RunStarted lacks agents field.
+  // In both cases fall back to the caller-supplied agents list.
+  const resolvedAgents: readonly string[] = eventAgents !== null ? eventAgents : agents;
+
+  const state = emptyRunState(resolvedAgents);
   // Index by agent name for O(1) lookups.
   const byAgent = new Map<string, StepInfo>(
     state.steps.map((s) => [s.agent, s]),

@@ -15,6 +15,7 @@ fn sample_events() -> Vec<Event> {
             profile: ProfileId("github".to_string()),
             backend: BackendId("claude-code".to_string()),
             model: ModelId("claude-opus-4-7".to_string()),
+            agents: vec![],
         },
         Event::RunComplete {
             status: RunStatus::Completed,
@@ -118,6 +119,7 @@ fn run_started_deserializes_from_fixture() {
             profile,
             backend,
             model,
+            ..
         } => {
             assert_eq!(ticket.kind, TicketKind::GithubIssue);
             assert_eq!(ticket.reference, "#42");
@@ -338,10 +340,19 @@ fn event_run_started_serializes_agents_field() {
     let envelope = EventEnvelope::now("run1".to_string(), None, event.clone());
     let json = serde_json::to_string(&envelope).expect("serialize");
     let back: EventEnvelope = serde_json::from_str(&json).expect("deserialize");
-    assert_eq!(back, envelope, "RunStarted with agents must round-trip through JSON");
+    assert_eq!(
+        back, envelope,
+        "RunStarted with agents must round-trip through JSON"
+    );
     // Verify the agents field is present in the JSON output
-    assert!(json.contains("\"agents\""), "JSON must contain 'agents' field");
-    assert!(json.contains("\"spec-writer\""), "JSON must contain agent names");
+    assert!(
+        json.contains("\"agents\""),
+        "JSON must contain 'agents' field"
+    );
+    assert!(
+        json.contains("\"spec-writer\""),
+        "JSON must contain agent names"
+    );
 }
 
 #[test]
@@ -366,7 +377,10 @@ fn event_run_started_agents_defaults_to_empty_on_legacy_json() {
     let envelope: EventEnvelope = serde_json::from_str(legacy_json).expect("deserialize legacy");
     match &envelope.event {
         Event::RunStarted { agents, .. } => {
-            assert!(agents.is_empty(), "legacy RunStarted without agents field should default to []");
+            assert!(
+                agents.is_empty(),
+                "legacy RunStarted without agents field should default to []"
+            );
         }
         other => panic!("expected RunStarted, got {other:?}"),
     }

@@ -120,12 +120,19 @@ impl PipelineSm {
         self.step_statuses[0] = StepStatus::Running;
 
         let first_agent = self.pipeline.steps[0].agent.clone();
+        let agents: Vec<String> = self
+            .pipeline
+            .steps
+            .iter()
+            .map(|s| s.agent.clone())
+            .collect();
         Ok(vec![
             Event::RunStarted {
                 ticket,
                 profile,
                 backend,
                 model: model.clone(),
+                agents,
             },
             Event::StepStarted {
                 agent: first_agent,

@@ -232,6 +232,7 @@ async fn run_started_event_transitions_run_row_to_running() {
             profile: ProfileId("github".into()),
             backend: BackendId("claude-code".into()),
             model: ModelId("claude-opus-4-7".into()),
+            agents: vec![],
         },
     ));
 
@@ -268,6 +269,7 @@ async fn run_started_for_unknown_run_logs_error_and_continues() {
             profile: ProfileId("custom".into()),
             backend: BackendId("scripted".into()),
             model: ModelId("fake".into()),
+            agents: vec![],
         },
     ));
 
@@ -286,6 +288,7 @@ async fn run_started_for_unknown_run_logs_error_and_continues() {
             profile: ProfileId("custom".into()),
             backend: BackendId("scripted".into()),
             model: ModelId("fake".into()),
+            agents: vec![],
         },
     ));
 

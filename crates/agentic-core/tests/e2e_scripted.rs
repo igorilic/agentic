@@ -135,6 +135,7 @@ async fn four_scripted_backends_complete_full_pipeline_and_persist_all_events() 
             profile: ProfileId("github".to_string()),
             backend: BackendId("scripted".to_string()),
             model: ModelId("fake".to_string()),
+            agents: vec![],
         },
     ));
 

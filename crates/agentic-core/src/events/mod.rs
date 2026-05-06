@@ -129,6 +129,8 @@ pub enum Event {
         profile: ProfileId,
         backend: BackendId,
         model: ModelId,
+        #[serde(default)]
+        agents: Vec<String>,
     },
     RunComplete {
         status: RunStatus,

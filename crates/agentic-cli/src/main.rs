@@ -304,6 +304,7 @@ async fn cmd_run(paths: &Paths, script_path: &std::path::Path) -> Result<()> {
             profile: ProfileId("custom".to_string()),
             backend: BackendId("scripted".to_string()),
             model: ModelId("fake".to_string()),
+            agents: vec![],
         },
     ));
 

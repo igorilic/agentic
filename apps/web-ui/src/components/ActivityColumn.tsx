@@ -70,14 +70,18 @@ function resolveAgent(
   env: EventEnvelope,
   stepAgents: Map<string, string>,
 ): string {
-  if (env.step_id === null) return "system";
+  // Issue 2: treat both null and undefined step_id as "system".
+  // Rust serde may serialize Option::None as a missing field (undefined in JS)
+  // rather than an explicit null, depending on skip_serializing_if usage.
+  if (env.step_id == null) return "system";
   return stepAgents.get(env.step_id) ?? "system";
 }
 
 function buildStepAgentMap(events: EventEnvelope[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const env of events) {
-    if (env.event.type === "StepStarted" && env.step_id !== null) {
+    // Issue 2: guard against undefined step_id from Tauri IPC missing field.
+    if (env.event.type === "StepStarted" && env.step_id != null) {
       const data = (env.event.data ?? {}) as { agent?: unknown };
       if (typeof data.agent === "string") {
         map.set(env.step_id, data.agent);

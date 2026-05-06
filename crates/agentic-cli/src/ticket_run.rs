@@ -93,6 +93,8 @@ pub async fn execute_pipeline<'a>(
 
     // GH #34: publish RunStarted before any step executes so the event log
     // starts consistently in both ticket mode and scripted mode.
+    // Issue 1: include the agents list so the frontend can seed runState.steps.
+    let agents: Vec<String> = pipeline.steps.iter().map(|s| s.agent.clone()).collect();
     bus.publish(EventEnvelope::now(
         run_id.to_string(),
         None,
@@ -107,6 +109,7 @@ pub async fn execute_pipeline<'a>(
             model: model_override
                 .clone()
                 .unwrap_or_else(|| agentic_core::ModelId("unknown".to_string())),
+            agents,
         },
     ));
 
@@ -1200,15 +1203,10 @@ mod tests {
 
         // Drain the channel to find the RunStarted event.
         let mut found_agents: Option<Vec<String>> = None;
-        loop {
-            match rx.try_recv() {
-                Ok(env) => {
-                    if let Event::RunStarted { agents, .. } = env.event {
-                        found_agents = Some(agents);
-                        break;
-                    }
-                }
-                Err(_) => break,
+        while let Ok(env) = rx.try_recv() {
+            if let Event::RunStarted { agents, .. } = env.event {
+                found_agents = Some(agents);
+                break;
             }
         }
 

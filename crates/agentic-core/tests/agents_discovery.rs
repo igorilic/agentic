@@ -489,18 +489,16 @@ fn error_lists_all_searched_paths_for_claude_backend() {
             assert_eq!(name, "nonexistent");
             assert_eq!(
                 searched.len(),
-                2,
-                "ClaudeCode should search exactly 2 paths (no .agentic/); got: {searched:?}"
+                4,
+                "ClaudeCode should search 4 paths (project+home × .md+.agent.md, no .agentic/); got: {searched:?}"
             );
             let paths: Vec<String> = searched
                 .iter()
                 .map(|p| p.to_string_lossy().to_string())
                 .collect();
-            assert!(paths[0].contains(".claude/agents"), "1st: {}", paths[0]);
             assert!(
-                paths[1].contains(".claude/agents"),
-                "2nd (home): {}",
-                paths[1]
+                paths.iter().all(|p| p.contains(".claude/agents")),
+                "all paths under .claude/agents; got: {paths:?}"
             );
             // Must NOT contain .agentic, .github or .copilot paths
             assert!(
@@ -537,18 +535,20 @@ fn error_lists_all_searched_paths_for_copilot_backend() {
             assert_eq!(name, "nonexistent");
             assert_eq!(
                 searched.len(),
-                2,
-                "CopilotCli should search exactly 2 paths (no .agentic/); got: {searched:?}"
+                4,
+                "CopilotCli should search 4 paths (project .github + home .copilot × .md+.agent.md, no .agentic/); got: {searched:?}"
             );
             let paths: Vec<String> = searched
                 .iter()
                 .map(|p| p.to_string_lossy().to_string())
                 .collect();
-            assert!(paths[0].contains(".github/agents"), "1st: {}", paths[0]);
             assert!(
-                paths[1].contains(".copilot/agents"),
-                "2nd (home): {}",
-                paths[1]
+                paths.iter().any(|p| p.contains(".github/agents")),
+                "should contain project .github/agents; got: {paths:?}"
+            );
+            assert!(
+                paths.iter().any(|p| p.contains(".copilot/agents")),
+                "should contain home .copilot/agents; got: {paths:?}"
             );
             // Must NOT contain .agentic or .claude paths
             assert!(
