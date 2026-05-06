@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::agents::{Agent, parse_agent};
+use crate::agents::{Agent, PipelineRole, parse_agent};
 use crate::backends::BackendKind;
 use crate::{CoreError, Result};
 
@@ -46,7 +46,13 @@ pub fn discover_agent_with_home(
     for path in &candidates {
         if path.is_file() {
             let content = std::fs::read_to_string(path)?;
-            return parse_agent(name, &content);
+            return parse_agent(name, &content).or_else(|e| {
+                if is_no_toml_fence_error(&e) {
+                    Ok(fallback_agent(name, content))
+                } else {
+                    Err(e)
+                }
+            });
         }
     }
 
@@ -95,6 +101,32 @@ fn paths_for_dir(dir: &Path, name: &str) -> [PathBuf; 2] {
         dir.join(format!("{name}.md")),
         dir.join(format!("{name}.agent.md")),
     ]
+}
+
+/// Returns `true` when `e` is the "missing leading '+++' fence" parse error,
+/// indicating the file uses YAML frontmatter or has no frontmatter at all.
+/// This mirrors the tolerance criterion used by `list_discoverable` / `load_agent_info`.
+/// Other parse errors (e.g. "missing closing '+++' fence") are NOT matched so
+/// that intentionally-TOML-but-malformed files still surface an error to the caller.
+fn is_no_toml_fence_error(e: &CoreError) -> bool {
+    matches!(e, CoreError::Parse(msg) if msg.contains("missing leading '+++'"))
+}
+
+/// Build a fallback [`Agent`] for files that lack a TOML `+++` fence. The
+/// entire file content is stored as `system_prompt` so downstream callers
+/// (Copilot CLI, Claude Code) can read it directly. Metadata fields are left
+/// as empty/`None` because there is no TOML to extract them from.
+fn fallback_agent(name: &str, content: String) -> Agent {
+    Agent {
+        name: name.to_string(),
+        description: String::new(),
+        model: None,
+        tools: None,
+        allowed_questions: None,
+        pipeline_role: PipelineRole::default(),
+        timeout_seconds: None,
+        system_prompt: content,
+    }
 }
 
 #[cfg(test)]
@@ -257,7 +289,10 @@ You are a spec-writer agent.
             result
         );
         let agent = result.unwrap();
-        assert_eq!(agent.name, "spec-writer", "fallback name must equal filename stem");
+        assert_eq!(
+            agent.name, "spec-writer",
+            "fallback name must equal filename stem"
+        );
         assert!(
             agent.description.is_empty(),
             "fallback description must be empty (no TOML parsed); got: {:?}",

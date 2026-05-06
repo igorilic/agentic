@@ -285,8 +285,8 @@ pub fn pre_flight_check_with_home(
             }
             Err(e) => {
                 return Err(format!(
-                    "pre-flight: agent '{agent_name}' in agents/ could not be parsed: {e}. \
-                     Run `agentic-cli init` to re-scaffold the required agents."
+                    "pre-flight: agent '{agent_name}' could not be parsed: {e}. \
+                     Check the frontmatter syntax in the agent file."
                 ));
             }
         }
@@ -297,8 +297,8 @@ pub fn pre_flight_check_with_home(
 
 /// Format a user-facing error string for a missing agent.
 ///
-/// Lists each searched path as a bullet so the user knows exactly where to
-/// place the file. Includes a backend-specific `agentic-cli init` hint.
+/// Lists each searched path as a bullet (both `.md` and `.agent.md` variants)
+/// so the user knows exactly where to place the file.
 fn format_agent_not_found_error(
     name: &str,
     backend: BackendKind,
@@ -308,10 +308,6 @@ fn format_agent_not_found_error(
         .iter()
         .map(|p| format!("  - {}\n", p.display()))
         .collect();
-    let flag = match backend {
-        BackendKind::CopilotCli => " --copilot",
-        BackendKind::ClaudeCode => "",
-    };
     let backend_label = match backend {
         BackendKind::ClaudeCode => "claude-code",
         BackendKind::CopilotCli => "copilot-cli",
@@ -319,7 +315,8 @@ fn format_agent_not_found_error(
     format!(
         "pre-flight: agent '{name}' not found for backend '{backend_label}'. Searched:\n\
          {bullets}\
-         Run `agentic-cli init{flag}` to scaffold the four required agents."
+         Place an agent file at one of the paths above (with .md or .agent.md extension), \
+         or pick a different agent in the picker."
     )
 }
 

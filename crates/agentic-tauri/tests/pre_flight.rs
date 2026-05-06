@@ -208,7 +208,8 @@ fn smoke_agent_dot_agent_md_resolves_for_copilot_cli() {
     let agents_dir = ws.path().join(".github").join("agents");
     std::fs::create_dir_all(&agents_dir).unwrap();
     // Write the .agent.md variant only — no plain .md file.
-    let content = "+++\nname = \"spec-writer\"\ndescription = \"stub\"\npipeline_role = \"step\"\n+++\nbody";
+    let content =
+        "+++\nname = \"spec-writer\"\ndescription = \"stub\"\npipeline_role = \"step\"\n+++\nbody";
     std::fs::write(agents_dir.join("spec-writer.agent.md"), content).unwrap();
 
     unsafe {
