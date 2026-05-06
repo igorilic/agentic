@@ -5635,7 +5635,7 @@ rg -n '\brole\b' crates/ apps/web-ui/src | rg -v 'chat::ChatMessage|chat\\.rs|\\
 
 ---
 
-### Step I.10: Integration smoke — end-to-end 2-agent pipeline
+### Step I.10: Integration smoke — end-to-end 2-agent pipeline [COMPLETE]
 
 **Goal**: One last integration step that exercises every Phase I
 contract together: list discoverable agents → pick a 2-agent
@@ -5704,7 +5704,7 @@ cargo fmt --all -- --check
 - [x] I.7 per-project pipeline persistence in localStorage
 - [x] I.8 AgentPicker consumes `useDiscoverableAgents`
 - [x] I.9 drop `RunStep.role` everywhere
-- [ ] I.10 end-to-end dynamic pipeline integration smoke
+- [x] I.10 end-to-end dynamic pipeline integration smoke
 
 ### Phase I open implementation questions (raised mid-write — triage before I.1 dispatch)
 
