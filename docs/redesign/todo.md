@@ -5140,7 +5140,7 @@ cargo clippy --workspace --all-features --all-targets -- -D warnings
 
 ---
 
-### Step I.4: CLI `run --ticket --agents <list>` (no implicit fallback)
+### [x] Step I.4: CLI `run --ticket --agents <list>` (no implicit fallback)
 
 **Goal**: `agentic-cli run --ticket "..." --agents architect,tdd-developer,qa,reviewer`
 runs the pipeline with that agent list. **Empty / missing
