@@ -2296,6 +2296,11 @@ pane**. The dual binding is the contract:
     - Why deferred: surfacing the error from `App.handleRunPipeline` requires hoisting `systemMessages` state from `ChatPane` to `App` or adding a callback prop — invasive restructuring for a placeholder button.
     - Trigger: Run-pipeline button graduates to a SpecDialog-driven flow (W.8.x successor), OR a global toast surface lands first.
 
+19. **YAML frontmatter metadata flow-through in agent discovery** (GH #107).
+    - What's missing: `discover_agent_with_home` falls back to a stub `Agent` when it encounters YAML `---` frontmatter (commit `5700509`). The fallback carries `system_prompt = full file content` but leaves `model`, `tools`, `allowed_questions`, `pipeline_role`, `timeout_seconds` at their defaults. Picker (`list_discoverable`) also shows `description = None` for YAML files.
+    - Why deferred: Copilot CLI and Claude Code read the agent file directly from disk; the Rust `Agent` struct metadata is not load-bearing for the current pipeline. Adding a YAML parser (`serde_yaml`) touches the `agentic-core` dependency surface — that's a separate decision.
+    - Trigger: when the orchestrator needs to route on `model`/`tools`/`pipeline_role` from YAML agent files (i.e. when Rust—not the subprocess—must act on metadata), or when a user requests description display for YAML files in the picker.
+
 ---
 
 ## Phase P — Backend permission stream (GH #88)
