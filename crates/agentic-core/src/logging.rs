@@ -131,6 +131,57 @@ thread_local! {
     static IN_BUS_LAYER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+/// RAII guard that clears `IN_BUS_LAYER` when dropped, even on panic (F1).
+///
+/// Using a drop guard instead of a manual set/clear pair ensures the flag is
+/// always reset even if `bus.publish` panics and the stack unwinds.
+struct ReentryGuard;
+
+impl ReentryGuard {
+    /// Set the flag and return a guard. The flag is cleared when the guard drops.
+    fn set() -> Self {
+        IN_BUS_LAYER.with(|g| g.set(true));
+        Self
+    }
+}
+
+impl Drop for ReentryGuard {
+    fn drop(&mut self) {
+        IN_BUS_LAYER.with(|g| g.set(false));
+    }
+}
+
+/// Fields extracted from a span's attributes and stored as a span extension.
+///
+/// `BusLayer::on_new_span` populates this struct by walking the span's
+/// `Attributes` via a `Visit` implementation.  `on_event` then reads the
+/// extension from parent spans rather than parsing the formatted string
+/// produced by `DefaultFields` (F2: the formatted string is not a stable API).
+#[derive(Default)]
+struct SpanFields {
+    run_id: Option<String>,
+    step_id: Option<String>,
+}
+
+impl tracing::field::Visit for SpanFields {
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        match field.name() {
+            "run_id" => self.run_id = Some(value.to_owned()),
+            "step_id" => self.step_id = Some(value.to_owned()),
+            _ => {}
+        }
+    }
+
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        let s = debug_to_string(value);
+        match field.name() {
+            "run_id" => self.run_id = Some(s),
+            "step_id" => self.step_id = Some(s),
+            _ => {}
+        }
+    }
+}
+
 /// A [`tracing_subscriber::Layer`] that bridges ERROR and WARN events onto an
 /// [`EventBus`] as [`Event::Finding`] envelopes.
 ///
@@ -146,7 +197,7 @@ thread_local! {
 ///
 /// 1. Field is present on the tracing event itself.
 /// 2. Walk parent spans (innermost → outermost) and use the first match found
-///    in the span's pre-formatted field string.
+///    in the span's stored [`SpanFields`] extension.
 /// 3. If not found anywhere, use `""` (empty-string sentinel — the UI can
 ///    choose to hide findings that have no associated run).
 ///
@@ -154,8 +205,8 @@ thread_local! {
 ///
 /// `EventBus::publish` internally calls `tracing::warn!` when no subscribers
 /// are listening.  To prevent infinite recursion a `thread_local!` boolean is
-/// set for the duration of `on_event`; if it is already `true` on entry, the
-/// call is a no-op.
+/// set for the duration of `on_event` via an RAII [`ReentryGuard`] that clears
+/// the flag even if `publish` panics (F1).
 pub struct BusLayer {
     /// The bus slot this layer reads from.  `None` means "use the global slot".
     slot: Option<Arc<BusSlot>>,
@@ -186,6 +237,21 @@ impl<S> Layer<S> for BusLayer
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
+    /// Store span-level `run_id` / `step_id` attributes as a [`SpanFields`]
+    /// extension so `on_event` can retrieve them without parsing formatted strings.
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        id: &tracing::span::Id,
+        ctx: Context<'_, S>,
+    ) {
+        if let Some(span) = ctx.span(id) {
+            let mut fields = SpanFields::default();
+            attrs.record(&mut fields);
+            span.extensions_mut().insert(fields);
+        }
+    }
+
     fn on_event(&self, event: &tracing::Event<'_>, ctx: Context<'_, S>) {
         // Re-entry guard — bail if we are already inside this function on
         // this thread (prevents infinite recursion through publish → warn).
@@ -205,19 +271,19 @@ where
             _ => return, // only bridge ERROR + WARN
         };
 
-        // Visit fields to extract message, run_id, step_id.
+        // Visit event-level fields to extract message, run_id, step_id.
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
 
-        // If run_id not on the event, search parent spans.
+        // If run_id / step_id not on the event, walk parent span extensions.
         let run_id = if visitor.run_id.is_empty() {
-            find_in_spans(ctx.lookup_current(), "run_id").unwrap_or_default()
+            find_in_span_extensions(ctx.lookup_current(), |f| f.run_id.clone()).unwrap_or_default()
         } else {
             visitor.run_id.clone()
         };
 
         let step_id = if visitor.step_id.is_empty() {
-            find_in_spans(ctx.lookup_current(), "step_id")
+            find_in_span_extensions(ctx.lookup_current(), |f| f.step_id.clone())
         } else {
             Some(visitor.step_id.clone())
         };
@@ -232,29 +298,30 @@ where
         };
         let envelope = EventEnvelope::now(run_id, step_id, finding);
 
-        IN_BUS_LAYER.with(|g| g.set(true));
+        // RAII guard — flag is cleared on drop even if publish panics (F1).
+        let _guard = ReentryGuard::set();
         bus.publish(envelope);
-        IN_BUS_LAYER.with(|g| g.set(false));
     }
 }
 
-/// Walk span ancestors looking for `key` in pre-formatted field strings.
-fn find_in_spans<S>(
+/// Walk span ancestors looking for a non-`None` value via `extract`.
+///
+/// Uses the typed [`SpanFields`] extension stored by `on_new_span`, avoiding
+/// the unstable `FormattedFields<DefaultFields>` string parsing (F2).
+fn find_in_span_extensions<S, F>(
     span: Option<tracing_subscriber::registry::SpanRef<'_, S>>,
-    key: &str,
+    extract: F,
 ) -> Option<String>
 where
     S: Subscriber + for<'b> LookupSpan<'b>,
+    F: Fn(&SpanFields) -> Option<String>,
 {
     let mut current = span;
     loop {
         let s = current?;
-        if let Some(fields) = s
-            .extensions()
-            .get::<tracing_subscriber::fmt::FormattedFields<
-                tracing_subscriber::fmt::format::DefaultFields,
-            >>()
-            && let Some(v) = extract_field_from_formatted(fields.fields.as_str(), key)
+        if let Some(fields) = s.extensions().get::<SpanFields>()
+            && let Some(v) = extract(fields)
+            && !v.is_empty()
         {
             return Some(v);
         }
@@ -262,24 +329,19 @@ where
     }
 }
 
-/// Extract `key=value` from a pre-formatted tracing field string.
+/// Format a `Debug` value as a string, stripping outer double-quotes if
+/// present (F4).
 ///
-/// `FormattedFields` stores a string like `run_id=abc step_id=xyz`.
-/// Finds `key=` preceded by a word boundary (space or start-of-string) and
-/// reads until the next whitespace or end-of-string.
-fn extract_field_from_formatted(s: &str, key: &str) -> Option<String> {
-    let search = format!("{key}=");
-    let idx = s.find(search.as_str())?;
-    if idx > 0 && !s.as_bytes()[idx - 1].is_ascii_whitespace() {
-        return None;
+/// When a `String` or `&str` value is passed through the `?` sigil (Debug
+/// formatter), `format!("{value:?}")` produces `"\"abc\""`.  This helper
+/// strips the surrounding `"..."` so callers receive `"abc"` instead.
+fn debug_to_string(value: &dyn std::fmt::Debug) -> String {
+    let s = format!("{value:?}");
+    if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
+        s[1..s.len() - 1].to_owned()
+    } else {
+        s
     }
-    let value_start = idx + search.len();
-    let rest = &s[value_start..];
-    let value_end = rest
-        .find(|c: char| c.is_ascii_whitespace())
-        .unwrap_or(rest.len());
-    let value = &rest[..value_end];
-    if value.is_empty() { None } else { Some(value.to_owned()) }
 }
 
 /// Visits tracing event fields and collects `message`, `run_id`, `step_id`.
@@ -301,10 +363,11 @@ impl tracing::field::Visit for FieldVisitor {
     }
 
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        let s = debug_to_string(value);
         match field.name() {
-            "message" => self.message = format!("{value:?}"),
-            "run_id" => self.run_id = format!("{value:?}"),
-            "step_id" => self.step_id = format!("{value:?}"),
+            "message" => self.message = s,
+            "run_id" => self.run_id = s,
+            "step_id" => self.step_id = s,
             _ => {}
         }
     }
@@ -319,16 +382,14 @@ mod tests {
 
     use tracing_subscriber::prelude::*;
 
-    use crate::events::{EventBus, Severity};
     use crate::events::Event;
+    use crate::events::{EventBus, Severity};
 
     use super::BusLayer;
 
     /// Build a scoped test subscriber backed by `bus`.
     /// Does NOT touch global subscriber state.
-    fn make_subscriber(
-        bus: Arc<EventBus>,
-    ) -> impl tracing::Subscriber + Send + Sync {
+    fn make_subscriber(bus: Arc<EventBus>) -> impl tracing::Subscriber + Send + Sync {
         let fmt_layer = tracing_subscriber::fmt::layer().with_test_writer();
         tracing_subscriber::registry()
             .with(fmt_layer)
@@ -360,7 +421,9 @@ mod tests {
 
         assert_eq!(envelope.run_id, "r1");
         match envelope.event {
-            Event::Finding { severity, message, .. } => {
+            Event::Finding {
+                severity, message, ..
+            } => {
                 assert_eq!(severity, Severity::Error);
                 assert!(message.contains("boom"), "message was: {message:?}");
             }
@@ -412,10 +475,8 @@ mod tests {
             tracing::info!("noise");
         });
 
-        let result = tokio::time::timeout(Duration::from_millis(50), async {
-            rx.recv().await.ok()
-        })
-        .await;
+        let result =
+            tokio::time::timeout(Duration::from_millis(50), async { rx.recv().await.ok() }).await;
 
         assert!(
             result.is_err(),
