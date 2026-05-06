@@ -366,10 +366,10 @@ async fn start_ticket_run_fails_fast_when_agent_files_are_missing() {
         "claude-code".to_string(),
         None,
         vec![
-            "architect".to_string(),
-            "tdd-developer".to_string(),
-            "qa".to_string(),
-            "reviewer".to_string(),
+            // Use a sentinel that cannot collide with any real ~/.claude/agents/
+            // entry on a developer's machine. Earlier names like "architect"
+            // exist in real home dirs and made the test environment-dependent.
+            "__no_such_agent_for_pre_flight_test__".to_string(),
         ],
     )
     .await;
