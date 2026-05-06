@@ -1,17 +1,59 @@
 //! Tests for `--agents` CLI argument on `run --ticket`.
 //!
-//! Uses the subprocess approach (matching `cli_smoke.rs` / `cli_ticket.rs`):
-//! invokes the compiled binary and inspects exit codes + stderr.
+//! Uses two complementary approaches:
+//!   1. Clap `try_parse_from` for fast, in-process contract tests (value_delimiter,
+//!      type correctness, `requires` constraints).
+//!   2. Subprocess invocations (matching `cli_smoke.rs` / `cli_ticket.rs`) for
+//!      integration-level exit-code + stderr validation.
 //!
 //! These tests validate Step I.4 contract:
-//!   - `--agents foo,bar` parses and is accepted
+//!   - `--agents foo,bar` parses and is accepted, producing vec!["foo", "bar"]
 //!   - missing `--agents` with `--ticket` errors with an actionable message
 //!   - whitespace-only `--agents` errors with the same actionable message
 //!   - `--agents` without `--ticket` is rejected by clap
 
+use agentic_cli::args::{Cli, CliCommand};
+use clap::Parser;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
+
+// ---------------------------------------------------------------------------
+// I.4.0 — `try_parse_from`: value_delimiter contract assertion
+//
+// Verifies that `--agents foo,bar` splits on commas and produces the correct
+// Vec<String>. Catches regressions to `value_delimiter = ','` without
+// spinning up a subprocess. This is the primary spec contract from I.4.
+// ---------------------------------------------------------------------------
+#[test]
+fn run_ticket_agents_try_parse_from_splits_on_comma() -> anyhow::Result<()> {
+    let cli = Cli::try_parse_from([
+        "agentic-cli",
+        "run",
+        "--ticket",
+        "fix",
+        "--agents",
+        "foo,bar",
+    ])?;
+
+    match cli.command {
+        CliCommand::Run {
+            ticket: Some(t),
+            agents,
+            scripted: None,
+            ..
+        } => {
+            assert_eq!(t, "fix");
+            assert_eq!(
+                agents,
+                vec!["foo".to_string(), "bar".to_string()],
+                "--agents foo,bar must split into [\"foo\", \"bar\"]"
+            );
+        }
+        other => panic!("expected CliCommand::Run, got: {other:?}"),
+    }
+    Ok(())
+}
 
 fn cargo_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_agentic-cli"))

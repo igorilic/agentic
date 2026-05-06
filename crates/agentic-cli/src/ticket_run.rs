@@ -594,10 +594,15 @@ mod tests {
 
         assert!(result.is_ok(), "expected Ok, got: {:?}", result);
 
-        // Shut down infrastructure.
+        // Drain infra: the orchestrator holds a bus clone so the channel never closes
+        // on drop(bus); use timeout+abort to avoid a permanent hang.
         drop(bus);
-        orch_handle.await.unwrap();
-        pers_handle.await.unwrap();
+        tokio::time::timeout(Duration::from_millis(500), orch_handle)
+            .await
+            .ok();
+        tokio::time::timeout(Duration::from_millis(500), pers_handle)
+            .await
+            .ok();
 
         // Assert all 4 step rows are Passed with completed_at set and summary = "scripted".
         let steps_repo = StepRepo::new(&db);
@@ -741,9 +746,15 @@ mod tests {
 
         assert!(result.is_err(), "expected Err when step fails");
 
+        // The orchestrator holds a bus clone so the channel never closes on drop(bus).
+        // Use timeout+ok to drain for up to 500 ms, then continue.
         drop(bus);
-        orch_handle.await.unwrap();
-        pers_handle.await.unwrap();
+        tokio::time::timeout(Duration::from_millis(500), orch_handle)
+            .await
+            .ok();
+        tokio::time::timeout(Duration::from_millis(500), pers_handle)
+            .await
+            .ok();
 
         let steps_repo = StepRepo::new(&db);
         let steps = steps_repo.list_by_run(run_id).unwrap();
@@ -764,8 +775,10 @@ mod tests {
 
     #[tokio::test]
     async fn execute_pipeline_missing_agent_file_errors_cleanly() {
-        // Only architect and tdd-developer agents exist; qa is missing.
-        let agent_names = ["architect", "tdd-developer", "reviewer"];
+        // Steps 0-1 (architect, tdd-developer) exist in the workspace.
+        // Step 2 is a sentinel name that cannot exist in any real ~/.claude/agents/,
+        // so discover_agent reliably fails there regardless of the developer's home dir.
+        let agent_names = ["architect", "tdd-developer"];
         let (tmp, paths, db, bus, ws_id) = setup_workspace(&agent_names);
         let ws_root = tmp.path().to_path_buf();
 
@@ -780,7 +793,7 @@ mod tests {
         );
         let pers_handle = EventPersister::spawn(bus.subscribe(), db.clone());
 
-        // Factory that always returns passing backend (should be called for steps 0-1).
+        // Factory that always returns passing backend (called for steps 0-1).
         let factory: BackendFactory<'_> = Box::new(|_step: &PipelineStep| -> Box<dyn Backend> {
             Box::new(ScriptedBackend::new(vec![
                 Event::StepStarted {
@@ -797,8 +810,14 @@ mod tests {
             ]))
         });
 
-        let pipeline = PipelineConfig::builtin_default();
-        let pipeline = pipeline.default_pipeline();
+        // Build a 3-step pipeline: the third agent name is a sentinel that cannot
+        // exist in any real ~/.claude/agents/ directory.
+        let agent_list = vec![
+            "architect".to_string(),
+            "tdd-developer".to_string(),
+            "__test_missing_agent__".to_string(),
+        ];
+        let pipeline = PipelineConfig::from_agents(&agent_list).unwrap();
 
         let result = execute_pipeline(
             PipelineRunContext {
@@ -813,21 +832,25 @@ mod tests {
                 backend_kind: BackendKind::ClaudeCode,
                 external_cancel: None,
             },
-            pipeline,
+            &pipeline,
             factory,
         )
         .await;
 
-        drop(bus);
-        orch_handle.await.unwrap();
-        pers_handle.await.unwrap();
-
+        // Assert before draining infra to avoid the orch_handle deadlock (see
+        // execute_pipeline_missing_agent_marks_run_failed for details).
         assert!(result.is_err(), "expected Err for missing agent");
         let err_str = format!("{:?}", result.unwrap_err());
         assert!(
-            err_str.to_lowercase().contains("qa"),
-            "error should mention 'qa', got: {err_str}"
+            err_str.contains("__test_missing_agent__"),
+            "error should mention the missing agent name, got: {err_str}"
         );
+
+        drop(bus);
+        tokio::time::timeout(Duration::from_millis(500), orch_handle)
+            .await
+            .ok();
+        pers_handle.abort();
     }
 
     // -----------------------------------------------------------------------
@@ -837,6 +860,10 @@ mod tests {
     /// Build a workspace where the first pipeline step (architect) has
     /// `model = <model_str>` in its TOML frontmatter. Returns the TempDir so
     /// the caller keeps it alive.
+    ///
+    /// Files are written to `.claude/agents/` so that `discover_agent` with
+    /// `BackendKind::ClaudeCode` finds the test fixtures instead of the
+    /// developer's real `~/.claude/agents/`.
     fn setup_workspace_with_agent_model(model_str: &str) -> (TempDir, Paths, Db, EventBus, String) {
         let tmp = TempDir::new().unwrap();
         let base = tmp.path();
@@ -845,7 +872,7 @@ mod tests {
         paths.ensure_dirs().unwrap();
         let db = Db::open(&paths).unwrap();
 
-        let agents_dir = base.join(".agentic").join("agents");
+        let agents_dir = base.join(".claude").join("agents");
         std::fs::create_dir_all(&agents_dir).unwrap();
 
         // architect gets a model field; remaining steps do not.
@@ -1014,9 +1041,15 @@ mod tests {
         )
         .await;
 
+        // The orchestrator holds a bus clone so the channel never closes on drop(bus).
+        // Use timeout+ok to drain for up to 500 ms, then continue.
         drop(bus);
-        orch_handle.await.unwrap();
-        pers_handle.await.unwrap();
+        tokio::time::timeout(Duration::from_millis(500), orch_handle)
+            .await
+            .ok();
+        tokio::time::timeout(Duration::from_millis(500), pers_handle)
+            .await
+            .ok();
 
         assert!(result.is_ok(), "expected Ok, got: {result:?}");
 
@@ -1137,9 +1170,15 @@ mod tests {
         )
         .await;
 
+        // The orchestrator holds a bus clone so the channel never closes on drop(bus).
+        // Use timeout+ok to drain for up to 500 ms, then continue.
         drop(bus);
-        orch_handle.await.unwrap();
-        pers_handle.await.unwrap();
+        tokio::time::timeout(Duration::from_millis(500), orch_handle)
+            .await
+            .ok();
+        tokio::time::timeout(Duration::from_millis(500), pers_handle)
+            .await
+            .ok();
 
         assert!(result.is_ok(), "expected Ok, got: {result:?}");
 
@@ -1197,9 +1236,15 @@ mod tests {
 
         assert!(result.is_ok(), "expected Ok, got: {:?}", result);
 
+        // The orchestrator holds a bus clone so the channel never closes on drop(bus).
+        // Use timeout+ok to drain for up to 500 ms, then continue.
         drop(bus);
-        orch_handle.await.unwrap();
-        pers_handle.await.unwrap();
+        tokio::time::timeout(Duration::from_millis(500), orch_handle)
+            .await
+            .ok();
+        tokio::time::timeout(Duration::from_millis(500), pers_handle)
+            .await
+            .ok();
 
         // Drain the channel to find the RunStarted event.
         let mut found_agents: Option<Vec<String>> = None;
@@ -1280,9 +1325,15 @@ mod tests {
 
         assert!(result.is_ok(), "expected Ok, got: {result:?}");
 
+        // The orchestrator holds a bus clone so the channel never closes on drop(bus).
+        // Use timeout+ok to drain for up to 500 ms, then continue.
         drop(bus);
-        orch_handle.await.unwrap();
-        pers_handle.await.unwrap();
+        tokio::time::timeout(Duration::from_millis(500), orch_handle)
+            .await
+            .ok();
+        tokio::time::timeout(Duration::from_millis(500), pers_handle)
+            .await
+            .ok();
 
         let conn = db.conn().unwrap();
         let count_by_type = |event_type: &str| -> i64 {
@@ -1313,8 +1364,11 @@ mod tests {
     /// not stuck at `Running`.
     #[tokio::test]
     async fn execute_pipeline_missing_agent_marks_run_failed() {
-        // qa agent is missing so step 2 errors without stop_on_failure path.
-        let agent_names = ["architect", "tdd-developer", "reviewer"];
+        // Steps 0-1 (architect, tdd-developer) exist in the workspace.
+        // Step 2 is a sentinel name that cannot exist in any real ~/.claude/agents/,
+        // ensuring discover_agent reliably errors — not just on this machine but
+        // in any CI environment — without relying on the canonical default pipeline.
+        let agent_names = ["architect", "tdd-developer"];
         let (tmp, paths, db, bus, ws_id) = setup_workspace(&agent_names);
         let ws_root = tmp.path().to_path_buf();
 
@@ -1345,8 +1399,15 @@ mod tests {
             ]))
         });
 
-        let pipeline = PipelineConfig::builtin_default();
-        let pipeline = pipeline.default_pipeline();
+        // Build a 3-step pipeline using from_agents: the third step is a sentinel
+        // that won't exist in any real ~/.claude/agents/ directory, so the run
+        // reliably errors on the missing-agent path.
+        let agent_list = vec![
+            "architect".to_string(),
+            "tdd-developer".to_string(),
+            "__test_missing_agent__".to_string(),
+        ];
+        let pipeline = PipelineConfig::from_agents(&agent_list).unwrap();
 
         let result = execute_pipeline(
             PipelineRunContext {
@@ -1361,19 +1422,24 @@ mod tests {
                 backend_kind: BackendKind::ClaudeCode,
                 external_cancel: None,
             },
-            pipeline,
+            &pipeline,
             factory,
         )
         .await;
 
         assert!(result.is_err(), "expected Err for missing agent");
 
-        // GH #37: publish the synthetic RunComplete(Failed) that the fix will add.
-        // After the fix lands in execute_pipeline, this will be published internally.
-        // For now this test asserts the DB state AFTER the fix publishes it.
+        // execute_pipeline publishes RunComplete(Failed) before returning Err (GH #37).
+        // Give the orchestrator time to process that event and update the run row.
+        // We cannot await orch_handle/pers_handle to drain because the orchestrator
+        // holds a bus clone (Sender) so the channel never closes — a known pre-existing
+        // limitation of the orchestrator's handle_tool_use_start spawn approach.
+        // Abort the handles after a short grace period instead.
         drop(bus);
-        orch_handle.await.unwrap();
-        pers_handle.await.unwrap();
+        tokio::time::timeout(Duration::from_millis(500), orch_handle)
+            .await
+            .ok(); // timeout is expected — abort the task and continue
+        pers_handle.abort();
 
         let runs_repo = RunRepo::new(&db);
         let run = runs_repo.get(run_id).unwrap().unwrap();

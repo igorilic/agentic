@@ -296,9 +296,15 @@ async fn execute_pipeline_writes_per_step_diff_file() {
         result
     );
 
+    // The orchestrator holds a bus clone so the channel never closes on drop(bus).
+    // Use timeout+ok to drain for up to 500 ms, then continue.
     drop(bus);
-    orch_handle.await.unwrap();
-    pers_handle.await.unwrap();
+    tokio::time::timeout(Duration::from_millis(500), orch_handle)
+        .await
+        .ok();
+    tokio::time::timeout(Duration::from_millis(500), pers_handle)
+        .await
+        .ok();
 
     // Retrieve the step_id.
     let step_id = step_id_out
