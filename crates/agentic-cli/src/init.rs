@@ -1,7 +1,7 @@
 //! `agentic-cli init` — scaffold an agents directory required to drive a
 //! pipeline against an arbitrary repo.
 //!
-//! Writes one agent file per role (`architect`, `tdd-developer`, `qa`,
+//! Writes one agent file per agent (`architect`, `tdd-developer`, `qa`,
 //! `reviewer`) into a caller-supplied directory. The CLI resolves the
 //! directory based on flags (default: `<cwd>/.claude/agents/` to reuse
 //! Claude Code's existing convention; alternatives via `--copilot` and/or

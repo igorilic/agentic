@@ -3,6 +3,7 @@ import {
   deriveRunState,
   emptyRunState,
 } from "../types/run";
+import type { StepInfo } from "../types/run";
 import type { EventEnvelope } from "../types/event";
 
 function envelope(overrides: Partial<EventEnvelope>): EventEnvelope {
@@ -290,5 +291,20 @@ describe("deriveRunState", () => {
     // This tests the distinction between "no agents field" (fallback applies)
     // and "agents: []" (run genuinely has no agents configured).
     expect(state.steps).toHaveLength(0);
+  });
+
+  // I.9 — StepInfo contract: agent is the identity field, role must not exist
+  it("StepInfo has no role field", () => {
+    const step: StepInfo = {
+      agent: "x",
+      status: "pending",
+      tokens: 0,
+      costUsd: null,
+      durationMs: 0,
+      summary: null,
+    };
+    // @ts-expect-error — StepInfo must not have a `role` field
+    const _check = step.role;
+    expect(_check).toBeUndefined();
   });
 });

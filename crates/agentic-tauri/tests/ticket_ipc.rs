@@ -3,12 +3,28 @@
 use std::sync::Arc;
 
 use agentic_core::Db;
-use agentic_core::events::EventBus;
+use agentic_core::{Event, EventBus, EventEnvelope, ModelId, StepStatus, TokenUsage};
 use agentic_tauri::commands::events::EventBusState;
 use agentic_tauri::commands::ticket::start_ticket_run;
+use serde_json::Value;
 use tauri::Manager;
 use tauri::test::{mock_builder, mock_context, noop_assets};
 use tokio::sync::Mutex as AsyncMutex;
+
+/// Recursively walk a `serde_json::Value` tree and return `true` if any
+/// object key (at any depth) exactly matches `key`.
+fn json_contains_key(v: &Value, key: &str) -> bool {
+    match v {
+        Value::Object(map) => {
+            if map.contains_key(key) {
+                return true;
+            }
+            map.values().any(|child| json_contains_key(child, key))
+        }
+        Value::Array(arr) => arr.iter().any(|item| json_contains_key(item, key)),
+        _ => false,
+    }
+}
 
 /// Serialise tests that read or mutate `AGENTIC_WORKSPACE_ROOT`. Cargo runs
 /// tests in parallel by default; env vars are process-global, so without
@@ -578,5 +594,78 @@ async fn start_ticket_run_rejects_agents_that_dont_resolve() {
     assert!(
         err.contains("nope") && err.contains("not found"),
         "error should name the missing agent and say not found; got: {err}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// I.9: RunStep DTO has agent + index, no role
+// ---------------------------------------------------------------------------
+
+/// Pin the contract: `StepStarted` and `StepComplete` event JSON must not
+/// contain a top-level or nested `"role"` key.  Pipeline-step identity is
+/// expressed via the `agent` field only; "role" is reserved for
+/// conversational chat messages (`ChatMessage.role`).
+#[test]
+fn step_started_dto_has_agent_no_role() {
+    // Build a StepStarted event directly — no IPC plumbing needed to pin the
+    // serde shape of the Event enum.
+    let event = Event::StepStarted {
+        agent: "architect".to_string(),
+        model: ModelId("claude-opus-4-5".to_string()),
+    };
+
+    let json = serde_json::to_value(&event).expect("StepStarted must serialize");
+
+    // The serialised object must carry the `agent` field.
+    assert!(
+        json_contains_key(&json, "agent"),
+        "StepStarted JSON must contain 'agent'; got: {json}"
+    );
+
+    // It must NOT carry a `role` field at any depth.
+    assert!(
+        !json_contains_key(&json, "role"),
+        "StepStarted JSON must not contain 'role' (pipeline-step identity uses 'agent'); got: {json}"
+    );
+}
+
+/// Same check for StepComplete — ensures no stale `role` crept into that
+/// variant either.
+#[test]
+fn step_complete_dto_has_no_role() {
+    let event = Event::StepComplete {
+        status: StepStatus::Passed,
+        summary: "all good".to_string(),
+        token_usage: TokenUsage {
+            input_tokens: 10,
+            output_tokens: 5,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+        },
+        cost_usd: Some(0.001),
+        duration_ms: 100,
+    };
+
+    let json = serde_json::to_value(&event).expect("StepComplete must serialize");
+    assert!(
+        !json_contains_key(&json, "role"),
+        "StepComplete JSON must not contain 'role'; got: {json}"
+    );
+}
+
+/// Pin the full `EventEnvelope` wrapper: wrapping StepStarted in an envelope
+/// must not introduce a `role` key anywhere in the tree.
+#[test]
+fn event_envelope_step_started_has_no_role() {
+    let event = Event::StepStarted {
+        agent: "tdd-developer".to_string(),
+        model: ModelId("claude-sonnet-4-6".to_string()),
+    };
+    let envelope = EventEnvelope::now("run-001".to_string(), Some("step-001".to_string()), event);
+
+    let json = serde_json::to_value(&envelope).expect("EventEnvelope must serialize");
+    assert!(
+        !json_contains_key(&json, "role"),
+        "EventEnvelope wrapping StepStarted must not contain 'role'; got: {json}"
     );
 }
