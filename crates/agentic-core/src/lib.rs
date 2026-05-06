@@ -28,7 +28,7 @@ pub use events::{
 pub mod error;
 pub use error::{CoreError, Result};
 pub mod logging;
-pub use logging::{init, init_test_subscriber};
+pub use logging::{attach_event_bus, init, init_test_subscriber};
 pub mod paths;
 pub use paths::Paths;
 pub mod pipeline;

@@ -16,7 +16,7 @@ use agentic_core::db::workspaces::{Workspace, WorkspaceRepo};
 use agentic_core::events::EventBus;
 use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::pipeline::PipelineOrchestrator;
-use agentic_core::{Db, Paths, init as init_logging};
+use agentic_core::{Db, Paths, attach_event_bus, init as init_logging};
 use commands::auth::{AuthState, WebbrowserOpener};
 use commands::chat::ChatState;
 use commands::events::EventBusState;
@@ -55,6 +55,12 @@ fn main() {
                 .expect("seed default workspace");
 
             let bus = Arc::new(EventBus::new());
+
+            // Wire the bus into the tracing BusLayer so that backend
+            // tracing::error! / warn! calls are forwarded to the Activity
+            // column as Finding envelopes. init_logging(None) installed the
+            // BusLayer earlier; this call activates it.
+            attach_event_bus(bus.clone());
 
             // Spawn ONE PipelineOrchestrator subscribed to the managed bus
             // for the lifetime of the app. Per-run spawning (the previous
