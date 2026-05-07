@@ -35,13 +35,13 @@ export default tseslint.config(
       // React rules
       ...reactPlugin.configs.recommended.rules,
       // React Hooks rules — this is the main gate that catches the original bug.
-      // set-state-in-effect (new in v7) is disabled: our "clear on dep change"
-      // pattern (setEvents([]) at the top of effects) is an intentional React
-      // idiom that avoids stale state. Refactoring to derived state would require
-      // significant architectural changes across multiple components.
-      // Tech-debt tracked in GH #86.
+      // set-state-in-effect (v7+) is enabled globally. The two App.tsx violations
+      // (findingsRefetchKey, findingsRunId sync) were refactored to useMemo and
+      // the render-time "storing information from previous renders" pattern (GH #86).
+      // The remaining intentional patterns (fetch-on-mount in PastRunsPane/SettingsPane,
+      // clear-before-refetch in useFindings/useTauriEvents) each carry a per-line
+      // eslint-disable comment with a rationale explaining why the pattern is safe.
       ...reactHooksPlugin.configs.recommended.rules,
-      "react-hooks/set-state-in-effect": "off",
       // No need to import React in scope (JSX runtime handles it)
       "react/react-in-jsx-scope": "off",
       "react/prop-types": "off",

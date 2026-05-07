@@ -45,8 +45,8 @@ export function usePipelineMutation(
   // disappear after run" symptom (I.7 fix-loop TD1).
   useEffect(() => {
     if (!activeRunId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset skip-set when a new run starts; this is a "clear on dep change" pattern keyed on activeRunId, not a synchronous cascade.
     setPipelineSkipped(new Set<string>());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRunId]);
 
   function onReorder(from: number, to: number) {

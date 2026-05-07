@@ -19,6 +19,7 @@ export default function SettingsPane() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: fetch-on-mount pattern; refresh()'s setStates run after the await, not synchronously in the effect body.
     void refresh();
   }, [refresh]);
 

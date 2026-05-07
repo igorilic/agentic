@@ -29,6 +29,7 @@ export function useDiscoverableAgents(): UseDiscoverableAgentsResult {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: set loading/error flags synchronously before async fetch; these are fetch-lifecycle setStates, not cascading renders.
     setIsLoading(true);
     setError(null);
 
@@ -52,7 +53,6 @@ export function useDiscoverableAgents(): UseDiscoverableAgentsResult {
       cancelled = true;
     };
     // fetchTick is included so refetch() triggers a new effect run.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backend, fetchTick]);
 
   const refetch = useCallback(() => {

@@ -27,6 +27,7 @@ export function useFindings(runId?: string, refetchKey?: unknown): UseFindingsRe
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: clear stale findings before refetch on runId/refetchKey change; the reset is part of the dep-change sequence, not a side-effect cascade.
     setFindings([]);
     setError(null);
     if (!runId) return;

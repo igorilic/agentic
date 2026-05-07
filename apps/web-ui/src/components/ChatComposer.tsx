@@ -55,6 +55,7 @@ export default function ChatComposer({ onSend, inputTestId, sendTestId, onCreate
 
   // Reset selected index and esc-closed marker when value changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset UI-derived index synchronously when the input value changes; both setStates are logically "clear on dep change", not external-system sync.
     setSlashSelectedIndex(0);
     if (escClosedForValue !== null && !/^\/[a-z]*$/.test(value)) {
       setEscClosedForValue(null);

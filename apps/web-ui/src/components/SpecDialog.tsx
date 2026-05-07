@@ -20,6 +20,7 @@ export default function SpecDialog({ open, onClose, onSubmit }: SpecDialogProps)
 
   useEffect(() => {
     if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset dialog form fields when dialog closes; the setStates are "clear on dep change", not an external-system sync cascade.
       setJiraKey("");
       setPullError(null);
     }

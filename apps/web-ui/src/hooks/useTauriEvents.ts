@@ -54,6 +54,7 @@ export function useTauriEvents(runId?: string): UseTauriEventsResult {
     // finishes, and the FindingsTable refetch (which keys on the last event
     // being RunComplete) would silently miss its trigger.
     if (runId !== undefined) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: clear stale events when entering a new run; the empty/clear here is part of the run-key reset sequence, not a synchronous setState cascade.
       setEvents([]);
       setHistoryError(null);
     }

@@ -26,6 +26,7 @@ export function usePipelinePersistence(wsId: string | null): {
   // Re-read storage whenever wsId changes
   useEffect(() => {
     if (wsId === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: re-read localStorage when wsId resolves; this is a "sync from external system (localStorage)" pattern, exactly what effects are for.
       setPipelineAgentsState([]);
       return;
     }

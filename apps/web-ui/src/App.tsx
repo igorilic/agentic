@@ -32,8 +32,19 @@ export default function App() {
   const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
   const [activeTicketLabel, setActiveTicketLabel] = useState<string | undefined>(undefined);
   const [activeTicketDescription, setActiveTicketDescription] = useState<string | undefined>(undefined);
+
+  // B: "Storing information from previous renders" pattern (react.dev/reference/react/useState).
+  // Syncs findingsRunId to activeRunId only when activeRunId becomes defined so that
+  // findingsRunId persists through the RunComplete → activeRunId=undefined transition,
+  // keeping the findings panel populated for post-run review.
   const [findingsRunId, setFindingsRunId] = useState<string | undefined>(undefined);
-  const [findingsRefetchKey, setFindingsRefetchKey] = useState(0);
+  const [prevActiveRunId, setPrevActiveRunId] = useState(activeRunId);
+  if (activeRunId !== prevActiveRunId) {
+    setPrevActiveRunId(activeRunId);
+    if (activeRunId !== undefined) {
+      setFindingsRunId(activeRunId);
+    }
+  }
 
   // Resolve workspace id once on mount — used as the localStorage key.
   const [wsId, setWsId] = useState<string | null>(null);
@@ -46,20 +57,21 @@ export default function App() {
   }, []);
 
   const { events } = useTauriEvents(activeRunId);
+
+  // A: Derived via useMemo instead of state + effect — eliminates cascading renders.
+  // The key equals the count of RunComplete envelopes matching findingsRunId,
+  // so it increments by 1 for each completion. useFindings re-fetches when the
+  // key changes (its refetchKey dep remains an opaque value — shape unchanged).
+  const findingsRefetchKey = useMemo(
+    () =>
+      events.filter(
+        (e) => e.event.type === "RunComplete" && e.run_id === findingsRunId,
+      ).length,
+    [events, findingsRunId],
+  );
+
   const { findings } = useFindings(findingsRunId, findingsRefetchKey);
   const { backend } = useBackend();
-
-  useEffect(() => {
-    if (activeRunId && activeRunId !== findingsRunId) setFindingsRunId(activeRunId);
-  }, [activeRunId, findingsRunId]);
-
-  useEffect(() => {
-    if (!findingsRunId) return;
-    const last = events[events.length - 1];
-    if (last && last.event.type === "RunComplete" && last.run_id === findingsRunId) {
-      setFindingsRefetchKey((n) => n + 1);
-    }
-  }, [events, findingsRunId]);
 
   const runState = useMemo(() => deriveRunState(events, activeRunId), [events, activeRunId]);
 
