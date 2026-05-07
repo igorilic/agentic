@@ -23,7 +23,8 @@ export function parseSlashCommand(input: string): SlashParseResult {
   }
 
   const parts = trimmed.slice(1).split(/\s+/);
-  const cmd = parts[0] ?? "";
+  const rawCmd = parts[0] ?? "";
+  const cmd = rawCmd.toLowerCase();
   const args = parts.slice(1);
 
   switch (cmd) {
@@ -74,7 +75,7 @@ export function parseSlashCommand(input: string): SlashParseResult {
       return { ok: true, command: { kind: "cancel", runId: args[0] } };
     }
     default: {
-      return { ok: false, error: { kind: "unknown_command", cmd } };
+      return { ok: false, error: { kind: "unknown_command", cmd: rawCmd } };
     }
   }
 }
