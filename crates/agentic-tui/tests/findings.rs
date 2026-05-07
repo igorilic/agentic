@@ -12,6 +12,8 @@ use crossterm::event::KeyCode;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
+mod common;
+
 fn finding(id: &str, message: &str) -> Finding {
     Finding {
         id: id.to_string(),
@@ -39,16 +41,6 @@ fn finding_envelope(id: &str, message: &str) -> EventEnvelope {
             suggestion: None,
         },
     }
-}
-
-fn flatten(terminal: &Terminal<TestBackend>) -> String {
-    terminal
-        .backend()
-        .buffer()
-        .content
-        .iter()
-        .map(|c| c.symbol())
-        .collect()
 }
 
 // ─── default state ──────────────────────────────────────────────────────────
@@ -230,7 +222,7 @@ fn cockpit_renders_finding_message_when_present() {
     let mut s = AppState::default();
     s.findings.items = vec![finding("a", "missing-error-handling")];
     terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content = flatten(&terminal);
+    let content = common::flatten(&terminal);
     assert!(
         content.contains("missing-error-handling"),
         "expected finding message in cockpit; got: {content:?}"
@@ -245,7 +237,7 @@ fn cockpit_renders_triage_label_after_triaging() {
     s.findings.items = vec![finding("a", "missing-error-handling")];
     s.handle_key(KeyCode::Char('t'));
     terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content = flatten(&terminal);
+    let content = common::flatten(&terminal);
     assert!(
         content.contains("tech-debt"),
         "expected 'tech-debt' badge in cockpit; got: {content:?}"
@@ -260,7 +252,7 @@ fn cockpit_marks_selected_finding_row_with_a_cursor_glyph() {
     s.findings.items = vec![finding("a", "alpha-msg"), finding("b", "beta-msg")];
     s.handle_key(KeyCode::Char('j')); // cursor → 1 (beta-msg row)
     terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content = flatten(&terminal);
+    let content = common::flatten(&terminal);
     // The `>` glyph marks the selected row in `views/findings.rs`.
     // The selected row (beta-msg) must carry the `>` prefix; the
     // unselected row (alpha-msg) must NOT.

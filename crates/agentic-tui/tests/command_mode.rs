@@ -12,15 +12,7 @@ use crossterm::event::KeyCode;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
-fn flatten(terminal: &Terminal<TestBackend>) -> String {
-    terminal
-        .backend()
-        .buffer()
-        .content
-        .iter()
-        .map(|c| c.symbol())
-        .collect()
-}
+mod common;
 
 fn type_str(state: &mut AppState, s: &str) -> Option<AppCommand> {
     let mut last = None;
@@ -252,7 +244,7 @@ fn normal_mode_does_not_render_a_command_prompt() {
     let mut terminal = Terminal::new(backend).unwrap();
     let s = AppState::default();
     terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content = flatten(&terminal);
+    let content = common::flatten(&terminal);
     // The cursor glyph `█` is unique to the command-mode prompt; the
     // hint line uses ` · ` separators only.
     assert!(

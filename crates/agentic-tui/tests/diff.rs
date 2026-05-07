@@ -13,6 +13,8 @@ use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Color;
 
+mod common;
+
 const SAMPLE: &str = "--- a/src/lib.rs\n\
 +++ b/src/lib.rs\n\
 @@ -1,3 +1,3 @@\n\
@@ -114,16 +116,6 @@ fn parse_handles_multi_hunk_diff_in_one_file() {
 
 // ─── render — colours via Cell.fg ───────────────────────────────────────────
 
-fn flatten(terminal: &Terminal<TestBackend>) -> String {
-    terminal
-        .backend()
-        .buffer()
-        .content
-        .iter()
-        .map(|c| c.symbol())
-        .collect()
-}
-
 fn first_nonblank_fg_for_substring(buf: &ratatui::buffer::Buffer, needle: &str) -> Option<Color> {
     let area = buf.area;
     for y in 0..area.height {
@@ -196,7 +188,7 @@ fn current_diff_replaces_the_chat_pane_interior() {
         ..Default::default()
     };
     terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content = flatten(&terminal);
+    let content = common::flatten(&terminal);
     // The unified-diff header must show up in the rendered buffer.
     assert!(
         content.contains("--- a/src/lib.rs"),
@@ -210,7 +202,7 @@ fn no_current_diff_falls_back_to_normal_chat_pane() {
     let mut terminal = Terminal::new(backend).unwrap();
     let s = AppState::default();
     terminal.draw(|f| draw_app(f, &s)).unwrap();
-    let content = flatten(&terminal);
+    let content = common::flatten(&terminal);
     // No diff text should appear when current_diff is None.
     assert!(
         !content.contains("---"),
