@@ -17,9 +17,9 @@ use agentic_cli::ticket_run::{BackendFactory, PipelineRunContext, execute_pipeli
 use agentic_core::permissions::config::PermissionsConfig;
 use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::{
-    Backend, CopilotCliBackend, Db, Event, EventBus, EventPersister, ModelId, Paths, Pipeline,
-    PipelineOrchestrator, PipelineStep, Run, RunRepo, RunStatus, StepRepo, Workspace,
-    WorkspaceRepo,
+    Backend, CopilotCliBackend, Db, Event, EventBus, EventPersister, ModelId, Paths,
+    PipelineConfig, PipelineOrchestrator, PipelineStep, Run, RunRepo, RunStatus, StepRepo,
+    Workspace, WorkspaceRepo,
 };
 
 // ---------------------------------------------------------------------------
@@ -203,13 +203,11 @@ default_on_timeout = "deny"
 
     // 10. Build single-step pipeline (reviewer only — fast and exercises
     //     read-only tools which the allowlist covers).
-    let pipeline = Pipeline {
-        steps: vec![PipelineStep {
-            agent: "reviewer".to_string(),
-            stop_on_failure: false,
-            allowed_questions: None,
-        }],
-    };
+    //     Use the canonical I.4 path so the construction stays in sync with
+    //     Pipeline / PipelineStep field-shape changes.  stop_on_failure is
+    //     functionally inert for a single-step pipeline (no subsequent step to
+    //     skip), so the default of `true` from from_agents is fine.
+    let pipeline = PipelineConfig::from_agents(&["reviewer".to_string()]).expect("from_agents");
 
     // 11. Ticket prompt — intentionally minimal to keep cost and runtime low.
     let ticket_text = "List the files in the current directory and exit. \
