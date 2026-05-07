@@ -126,6 +126,38 @@ describe("parseSlashCommand", () => {
     expect(r.ok).toBe(true);
   });
 
+  // C1 — uppercase command name is accepted (case-insensitive matching)
+  it("C1 — /PLAN upper-case is treated identically to /plan", () => {
+    const r = parseSlashCommand("/PLAN ticket text here");
+    expect(r.ok).toBe(true);
+    if (r.ok && r.command.kind === "plan") {
+      expect(r.command.ticket).toBe("ticket text here");
+    }
+  });
+
+  // C2 — mixed-case command name is accepted
+  it("C2 — /Status mixed-case is treated identically to /status", () => {
+    const r = parseSlashCommand("/Status");
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.command.kind).toBe("status");
+      if (r.command.kind === "status") expect(r.command.runId).toBeNull();
+    }
+  });
+
+  // C3 — original casing of unknown command is preserved in the error
+  it("C3 — unknown command error preserves the original casing of the command", () => {
+    const r = parseSlashCommand("/Foo");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.kind).toBe("unknown_command");
+      if (r.error.kind === "unknown_command") {
+        // Should echo "Foo" (original), NOT "foo" (lowercased)
+        expect(r.error.cmd).toBe("Foo");
+      }
+    }
+  });
+
   it("formats error messages user-friendly", () => {
     expect(
       formatSlashParseError({ kind: "unknown_command", cmd: "foo" }),
