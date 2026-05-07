@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type { EventEnvelope } from "../types/event";
+import { isEventEnvelope, isEventEnvelopeArray } from "../types/event";
 
 export const EVENT_CHANNEL = "agentic://event";
 
@@ -62,7 +63,17 @@ export function useTauriEvents(runId?: string): UseTauriEventsResult {
         // Fetch history first if a runId is known.
         if (runId) {
           try {
-            const history = (await invoke("get_event_history", { runId })) as EventEnvelope[];
+            const result = await invoke("get_event_history", { runId });
+            if (!isEventEnvelopeArray(result)) {
+              throw new Error(
+                `get_event_history returned malformed shape: ${
+                  typeof result === "object"
+                    ? JSON.stringify(result).slice(0, 200)
+                    : String(result)
+                }`,
+              );
+            }
+            const history = result;
             if (!cancelled) {
               setEvents((prev) => {
                 const seen = new Set(prev.map((e) => e.event_id));
@@ -79,6 +90,13 @@ export function useTauriEvents(runId?: string): UseTauriEventsResult {
         }
 
         const stop = await listen<EventEnvelope>(EVENT_CHANNEL, (event) => {
+          if (!isEventEnvelope(event.payload)) {
+            console.error(
+              "[useTauriEvents] malformed live envelope skipped:",
+              event.payload,
+            );
+            return;
+          }
           setEvents((prev) => {
             // Dedupe by event_id (handles overlap with history fetch).
             if (prev.some((e) => e.event_id === event.payload.event_id)) {

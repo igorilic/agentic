@@ -64,3 +64,40 @@ export function isPermissionResolvedEvent(
 ): event is PermissionResolvedEvent {
   return event.type === "PermissionResolved";
 }
+
+/**
+ * Runtime type guard for a single `EventEnvelope`.
+ *
+ * Validates only the envelope-level fields required by the type definition.
+ * The inner `event.data` is deliberately left as `unknown` — the catch-all
+ * variant in the union explicitly allows arbitrary data payloads.
+ */
+export function isEventEnvelope(value: unknown): value is EventEnvelope {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  if (typeof v["event_id"] !== "string" || v["event_id"] === "") return false;
+  if (typeof v["run_id"] !== "string") return false;
+  if (typeof v["schema_version"] !== "number") return false;
+  if (typeof v["timestamp_ms"] !== "number") return false;
+  // step_id must be string | null — undefined is not acceptable.
+  if (v["step_id"] !== null && typeof v["step_id"] !== "string") return false;
+  // event must be an object with a string `type` field.
+  const evt = v["event"];
+  if (evt === null || typeof evt !== "object" || Array.isArray(evt)) return false;
+  if (typeof (evt as Record<string, unknown>)["type"] !== "string") return false;
+  return true;
+}
+
+/**
+ * Runtime type guard for an array of `EventEnvelope` values.
+ *
+ * Returns false if the outer value is not an array, or if any element
+ * fails `isEventEnvelope`. Use this to validate the response from the
+ * `get_event_history` IPC command before trusting the cast.
+ */
+export function isEventEnvelopeArray(value: unknown): value is EventEnvelope[] {
+  if (!Array.isArray(value)) return false;
+  return value.every(isEventEnvelope);
+}
