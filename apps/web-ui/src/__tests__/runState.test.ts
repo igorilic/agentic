@@ -23,7 +23,7 @@ const DEFAULT_AGENTS = ["architect", "tdd-developer", "qa", "reviewer"];
 
 describe("deriveRunState", () => {
   it("returns all-pending state for empty events (with explicit agents)", () => {
-    const state = deriveRunState([], DEFAULT_AGENTS);
+    const state = deriveRunState([], undefined, DEFAULT_AGENTS);
     expect(state.steps).toHaveLength(4);
     expect(state.steps.every((s) => s.status === "pending")).toBe(true);
     expect(state.totalTokens).toBe(0);
@@ -41,6 +41,7 @@ describe("deriveRunState", () => {
           },
         }),
       ],
+      undefined,
       DEFAULT_AGENTS,
     );
     expect(state.steps[0].status).toBe("running");
@@ -71,6 +72,7 @@ describe("deriveRunState", () => {
           },
         }),
       ],
+      undefined,
       DEFAULT_AGENTS,
     );
     expect(state.steps[2].status).toBe("passed");
@@ -123,6 +125,7 @@ describe("deriveRunState", () => {
           },
         }),
       ],
+      undefined,
       DEFAULT_AGENTS,
     );
     expect(state.totalTokens).toBe(150);
@@ -140,6 +143,7 @@ describe("deriveRunState", () => {
           },
         }),
       ],
+      undefined,
       DEFAULT_AGENTS,
     );
     // All four still pending.
@@ -170,6 +174,7 @@ describe("deriveRunState", () => {
           },
         }),
       ],
+      undefined,
       DEFAULT_AGENTS,
     );
     expect(state.steps[2].status).toBe("needs_triage");
@@ -204,6 +209,7 @@ describe("deriveRunState", () => {
           },
         }),
       ],
+      undefined,
       DEFAULT_AGENTS,
     );
     // 100 + 50 + 200 + 300 = 650
@@ -264,7 +270,7 @@ describe("deriveRunState", () => {
         event: { type: "RunStarted", data: { ticket: "ABC-1" } },
       }),
     ];
-    const state = deriveRunState(events, ["a", "b"]);
+    const state = deriveRunState(events, undefined, ["a", "b"]);
     expect(state.steps).toHaveLength(2);
     expect(state.steps[0].agent).toBe("a");
     expect(state.steps[1].agent).toBe("b");
@@ -286,7 +292,7 @@ describe("deriveRunState", () => {
         event: { type: "RunStarted", data: { agents: [] } },
       }),
     ];
-    const state = deriveRunState(events, ["a", "b"]);
+    const state = deriveRunState(events, undefined, ["a", "b"]);
     // An explicit empty agents array in the event should NOT use the fallback.
     // This tests the distinction between "no agents field" (fallback applies)
     // and "agents: []" (run genuinely has no agents configured).
@@ -306,5 +312,52 @@ describe("deriveRunState", () => {
     // @ts-expect-error — StepInfo must not have a `role` field
     const _check = step.role;
     expect(_check).toBeUndefined();
+  });
+
+  // GH #66 — multi-run safety: deriveRunState should filter by activeRunId
+
+  // M1 — multi-run isolation: only r1 events affect r1 state
+  it("M1: filters to activeRunId — only matching run events applied", () => {
+    const events: EventEnvelope[] = [
+      // r1: architect started and completed passed
+      envelope({ run_id: "r1", step_id: "s1", event: { type: "StepStarted", data: { agent: "architect", model: {} } } }),
+      envelope({ run_id: "r1", step_id: "s1", event: { type: "StepComplete", data: { status: "passed", summary: "", token_usage: { input_tokens: 0, output_tokens: 0 }, cost_usd: null, duration_ms: 1 } } }),
+      // r2: tdd-developer started and completed failed — must NOT bleed into r1 view
+      envelope({ run_id: "r2", step_id: "s2", event: { type: "StepStarted", data: { agent: "tdd-developer", model: {} } } }),
+      envelope({ run_id: "r2", step_id: "s2", event: { type: "StepComplete", data: { status: "failed", summary: "", token_usage: { input_tokens: 0, output_tokens: 0 }, cost_usd: null, duration_ms: 1 } } }),
+    ];
+    const state = deriveRunState(events, "r1", ["architect", "tdd-developer", "qa", "reviewer"]);
+    const architect = state.steps.find((s) => s.agent === "architect");
+    const tddDev = state.steps.find((s) => s.agent === "tdd-developer");
+    expect(architect?.status).toBe("passed");    // r1 effect landed
+    expect(tddDev?.status).toBe("pending");      // r2 bleed blocked — stays pending
+  });
+
+  // M2 — activeRunId undefined preserves legacy behavior: all events processed
+  it("M2: activeRunId undefined applies all events (back-compat)", () => {
+    const events: EventEnvelope[] = [
+      envelope({ run_id: "r1", step_id: "s1", event: { type: "StepStarted", data: { agent: "architect", model: {} } } }),
+      envelope({ run_id: "r1", step_id: "s1", event: { type: "StepComplete", data: { status: "passed", summary: "", token_usage: { input_tokens: 0, output_tokens: 0 }, cost_usd: null, duration_ms: 1 } } }),
+      envelope({ run_id: "r2", step_id: "s2", event: { type: "StepStarted", data: { agent: "tdd-developer", model: {} } } }),
+      envelope({ run_id: "r2", step_id: "s2", event: { type: "StepComplete", data: { status: "failed", summary: "", token_usage: { input_tokens: 0, output_tokens: 0 }, cost_usd: null, duration_ms: 1 } } }),
+    ];
+    const state = deriveRunState(events, undefined, ["architect", "tdd-developer"]);
+    const architect = state.steps.find((s) => s.agent === "architect");
+    const tddDev = state.steps.find((s) => s.agent === "tdd-developer");
+    expect(architect?.status).toBe("passed");    // r1 effect visible
+    expect(tddDev?.status).toBe("failed");       // r2 effect also visible — no filter
+  });
+
+  // M3 — agents resolved from RunStarted respect the activeRunId filter
+  it("M3: RunStarted from another run must not contribute agents when activeRunId is set", () => {
+    const events: EventEnvelope[] = [
+      // r1 RunStarted declares agents ["a", "b"]
+      envelope({ run_id: "r1", step_id: null, event: { type: "RunStarted", data: { agents: ["a", "b"] } } }),
+      // r2 RunStarted declares agents ["x", "y"] — must be ignored when filtering to r1
+      envelope({ run_id: "r2", step_id: null, event: { type: "RunStarted", data: { agents: ["x", "y"] } } }),
+    ];
+    const state = deriveRunState(events, "r1");
+    expect(state.steps).toHaveLength(2);
+    expect(state.steps.map((s) => s.agent)).toEqual(["a", "b"]);
   });
 });
