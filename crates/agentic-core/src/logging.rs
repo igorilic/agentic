@@ -4,6 +4,30 @@ use tracing_subscriber::{EnvFilter, fmt};
 
 static SUBSCRIBER_INSTALLED: OnceLock<()> = OnceLock::new();
 
+/// Panic message emitted by [`init`] when another tracing subscriber is
+/// already installed globally.
+///
+/// Extracted as a constant so tests can assert message content without
+/// triggering the panic.
+pub(crate) const INIT_PANIC_MSG: &str = concat!(
+    "agentic-core logging: another tracing subscriber is already installed globally",
+    " — agentic_core::logging::init() must run before any other tracing_subscriber::* setup.",
+    " Either call init() first, or skip it entirely and let the existing subscriber",
+    " handle agentic-core's events.",
+);
+
+/// Panic message emitted by [`init_test_subscriber`] when another tracing
+/// subscriber is already installed globally.
+///
+/// Extracted as a constant so tests can assert message content without
+/// triggering the panic.
+pub(crate) const INIT_TEST_PANIC_MSG: &str = concat!(
+    "agentic-core logging: another tracing subscriber is already installed globally",
+    " — agentic_core::logging::init_test_subscriber() called after a global subscriber",
+    " already exists. Either call init_test_subscriber() first, or skip it",
+    " (test-writer capture won't apply but tests will still see logs).",
+);
+
 /// Resolve the tracing filter string with precedence:
 /// explicit `filter` arg > `AGENTIC_LOG` env var > `default_level`.
 #[doc(hidden)]
@@ -23,12 +47,28 @@ pub fn resolved_filter(filter: Option<&str>, default_level: &str) -> String {
 ///
 /// Only the **first** call in the process installs a subscriber. Subsequent
 /// calls are no-ops; the `filter` argument on any call after the first is
-/// **silently ignored**. If you need `init_test_subscriber()`'s `with_test_writer()`
+/// **silently ignored**. If `init_test_subscriber` has already been called in
+/// this process, this call is a no-op and the production subscriber is **NOT**
+/// installed. If you need `init_test_subscriber()`'s `with_test_writer()`
 /// capture behaviour, ensure `init()` has not been called earlier in the same
 /// process.
 ///
 /// The installed subscriber includes a [`BusLayer`] so that [`attach_event_bus`]
 /// can later wire in an [`EventBus`] without reinstalling the subscriber.
+///
+/// # Panics
+///
+/// Panics if `try_init()` fails because a global tracing subscriber was already
+/// installed by some *other* mechanism (i.e. not via this module). See
+/// [`INIT_PANIC_MSG`] for the exact message.
+///
+/// # Retry semantics
+///
+/// This function uses [`OnceLock::get_or_init`] internally. If the initialiser
+/// closure panics (e.g. because another tracing subscriber was pre-installed
+/// globally), the cell remains uninitialised and a subsequent call will
+/// **re-enter the closure and panic again**. Catching and retrying is not
+/// recommended — log the error once and let the process crash.
 pub fn init(filter: Option<&str>) {
     SUBSCRIBER_INSTALLED.get_or_init(|| {
         use tracing_subscriber::prelude::*;
@@ -39,9 +79,7 @@ pub fn init(filter: Option<&str>) {
             .with(fmt_layer)
             .with(BusLayer::global())
             .try_init()
-            .expect(
-                "agentic-core logging: another tracing subscriber is already installed globally",
-            );
+            .expect(INIT_PANIC_MSG);
     });
 }
 
@@ -55,6 +93,20 @@ pub fn init(filter: Option<&str>) {
 ///
 /// The installed subscriber includes a [`BusLayer`] so that [`attach_event_bus`]
 /// can later wire in an [`EventBus`] without reinstalling the subscriber.
+///
+/// # Panics
+///
+/// Panics if `try_init()` fails because a global tracing subscriber was already
+/// installed by some *other* mechanism (i.e. not via this module). See
+/// [`INIT_TEST_PANIC_MSG`] for the exact message.
+///
+/// # Retry semantics
+///
+/// This function uses [`OnceLock::get_or_init`] internally. If the initialiser
+/// closure panics (e.g. because another tracing subscriber was pre-installed
+/// globally), the cell remains uninitialised and a subsequent call will
+/// **re-enter the closure and panic again**. Catching and retrying is not
+/// recommended — log the error once and let the process crash.
 pub fn init_test_subscriber() {
     SUBSCRIBER_INSTALLED.get_or_init(|| {
         use tracing_subscriber::prelude::*;
@@ -66,9 +118,7 @@ pub fn init_test_subscriber() {
             .with(fmt_layer)
             .with(BusLayer::global())
             .try_init()
-            .expect(
-                "agentic-core logging: another tracing subscriber is already installed globally",
-            );
+            .expect(INIT_TEST_PANIC_MSG);
     });
 }
 
