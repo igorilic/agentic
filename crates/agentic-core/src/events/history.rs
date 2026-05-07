@@ -122,3 +122,106 @@ impl EventHistoryBuffer {
         guard.by_run.get(run_id).cloned().unwrap_or_default()
     }
 }
+
+#[cfg(test)]
+impl EventHistoryBuffer {
+    /// Test-only constructor: build a buffer from pre-seeded state without
+    /// spawning a real subscriber on a real bus. Useful for asserting
+    /// `get(...)` semantics in isolation.
+    ///
+    /// The placeholder JoinHandle is a no-op task so the field invariant
+    /// (`_subscriber` is a live JoinHandle) is preserved.
+    pub(crate) fn from_inner_for_test(
+        by_run: HashMap<String, Vec<EventEnvelope>>,
+        cap: usize,
+        runs_cap: usize,
+        lru_order: VecDeque<String>,
+    ) -> Self {
+        let inner = Arc::new(Mutex::new(Inner {
+            by_run,
+            cap,
+            runs_cap,
+            lru_order,
+        }));
+        let _subscriber = tokio::spawn(async {});
+        Self { inner, _subscriber }
+    }
+}
+
+#[cfg(test)]
+fn mk_env(run_id: &str, event_id: &str) -> crate::events::EventEnvelope {
+    use crate::events::Event;
+    crate::events::EventEnvelope {
+        schema_version: 1,
+        event_id: event_id.to_string(),
+        run_id: run_id.to_string(),
+        step_id: None,
+        timestamp_ms: 0,
+        event: Event::TextDelta {
+            content: String::new(),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{HashMap, VecDeque};
+
+    use super::{EventHistoryBuffer, mk_env};
+
+    /// U1 — `get` returns clones, preserves order.
+    /// Build from pre-seeded state with a single run_id "r1" carrying 3 distinct
+    /// envelopes. Assert length=3, order preserved, and calling twice yields
+    /// equal vecs (clones don't drain).
+    #[tokio::test]
+    async fn get_returns_clones_preserves_order() {
+        let mut by_run = HashMap::new();
+        by_run.insert(
+            "r1".to_string(),
+            vec![mk_env("r1", "e1"), mk_env("r1", "e2"), mk_env("r1", "e3")],
+        );
+        let buf = EventHistoryBuffer::from_inner_for_test(
+            by_run,
+            1000,
+            32,
+            VecDeque::from(["r1".to_string()]),
+        );
+
+        let first = buf.get("r1").await;
+        assert_eq!(first.len(), 3);
+        assert_eq!(first[0].event_id, "e1");
+        assert_eq!(first[1].event_id, "e2");
+        assert_eq!(first[2].event_id, "e3");
+
+        // Calling again yields equal results — clones don't drain.
+        let second = buf.get("r1").await;
+        assert_eq!(first, second);
+    }
+
+    /// U2 — `get` returns empty for unknown run_id.
+    #[tokio::test]
+    async fn get_returns_empty_for_unknown_run_id() {
+        let mut by_run = HashMap::new();
+        by_run.insert("r1".to_string(), vec![mk_env("r1", "e1")]);
+        let buf = EventHistoryBuffer::from_inner_for_test(by_run, 1000, 32, VecDeque::new());
+
+        let result = buf.get("r2").await;
+        assert!(result.is_empty());
+    }
+
+    /// U3 — by_run vs lru_order out-of-sync is permitted but does not crash.
+    /// The `get` path only consults `by_run`; divergent `lru_order` is irrelevant
+    /// for reads.
+    #[tokio::test]
+    async fn get_tolerates_lru_order_divergence() {
+        let mut by_run = HashMap::new();
+        let env1 = mk_env("r1", "e1");
+        by_run.insert("r1".to_string(), vec![env1.clone()]);
+        // lru_order intentionally empty — out of sync with by_run.
+        let buf = EventHistoryBuffer::from_inner_for_test(by_run, 1000, 32, VecDeque::new());
+
+        let result = buf.get("r1").await;
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].event_id, "e1");
+    }
+}
