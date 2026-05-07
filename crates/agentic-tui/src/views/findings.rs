@@ -35,7 +35,7 @@ pub fn render(area: Rect, state: &AppState, frame: &mut Frame<'_>) {
     frame.render_widget(body, area);
 }
 
-fn render_row(selected: bool, f: &Finding) -> Line<'static> {
+fn render_row(selected: bool, f: &Finding) -> Line<'_> {
     let cursor = if selected { "> " } else { "  " };
     let triage_badge = f
         .triage
