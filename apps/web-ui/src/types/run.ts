@@ -79,12 +79,23 @@ function extractAgentsFromEvents(events: EventEnvelope[]): string[] | null {
  * 2. If RunStarted is present but lacks agents (legacy event), fall back
  *    to the `agents` parameter.
  * 3. If no RunStarted at all, fall back to the `agents` parameter.
+ *
+ * Multi-run safety (GH #66):
+ * If `activeRunId` is provided, only envelopes whose `run_id` matches are
+ * processed. This prevents late-arriving or broadcast envelopes from other
+ * runs from corrupting the state. Pass `undefined` to retain legacy behavior
+ * (all events processed — useful when the caller already manages a
+ * single-run buffer).
  */
 export function deriveRunState(
   events: EventEnvelope[],
+  activeRunId?: string,
   agents: readonly string[] = [],
 ): RunState {
-  const eventAgents = extractAgentsFromEvents(events);
+  const filtered = activeRunId
+    ? events.filter((e) => e.run_id === activeRunId)
+    : events;
+  const eventAgents = extractAgentsFromEvents(filtered);
   // eventAgents is null when: no RunStarted, or RunStarted lacks agents field.
   // In both cases fall back to the caller-supplied agents list.
   const resolvedAgents: readonly string[] = eventAgents !== null ? eventAgents : agents;
@@ -99,7 +110,7 @@ export function deriveRunState(
   // step_id but not agent). For step_id-keyed lookups in StepComplete.
   const stepIdToAgent = new Map<string, string>();
 
-  for (const env of events) {
+  for (const env of filtered) {
     const data = (env.event.data ?? {}) as Record<string, unknown>;
     switch (env.event.type) {
       case "StepStarted": {

@@ -61,7 +61,7 @@ export default function App() {
     }
   }, [events, findingsRunId]);
 
-  const runState = useMemo(() => deriveRunState(events), [events]);
+  const runState = useMemo(() => deriveRunState(events, activeRunId), [events, activeRunId]);
 
   // Scan from the tail to find the most recent envelope with a non-null step_id
   // that belongs to a StepStarted event.
