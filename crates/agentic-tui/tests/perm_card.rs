@@ -13,10 +13,8 @@
 //! ```
 //! Plus a RED `┃` left accent column immediately left of the `┌`.
 
-use agentic_core::events::Severity;
 use agentic_tui::app::{AppState, LogEntry, LogLevel, Pane, PermissionRequest, PermissionRisk};
 use agentic_tui::draw_app;
-use agentic_tui::findings::Finding;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
@@ -499,29 +497,28 @@ fn perm_card_handles_low_and_medium_risk() {
     );
 }
 
-// ── Test 12: perm card renders BEFORE findings widget (S3) ───────────────────
+// ── Test 12: perm card renders AFTER finding WARN log rows (S3) ──────────────
 
-/// S3: When both a pending perm AND non-empty findings are present, the perm
-/// card's `⚠ PERM` row must appear ABOVE any findings row in the buffer.
+/// S3 (updated for #99): Finding events now render as WARN log rows in
+/// `state.log`, not as a sidebar widget. The perm card must still appear
+/// AFTER any log rows (including finding WARN rows). A finding that was
+/// pushed to `state.log` before the perm is enqueued occupies an earlier
+/// row than the perm card.
 ///
-/// This locks in the S1 ordering fix: log rows → perm card → findings.
+/// Layout contract (post #99): WARN log rows → perm card.
 #[test]
 fn perm_card_renders_above_findings_when_both_present() {
+    // Post #99: findings reach the buffer through state.log, not findings.items.
     let state = AppState {
         focus: Pane::Logs,
         pipeline: vec![],
         pending_perms: vec![perm_request()],
-        findings: agentic_tui::findings::FindingsState {
-            items: vec![Finding {
-                id: "f1".to_string(),
-                severity: Severity::Warning,
-                file: Some("src/main.rs".to_string()),
-                line: Some(42),
-                message: "UniqueFindingMessage42".to_string(),
-                triage: None,
-            }],
-            ..Default::default()
-        },
+        log: vec![LogEntry {
+            timestamp: "00:00:00".to_string(),
+            agent: "reviewer".to_string(),
+            level: LogLevel::Warn,
+            message: "UniqueFindingMessage42".to_string(),
+        }],
         ..Default::default()
     };
     let buf = render(&state);
@@ -530,12 +527,12 @@ fn perm_card_renders_above_findings_when_both_present() {
     let (_perm_col, perm_row) =
         find_str(&buf, "⚠ PERM", WIDTH, HEIGHT).expect("'⚠ PERM' not found in buffer");
 
-    // The finding message must be in the buffer.
+    // The finding message must be in the buffer (as a WARN log row).
     let (_find_col, find_row) = find_str(&buf, "UniqueFindingMessage42", WIDTH, HEIGHT)
         .expect("'UniqueFindingMessage42' not found in buffer");
 
     assert!(
-        perm_row < find_row,
-        "expected perm card row ({perm_row}) to appear BEFORE findings row ({find_row}) [S1]"
+        perm_row > find_row,
+        "expected perm card row ({perm_row}) to appear AFTER finding log row ({find_row}) [S1/#99]"
     );
 }

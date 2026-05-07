@@ -27,7 +27,6 @@ use ratatui::style::{Color, Style};
 
 use crate::app::{AppState, LogEntry, LogLevel, Pane};
 use crate::theme;
-use crate::views::findings;
 use crate::views::perm_card;
 
 // Column layout constants (relative to the pane left edge).
@@ -46,7 +45,7 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
     }
 
     // Use a block scope so the mutable borrow of `f` via `buf` ends before
-    // we call `findings::render(... f)` below.
+    // we call `perm_card::render(... f)` below.
     let log_rows: u16 = {
         let buf = f.buffer_mut();
 
@@ -84,37 +83,19 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
         None
     };
 
-    // S1: render perm card BEFORE findings.
-    // Card takes up to 5 rows immediately after the log rows.
+    // Render perm card immediately after the log rows.
+    // Card takes up to 5 rows.
     const CARD_HEIGHT: u16 = 5;
-    let card_used = if let Some(p) = perm {
-        let available = after_logs_height;
-        if available > 0 {
-            let card_area = Rect {
-                x: area.x,
-                y: after_logs_y,
-                width: area.width,
-                height: available.min(CARD_HEIGHT),
-            };
-            perm_card::render(card_area, f, p);
-        }
-        after_logs_height.min(CARD_HEIGHT)
-    } else {
-        0
-    };
-
-    // Findings start after the perm card.
-    let findings_y = after_logs_y + card_used;
-    let findings_height = after_logs_height.saturating_sub(card_used);
-
-    if findings_y < area.y + area.height && findings_height > 0 {
-        let findings_area = Rect {
+    if let Some(p) = perm
+        && after_logs_height > 0
+    {
+        let card_area = Rect {
             x: area.x,
-            y: findings_y,
+            y: after_logs_y,
             width: area.width,
-            height: findings_height,
+            height: after_logs_height.min(CARD_HEIGHT),
         };
-        findings::render(findings_area, state, f);
+        perm_card::render(card_area, f, p);
     }
 }
 

@@ -262,6 +262,14 @@ impl AppState {
         self.findings.ingest(envelope);
 
         match &envelope.event {
+            Event::Finding { message, .. } => {
+                self.log.push(LogEntry {
+                    timestamp: format_hms(envelope.timestamp_ms),
+                    agent: agent_from_step_id(envelope.step_id.as_deref()),
+                    level: LogLevel::Warn,
+                    message: message.clone(),
+                });
+            }
             Event::PermissionRequest {
                 request_id,
                 agent,
@@ -449,4 +457,26 @@ fn map_wire_risk(risk: agentic_core::events::PermissionRisk) -> PermissionRisk {
         agentic_core::events::PermissionRisk::Medium => PermissionRisk::Medium,
         agentic_core::events::PermissionRisk::High => PermissionRisk::High,
     }
+}
+
+/// Format a millisecond timestamp as `HH:MM:SS`.
+///
+/// Uses the time-of-day portion of the value modulo 24 hours so that
+/// the column always shows a clock-style string regardless of the epoch.
+pub(crate) fn format_hms(timestamp_ms: i64) -> String {
+    let total_secs = (timestamp_ms.unsigned_abs() / 1000) % 86_400;
+    let h = total_secs / 3600;
+    let m = (total_secs % 3600) / 60;
+    let s = total_secs % 60;
+    format!("{h:02}:{m:02}:{s:02}")
+}
+
+/// Derive the agent name from a `step_id` string of the form
+/// `"{run_id}-step-{agent}"`.  Returns the portion after the last
+/// `-step-` separator, or an empty string when the pattern is absent.
+pub(crate) fn agent_from_step_id(step_id: Option<&str>) -> String {
+    step_id
+        .and_then(|s| s.rsplit_once("-step-"))
+        .map(|(_, agent)| agent.to_string())
+        .unwrap_or_default()
 }

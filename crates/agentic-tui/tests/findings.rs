@@ -214,54 +214,62 @@ fn triage_keys_in_command_mode_are_treated_as_text_not_actions() {
 }
 
 // ─── render ─────────────────────────────────────────────────────────────────
+// Spec §4.6 (closes #99): Finding events now appear as WARN log rows
+// in `state.log` via `apply_envelope`, not as a sidebar widget.
 
 #[test]
 fn cockpit_renders_finding_message_when_present() {
+    // Post #99: finding messages reach the screen through state.log WARN
+    // rows. Populate via apply_envelope so the log entry is pushed.
     let backend = TestBackend::new(120, 30);
     let mut terminal = Terminal::new(backend).unwrap();
     let mut s = AppState::default();
-    s.findings.items = vec![finding("a", "missing-error-handling")];
+    s.apply_envelope(&finding_envelope("a", "missing-error-handling"));
     terminal.draw(|f| draw_app(f, &s)).unwrap();
     let content = common::flatten(&terminal);
     assert!(
         content.contains("missing-error-handling"),
-        "expected finding message in cockpit; got: {content:?}"
+        "expected finding message as a WARN log row; got: {content:?}"
     );
 }
 
 #[test]
-fn cockpit_renders_triage_label_after_triaging() {
+fn cockpit_renders_warn_level_label_for_finding() {
+    // Post #99: the level column for a Finding row must show "WARN".
     let backend = TestBackend::new(120, 30);
     let mut terminal = Terminal::new(backend).unwrap();
     let mut s = AppState::default();
-    s.findings.items = vec![finding("a", "missing-error-handling")];
-    s.handle_key(KeyCode::Char('t'));
+    s.apply_envelope(&finding_envelope("a", "missing-error-handling"));
     terminal.draw(|f| draw_app(f, &s)).unwrap();
     let content = common::flatten(&terminal);
     assert!(
-        content.contains("tech-debt"),
-        "expected 'tech-debt' badge in cockpit; got: {content:?}"
+        content.contains("WARN"),
+        "expected WARN level label for finding row; got: {content:?}"
     );
 }
 
 #[test]
 fn cockpit_marks_selected_finding_row_with_a_cursor_glyph() {
+    // Post #99: the sidebar cursor glyph (`> ⚠`) is gone; findings are plain
+    // WARN log rows. Confirm the message text appears without the old glyph.
     let backend = TestBackend::new(120, 30);
     let mut terminal = Terminal::new(backend).unwrap();
     let mut s = AppState::default();
-    s.findings.items = vec![finding("a", "alpha-msg"), finding("b", "beta-msg")];
-    s.handle_key(KeyCode::Char('j')); // cursor → 1 (beta-msg row)
+    s.apply_envelope(&finding_envelope("a", "alpha-msg"));
+    s.apply_envelope(&finding_envelope("b", "beta-msg"));
     terminal.draw(|f| draw_app(f, &s)).unwrap();
     let content = common::flatten(&terminal);
-    // The `>` glyph marks the selected row in `views/findings.rs`.
-    // The selected row (beta-msg) must carry the `>` prefix; the
-    // unselected row (alpha-msg) must NOT.
     assert!(
-        content.contains("> ⚠ beta-msg"),
-        "selected row must show '> ⚠ beta-msg'; got: {content:?}"
+        content.contains("alpha-msg"),
+        "finding alpha-msg must appear as a log row; got: {content:?}"
     );
     assert!(
-        !content.contains("> ⚠ alpha-msg"),
-        "unselected row must NOT show '> ⚠ alpha-msg'; got: {content:?}"
+        content.contains("beta-msg"),
+        "finding beta-msg must appear as a log row; got: {content:?}"
+    );
+    // The old sidebar cursor glyph must NOT appear.
+    assert!(
+        !content.contains("> ⚠"),
+        "sidebar cursor glyph '> ⚠' must not appear after #99; got: {content:?}"
     );
 }
