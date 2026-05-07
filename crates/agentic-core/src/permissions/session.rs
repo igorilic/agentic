@@ -169,4 +169,106 @@ mod tests {
         h1.join().expect("thread 1 panicked");
         h2.join().expect("thread 2 panicked");
     }
+
+    // -----------------------------------------------------------------------
+    // Test S.6: bounded map evicts oldest run when cap exceeded
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn bounded_map_evicts_oldest_run() {
+        let al = SessionAllowlist::with_runs_cap(3);
+        al.insert("r1", "Bash", "cmd1");
+        al.insert("r2", "Bash", "cmd2");
+        al.insert("r3", "Bash", "cmd3");
+        // r4 pushes us over the cap of 3; r1 (oldest) must be evicted.
+        al.insert("r4", "Bash", "cmd4");
+
+        assert!(!al.contains("r1", "Bash", "cmd1"), "r1 should be evicted");
+        assert!(al.contains("r2", "Bash", "cmd2"), "r2 must survive");
+        assert!(al.contains("r3", "Bash", "cmd3"), "r3 must survive");
+        assert!(al.contains("r4", "Bash", "cmd4"), "r4 must survive");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test S.7: LRU touch on insert promotes run to back
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn lru_touch_on_insert_promotes_run_to_back() {
+        let al = SessionAllowlist::with_runs_cap(2);
+        al.insert("r1", "Bash", "cmd1");
+        al.insert("r2", "Bash", "cmd2");
+        // Second insert for r1 touches it — moves r1 to back, so r2 is now oldest.
+        al.insert("r1", "Bash", "cmd1b");
+        // r3 pushes us over cap; r2 (now oldest) must be evicted.
+        al.insert("r3", "Bash", "cmd3");
+
+        assert!(!al.contains("r2", "Bash", "cmd2"), "r2 should be evicted (was LRU)");
+        assert!(al.contains("r1", "Bash", "cmd1"), "r1 must survive (was touched)");
+        assert!(al.contains("r1", "Bash", "cmd1b"), "r1 second pair must survive");
+        assert!(al.contains("r3", "Bash", "cmd3"), "r3 must survive");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test S.8: contains does NOT touch LRU order
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn contains_does_not_touch_lru_order() {
+        let al = SessionAllowlist::with_runs_cap(2);
+        al.insert("r1", "Bash", "cmd1");
+        al.insert("r2", "Bash", "cmd2");
+        // Calling contains on r1 must NOT count as a touch.
+        let _ = al.contains("r1", "Bash", "cmd1");
+        // r3 pushes us over cap; r1 (still oldest, contains didn't touch) is evicted.
+        al.insert("r3", "Bash", "cmd3");
+
+        assert!(!al.contains("r1", "Bash", "cmd1"), "r1 should be evicted (contains did not touch)");
+        assert!(al.contains("r2", "Bash", "cmd2"), "r2 must survive");
+        assert!(al.contains("r3", "Bash", "cmd3"), "r3 must survive");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test S.9: drop_run removes from lru_order (no phantom entry)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn drop_run_removes_from_lru_order() {
+        let al = SessionAllowlist::with_runs_cap(2);
+        al.insert("r1", "Bash", "cmd1");
+        al.insert("r2", "Bash", "cmd2");
+        // drop_run("r1") frees one slot; cap is now 1 used of 2.
+        al.drop_run("r1");
+        // r3 fits without eviction (1 used → 2 used, still ≤ cap).
+        al.insert("r3", "Bash", "cmd3");
+        // r4 now pushes to 3 > cap=2, evicting r2 (oldest remaining).
+        al.insert("r4", "Bash", "cmd4");
+
+        assert!(!al.contains("r1", "Bash", "cmd1"), "r1 was dropped");
+        assert!(!al.contains("r2", "Bash", "cmd2"), "r2 should be evicted");
+        assert!(al.contains("r3", "Bash", "cmd3"), "r3 must survive");
+        assert!(al.contains("r4", "Bash", "cmd4"), "r4 must survive");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test S.10: default cap is 64 — 65th run evicts exactly one entry
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn default_cap_is_64() {
+        assert_eq!(DEFAULT_RUNS_CAP, 64, "DEFAULT_RUNS_CAP must be 64");
+
+        let al = SessionAllowlist::new();
+        // Insert 64 runs — all must fit.
+        for i in 0..64 {
+            al.insert(&format!("run-{i}"), "Bash", "x");
+        }
+        for i in 0..64 {
+            assert!(al.contains(&format!("run-{i}"), "Bash", "x"), "run-{i} must survive within cap");
+        }
+        // 65th run evicts run-0 (the oldest).
+        al.insert("run-64", "Bash", "x");
+        assert!(!al.contains("run-0", "Bash", "x"), "run-0 should be evicted by the 65th insert");
+        assert!(al.contains("run-64", "Bash", "x"), "run-64 must be present");
+    }
 }
