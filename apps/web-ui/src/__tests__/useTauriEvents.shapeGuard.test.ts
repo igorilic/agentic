@@ -74,6 +74,10 @@ describe("isEventEnvelope", () => {
     expect(isEventEnvelope({ ...wellFormed, run_id: null })).toBe(false);
   });
 
+  it("G4 — rejects run_id set to a number", () => {
+    expect(isEventEnvelope({ ...wellFormed, run_id: 42 })).toBe(false);
+  });
+
   it("G4 — rejects schema_version set to a string", () => {
     expect(isEventEnvelope({ ...wellFormed, schema_version: "1" })).toBe(false);
   });
