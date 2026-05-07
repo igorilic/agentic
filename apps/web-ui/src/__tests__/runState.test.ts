@@ -317,20 +317,22 @@ describe("deriveRunState", () => {
   // GH #66 — multi-run safety: deriveRunState should filter by activeRunId
 
   // M1 — multi-run isolation: only r1 events affect r1 state
+  // Both runs fire StepStarted + StepComplete for the SAME agent ("architect")
+  // so that removing the activeRunId filter would cause r2's "failed" result
+  // to overwrite r1's "passed" on the shared slot — a real correctness failure.
   it("M1: filters to activeRunId — only matching run events applied", () => {
     const events: EventEnvelope[] = [
       // r1: architect started and completed passed
-      envelope({ run_id: "r1", step_id: "s1", event: { type: "StepStarted", data: { agent: "architect", model: {} } } }),
-      envelope({ run_id: "r1", step_id: "s1", event: { type: "StepComplete", data: { status: "passed", summary: "", token_usage: { input_tokens: 0, output_tokens: 0 }, cost_usd: null, duration_ms: 1 } } }),
-      // r2: tdd-developer started and completed failed — must NOT bleed into r1 view
-      envelope({ run_id: "r2", step_id: "s2", event: { type: "StepStarted", data: { agent: "tdd-developer", model: {} } } }),
-      envelope({ run_id: "r2", step_id: "s2", event: { type: "StepComplete", data: { status: "failed", summary: "", token_usage: { input_tokens: 0, output_tokens: 0 }, cost_usd: null, duration_ms: 1 } } }),
+      envelope({ run_id: "r1", step_id: "s-r1-arch", event: { type: "StepStarted", data: { agent: "architect", model: {} } } }),
+      envelope({ run_id: "r1", step_id: "s-r1-arch", event: { type: "StepComplete", data: { status: "passed", summary: "", token_usage: { input_tokens: 0, output_tokens: 0 }, cost_usd: null, duration_ms: 1 } } }),
+      // r2: architect started and completed failed (SAME agent, different step_id)
+      // Without the filter, this would overwrite r1's "passed" with "failed".
+      envelope({ run_id: "r2", step_id: "s-r2-arch", event: { type: "StepStarted", data: { agent: "architect", model: {} } } }),
+      envelope({ run_id: "r2", step_id: "s-r2-arch", event: { type: "StepComplete", data: { status: "failed", summary: "", token_usage: { input_tokens: 0, output_tokens: 0 }, cost_usd: null, duration_ms: 1 } } }),
     ];
-    const state = deriveRunState(events, "r1", ["architect", "tdd-developer", "qa", "reviewer"]);
-    const architect = state.steps.find((s) => s.agent === "architect");
-    const tddDev = state.steps.find((s) => s.agent === "tdd-developer");
-    expect(architect?.status).toBe("passed");    // r1 effect landed
-    expect(tddDev?.status).toBe("pending");      // r2 bleed blocked — stays pending
+    const state = deriveRunState(events, "r1", ["architect", "tdd-developer"]);
+    expect(state.steps[0].status).toBe("passed");   // architect — only r1 effect applied
+    expect(state.steps[1].status).toBe("pending");  // tdd-developer — neither run touched
   });
 
   // M2 — activeRunId undefined preserves legacy behavior: all events processed
