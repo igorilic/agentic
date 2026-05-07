@@ -613,6 +613,54 @@ mod tests {
         }
     }
 
+    // ── Test L1 — panic message constants are differentiated (GH #65) ──────────
+
+    #[test]
+    fn test_l1_panic_msg_constants_are_differentiated() {
+        use super::{INIT_PANIC_MSG, INIT_TEST_PANIC_MSG};
+
+        // Must differ from each other.
+        assert_ne!(
+            INIT_PANIC_MSG, INIT_TEST_PANIC_MSG,
+            "init and init_test_subscriber panic messages must be distinct"
+        );
+
+        // Both must start with the shared prefix.
+        assert!(
+            INIT_PANIC_MSG.contains("agentic-core logging:"),
+            "INIT_PANIC_MSG missing shared prefix; got: {INIT_PANIC_MSG:?}"
+        );
+        assert!(
+            INIT_TEST_PANIC_MSG.contains("agentic-core logging:"),
+            "INIT_TEST_PANIC_MSG missing shared prefix; got: {INIT_TEST_PANIC_MSG:?}"
+        );
+
+        // Each must mention its own entry-point name.
+        assert!(
+            INIT_PANIC_MSG.contains("init()"),
+            "INIT_PANIC_MSG must mention 'init()'; got: {INIT_PANIC_MSG:?}"
+        );
+        assert!(
+            INIT_TEST_PANIC_MSG.contains("init_test_subscriber()"),
+            "INIT_TEST_PANIC_MSG must mention 'init_test_subscriber()'; got: {INIT_TEST_PANIC_MSG:?}"
+        );
+
+        // Each must contain a remediation hint (at least one of these tokens).
+        let has_hint = |msg: &str| {
+            msg.to_lowercase().contains("either")
+                || msg.to_lowercase().contains("or skip")
+                || msg.to_lowercase().contains("call")
+        };
+        assert!(
+            has_hint(INIT_PANIC_MSG),
+            "INIT_PANIC_MSG must contain a remediation hint; got: {INIT_PANIC_MSG:?}"
+        );
+        assert!(
+            has_hint(INIT_TEST_PANIC_MSG),
+            "INIT_TEST_PANIC_MSG must contain a remediation hint; got: {INIT_TEST_PANIC_MSG:?}"
+        );
+    }
+
     // ── Test G — record_debug does not double-quote string values (F4) ────────
 
     #[tokio::test]
