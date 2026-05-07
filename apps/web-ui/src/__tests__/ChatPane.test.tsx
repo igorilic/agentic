@@ -308,4 +308,41 @@ describe("ChatPane", () => {
     expect(msg).toContain("Command failed:");
     expect(msg).toContain("Some other backend error");
   });
+
+  // -------------------------------------------------------------------------
+  // GH #67 — slash branch calls chat_record_system_message for audit trail
+  // -------------------------------------------------------------------------
+
+  it("slash parse error calls chat_record_system_message with the formatted error string", async () => {
+    // /plan --backend=bad-format triggers a parse error (bad backend value)
+    // recordSystem mock: return a system ChatMessage so the hook appends it.
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "chat_record_system_message") {
+        const content = (args?.content as string) ?? "";
+        return {
+          id: `sys-${Date.now()}`,
+          session_id: "s",
+          run_id: null,
+          role: "system",
+          content,
+          metadata: null,
+          created_at: Date.now(),
+        };
+      }
+      return undefined;
+    });
+
+    const user = userEvent.setup();
+    render(<ChatPane />);
+
+    await user.type(screen.getByTestId("chat-input"), "/plan --backend=bad-format #42");
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("chat_record_system_message", expect.objectContaining({
+        content: expect.stringContaining("bad-format"),
+        workspaceId: "default",
+      }));
+    });
+  });
 });
