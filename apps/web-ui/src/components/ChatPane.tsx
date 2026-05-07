@@ -27,7 +27,7 @@ export default function ChatPane({
   onTicketRunStarted,
   pipelineAgents = [],
 }: ChatPaneProps = {}) {
-  const { messages, send, sending, error } = useChat();
+  const { messages, send, recordSystem, sending, error } = useChat();
   const [systemMessages, setSystemMessages] = useState<string[]>([]);
   // Maps mention run_id → agent name so event envelopes can be rendered with
   // the correct per-agent identity. The EventEnvelope schema does not carry an
@@ -100,18 +100,23 @@ export default function ChatPane({
       if (text.trim().startsWith("/")) {
         const parsed = parseSlashCommand(text);
         if (!parsed.ok) {
-          setSystemMessages((prev) => [...prev, formatSlashParseError(parsed.error)]);
+          const errMsg = formatSlashParseError(parsed.error);
+          // setSystemMessages keeps the in-memory duplicate path for ChatColumn's
+          // systemMessages prop (mention branch still needs this state); recordSystem
+          // persists the message to the DB so the audit trail survives reload.
+          setSystemMessages((prev) => [...prev, errMsg]);
+          await recordSystem(errMsg);
           return;
         }
         try {
           const result = await dispatchSlashCommand(parsed.command, slashServices);
           setSystemMessages((prev) => [...prev, result.message]);
+          await recordSystem(result.message);
         } catch (err) {
           const errStr = String(err);
-          setSystemMessages((prev) => [
-            ...prev,
-            errStr.startsWith("pre-flight:") ? errStr : `Command failed: ${errStr}`,
-          ]);
+          const msg = errStr.startsWith("pre-flight:") ? errStr : `Command failed: ${errStr}`;
+          setSystemMessages((prev) => [...prev, msg]);
+          await recordSystem(msg);
         }
         return;
       }

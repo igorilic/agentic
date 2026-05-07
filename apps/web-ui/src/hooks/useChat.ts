@@ -10,9 +10,16 @@ export type UseChatResult = {
   messages: ChatMessage[];
   /** Submit a message. Persists user msg + reply, appends both to local state. */
   send: (content: string) => Promise<void>;
+  /**
+   * Persist a role="system" message for the audit trail (slash command output,
+   * errors, etc.). Best-effort: sets error on failure but does not throw.
+   * Appends the returned ChatMessage to the shared messages list so it renders
+   * alongside user/assistant messages and survives webview reload.
+   */
+  recordSystem: (content: string) => Promise<void>;
   /** True while a send is in-flight. */
   sending: boolean;
-  /** Last error from a failed send, or null. */
+  /** Last error from a failed send or recordSystem, or null. */
   error: string | null;
 };
 
@@ -44,5 +51,24 @@ export function useChat(): UseChatResult {
     }
   };
 
-  return { messages, send, sending, error };
+  const recordSystem = async (content: string) => {
+    try {
+      const msg = (await invoke("chat_record_system_message", {
+        sessionId,
+        workspaceId: DEFAULT_WORKSPACE_ID,
+        content,
+      })) as ChatMessage;
+      // Adopt the session_id returned by the backend when we didn't have one yet.
+      if (!sessionId) setSessionId(msg.session_id);
+      setMessages((prev) => {
+        const next = [...prev, msg];
+        return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
+      });
+    } catch (e) {
+      // Best-effort: persistence failure must not block the UX.
+      setError(String(e));
+    }
+  };
+
+  return { messages, send, recordSystem, sending, error };
 }

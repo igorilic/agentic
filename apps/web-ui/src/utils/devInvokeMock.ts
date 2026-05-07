@@ -154,6 +154,20 @@ async function mockInvoke(cmd: string, args?: Record<string, unknown>): Promise<
         },
       };
     }
+    case "chat_record_system_message": {
+      const session_id = (args?.sessionId as string | null) ?? `dev-session-${Date.now()}`;
+      const content = (args?.content as string) ?? "";
+      const now = Date.now();
+      return {
+        id: `sys-${now}`,
+        session_id,
+        run_id: null,
+        role: "system",
+        content,
+        metadata: null,
+        created_at: now,
+      };
+    }
     case "get_workspace_id":
       return "ws-dev-mock-1234567";
     case "list_runs":

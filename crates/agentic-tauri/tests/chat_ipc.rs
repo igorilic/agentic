@@ -1,7 +1,9 @@
 #![cfg(test)]
 
 use agentic_core::Db;
-use agentic_tauri::commands::chat::{ChatState, chat_list_messages, chat_record_system_message, chat_send_message};
+use agentic_tauri::commands::chat::{
+    ChatState, chat_list_messages, chat_record_system_message, chat_send_message,
+};
 use tauri::Manager;
 use tauri::test::{mock_builder, mock_context, noop_assets};
 
@@ -123,7 +125,9 @@ async fn chat_record_system_message_persists_system_role_row() {
         .await
         .expect("chat_list_messages");
     assert!(
-        messages.iter().any(|m| m.role == "system" && m.content.contains("pre-flight")),
+        messages
+            .iter()
+            .any(|m| m.role == "system" && m.content.contains("pre-flight")),
         "expected a system-role message in the persisted list"
     );
 }
@@ -137,17 +141,15 @@ async fn chat_record_system_message_rejects_empty_content() {
     let app = build_app();
     let state = app.state::<ChatState>();
 
-    let result = chat_record_system_message(
-        state,
-        None,
-        "default".to_string(),
-        "   ".to_string(),
-    )
-    .await;
+    let result =
+        chat_record_system_message(state, None, "default".to_string(), "   ".to_string()).await;
 
     assert!(result.is_err(), "expected Err for empty content");
     let err = result.unwrap_err();
-    assert_eq!(err, "content is empty", "error must be 'content is empty': {err}");
+    assert_eq!(
+        err, "content is empty",
+        "error must be 'content is empty': {err}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -169,13 +171,20 @@ async fn chat_record_system_message_creates_session_when_none() {
     .expect("chat_record_system_message with None session");
 
     // A fresh, non-empty session_id must be assigned.
-    assert!(!sys_msg.session_id.is_empty(), "session_id must be non-empty");
+    assert!(
+        !sys_msg.session_id.is_empty(),
+        "session_id must be non-empty"
+    );
 
     // The session row must exist so list_messages can find the persisted message.
     let state2 = app.state::<ChatState>();
     let messages = chat_list_messages(state2, sys_msg.session_id.clone())
         .await
         .expect("chat_list_messages for new session");
-    assert_eq!(messages.len(), 1, "new session should have exactly one system message");
+    assert_eq!(
+        messages.len(),
+        1,
+        "new session should have exactly one system message"
+    );
     assert_eq!(messages[0].role, "system");
 }

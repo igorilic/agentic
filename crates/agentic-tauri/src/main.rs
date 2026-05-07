@@ -151,6 +151,7 @@ fn main() {
             commands::scripted::cancel_run,
             commands::chat::chat_send_message,
             commands::chat::chat_list_messages,
+            commands::chat::chat_record_system_message,
             commands::mention::mention_agent,
             commands::findings::triage_finding,
             commands::findings::list_findings,

@@ -108,3 +108,48 @@ pub async fn chat_list_messages(
         .list_by_session(&session_id)
         .map_err(|e| e.to_string())
 }
+
+/// Persist a `role="system"` chat message. Used for slash command audit trail
+/// and any other non-user, non-assistant message that should survive reload.
+/// Unlike `chat_send_message`, does NOT synthesize an assistant echo.
+///
+/// If `session_id` is `None`, creates a new session (mirrors chat_send_message).
+#[tauri::command]
+pub async fn chat_record_system_message(
+    state: State<'_, ChatState>,
+    session_id: Option<String>,
+    workspace_id: String,
+    content: String,
+) -> Result<ChatMessage, String> {
+    if content.trim().is_empty() {
+        return Err("content is empty".to_string());
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let session_id = match session_id {
+        Some(id) => id,
+        None => {
+            let new_id = Ulid::new().to_string().to_lowercase();
+            state
+                .repo
+                .create_session(&new_id, &workspace_id, now)
+                .map_err(|e| e.to_string())?;
+            new_id
+        }
+    };
+    tracing::info!(session_id = %session_id, "chat_record_system_message");
+    state
+        .repo
+        .insert_message(ChatMessage {
+            id: Ulid::new().to_string().to_lowercase(),
+            session_id,
+            run_id: None,
+            role: "system".to_string(),
+            content,
+            metadata: None,
+            created_at: now,
+        })
+        .map_err(|e| e.to_string())
+}
