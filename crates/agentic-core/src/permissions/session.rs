@@ -15,53 +15,127 @@
 //! - **Cleared on `RunComplete`**: the async gate subscribes to the bus and
 //!   calls [`SessionAllowlist::drop_run`] when `Event::RunComplete` arrives
 //!   for that run.
+//! - **Bounded map**: at most [`DEFAULT_RUNS_CAP`] distinct run_ids are
+//!   retained. When a new run pushes the count over the cap, the least-recently
+//!   inserted-to run is evicted. This bounds memory in long-lived Tauri sessions
+//!   where runs exit abnormally and `RunComplete` is never emitted. See GH #102.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 
 /// Opaque run identifier. In the bus envelope this is the `run_id: String`
 /// field. We alias it here for readability.
 pub type RunId = str;
 
-/// Inner map type: run_id → set of (tool, arg) pairs.
-type AllowlistMap = Mutex<HashMap<String, HashSet<(String, String)>>>;
+/// Default maximum number of distinct run_ids retained in the allowlist.
+///
+/// Memory worst-case: 64 runs × 10 patterns × ~100 B per entry ≈ 64 KB
+/// resident in a long-lived Tauri session. Beyond this cap the least-recently
+/// inserted-to run is evicted. Each entry is small (two short strings in a
+/// HashSet), so 64 is generous. See GH #102.
+pub const DEFAULT_RUNS_CAP: usize = 64;
+
+/// Shared mutable state behind the `SessionAllowlist` `Arc`.
+///
+/// LRU invariant: `lru_order.front()` = oldest (least recently touched),
+/// `lru_order.back()` = newest. Only `insert` updates the ordering; `contains`
+/// is read-only and must NOT touch `lru_order` (see `contains` doc comment).
+#[derive(Debug)]
+struct Inner {
+    /// run_id → set of approved (tool, arg) pairs.
+    by_run: HashMap<String, HashSet<(String, String)>>,
+    /// LRU ordering: front = oldest, back = newest (most recently inserted to).
+    lru_order: VecDeque<String>,
+    /// Maximum number of distinct run_ids retained. When exceeded, the oldest
+    /// entry (front of `lru_order`) is evicted.
+    runs_cap: usize,
+}
 
 /// Per-run in-memory cache of user-approved `(tool, arg)` pairs.
 ///
-/// Cheap to clone: the `Arc` is cloned, not the inner map.
-#[derive(Debug, Clone, Default)]
+/// Cheap to clone: the `Arc` is cloned, not the inner state.
+///
+/// The map is bounded to [`DEFAULT_RUNS_CAP`] distinct run_ids (or a custom
+/// cap via [`SessionAllowlist::with_runs_cap`]). When a new run pushes the
+/// count over the cap, the least-recently-inserted-to run is evicted so that
+/// abnormal process exits that skip `RunComplete` do not leak indefinitely.
+#[derive(Debug, Clone)]
 pub struct SessionAllowlist {
-    inner: Arc<AllowlistMap>,
+    inner: Arc<Mutex<Inner>>,
+}
+
+impl Default for SessionAllowlist {
+    fn default() -> Self {
+        Self::with_runs_cap(DEFAULT_RUNS_CAP)
+    }
 }
 
 impl SessionAllowlist {
-    /// Create an empty allowlist.
+    /// Create an empty allowlist with [`DEFAULT_RUNS_CAP`].
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Create an empty allowlist with an explicit run-map cap.
+    ///
+    /// Prefer [`SessionAllowlist::new`] for typical call sites. This
+    /// constructor exists for tests and future callers that need a custom cap.
+    pub fn with_runs_cap(runs_cap: usize) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(Inner {
+                by_run: HashMap::new(),
+                lru_order: VecDeque::new(),
+                runs_cap,
+            })),
+        }
+    }
+
     /// Insert a `(tool, arg)` pair under `run_id`.
+    ///
+    /// Touches the LRU order: `run_id` is moved to the back (most recent).
+    /// If the resulting map size exceeds the cap, the oldest run is evicted.
     pub fn insert(&self, run_id: &RunId, tool: &str, arg: &str) {
         let mut guard = self.inner.lock().expect("SessionAllowlist mutex poisoned");
+
+        // Touch: remove prior position then push to back (most-recent).
+        guard.lru_order.retain(|id| id != run_id);
+        guard.lru_order.push_back(run_id.to_string());
+
+        // Insert into the by_run map.
         guard
+            .by_run
             .entry(run_id.to_string())
             .or_default()
             .insert((tool.to_string(), arg.to_string()));
+
+        // Evict LRU runs while over the map cap.
+        let runs_cap = guard.runs_cap;
+        while guard.by_run.len() > runs_cap {
+            if let Some(oldest) = guard.lru_order.pop_front() {
+                guard.by_run.remove(&oldest);
+            } else {
+                break;
+            }
+        }
     }
 
     /// Returns `true` if `(tool, arg)` was previously inserted under `run_id`.
     ///
     /// Matching is **exact-arg** — no glob or prefix logic.
     ///
+    /// **Read-only**: this method does NOT update the LRU order. Only
+    /// `insert` counts as a "touch". This ensures a `contains` call on the
+    /// hot path does not accidentally prevent an idle run from being evicted.
+    ///
     /// # Allocation note
     ///
-    /// The `(tool, arg)` strings are only heap-allocated when the `run_id` bucket
-    /// exists. The most common case on the hot path is that no session entries have
-    /// been inserted for the run (cold run or no `AllowSession` decisions yet), so
-    /// this early-return avoids both allocations entirely for that path.
+    /// The `(tool, arg)` strings are only heap-allocated when the `run_id`
+    /// bucket exists. The most common case on the hot path is that no session
+    /// entries have been inserted for the run (cold run or no `AllowSession`
+    /// decisions yet), so this early-return avoids both allocations entirely.
     pub fn contains(&self, run_id: &RunId, tool: &str, arg: &str) -> bool {
         let guard = self.inner.lock().expect("SessionAllowlist mutex poisoned");
-        let Some(set) = guard.get(run_id) else {
+        let Some(set) = guard.by_run.get(run_id) else {
             // Most common case: no bucket for this run_id — skip both allocations.
             return false;
         };
@@ -71,9 +145,13 @@ impl SessionAllowlist {
 
     /// Remove all cached entries for `run_id`. Called when `Event::RunComplete`
     /// arrives for that run.
+    ///
+    /// Also removes `run_id` from `lru_order` so no phantom entry remains to
+    /// interfere with eviction accounting.
     pub fn drop_run(&self, run_id: &RunId) {
         let mut guard = self.inner.lock().expect("SessionAllowlist mutex poisoned");
-        guard.remove(run_id);
+        guard.by_run.remove(run_id);
+        guard.lru_order.retain(|id| id != run_id);
     }
 }
 
@@ -203,9 +281,18 @@ mod tests {
         // r3 pushes us over cap; r2 (now oldest) must be evicted.
         al.insert("r3", "Bash", "cmd3");
 
-        assert!(!al.contains("r2", "Bash", "cmd2"), "r2 should be evicted (was LRU)");
-        assert!(al.contains("r1", "Bash", "cmd1"), "r1 must survive (was touched)");
-        assert!(al.contains("r1", "Bash", "cmd1b"), "r1 second pair must survive");
+        assert!(
+            !al.contains("r2", "Bash", "cmd2"),
+            "r2 should be evicted (was LRU)"
+        );
+        assert!(
+            al.contains("r1", "Bash", "cmd1"),
+            "r1 must survive (was touched)"
+        );
+        assert!(
+            al.contains("r1", "Bash", "cmd1b"),
+            "r1 second pair must survive"
+        );
         assert!(al.contains("r3", "Bash", "cmd3"), "r3 must survive");
     }
 
@@ -223,7 +310,10 @@ mod tests {
         // r3 pushes us over cap; r1 (still oldest, contains didn't touch) is evicted.
         al.insert("r3", "Bash", "cmd3");
 
-        assert!(!al.contains("r1", "Bash", "cmd1"), "r1 should be evicted (contains did not touch)");
+        assert!(
+            !al.contains("r1", "Bash", "cmd1"),
+            "r1 should be evicted (contains did not touch)"
+        );
         assert!(al.contains("r2", "Bash", "cmd2"), "r2 must survive");
         assert!(al.contains("r3", "Bash", "cmd3"), "r3 must survive");
     }
@@ -264,11 +354,17 @@ mod tests {
             al.insert(&format!("run-{i}"), "Bash", "x");
         }
         for i in 0..64 {
-            assert!(al.contains(&format!("run-{i}"), "Bash", "x"), "run-{i} must survive within cap");
+            assert!(
+                al.contains(&format!("run-{i}"), "Bash", "x"),
+                "run-{i} must survive within cap"
+            );
         }
         // 65th run evicts run-0 (the oldest).
         al.insert("run-64", "Bash", "x");
-        assert!(!al.contains("run-0", "Bash", "x"), "run-0 should be evicted by the 65th insert");
+        assert!(
+            !al.contains("run-0", "Bash", "x"),
+            "run-0 should be evicted by the 65th insert"
+        );
         assert!(al.contains("run-64", "Bash", "x"), "run-64 must be present");
     }
 }
