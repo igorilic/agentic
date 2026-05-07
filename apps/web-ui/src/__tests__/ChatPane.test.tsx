@@ -313,6 +313,93 @@ describe("ChatPane", () => {
   // GH #67 — slash branch calls chat_record_system_message for audit trail
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // GH #67 — dispatch-success and dispatch-error branches also call
+  // chat_record_system_message for audit trail (regression guard)
+  // -------------------------------------------------------------------------
+
+  it("slash dispatch-success persists audit trail via chat_record_system_message", async () => {
+    // start_ticket_run resolves first, then chat_record_system_message resolves.
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "start_ticket_run") return "run-audit-ok";
+      if (cmd === "chat_record_system_message") {
+        const content = (args?.content as string) ?? "";
+        return {
+          id: `sys-${Date.now()}`,
+          session_id: "s",
+          run_id: null,
+          role: "system",
+          content,
+          metadata: null,
+          created_at: Date.now(),
+        };
+      }
+      return undefined;
+    });
+
+    const user = userEvent.setup();
+    render(<ChatPane pipelineAgents={["architect"]} />);
+
+    await user.type(screen.getByTestId("chat-input"), "/plan #42 do thing");
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith(
+        "chat_record_system_message",
+        expect.objectContaining({
+          content: expect.stringMatching(/started run run-audit-ok/i),
+          workspaceId: "default",
+        }),
+      );
+    });
+  });
+
+  it("slash dispatch-error persists audit trail via chat_record_system_message", async () => {
+    // start_ticket_run rejects with a non-pre-flight error so the
+    // "Command failed:" prefix is prepended before recordSystem is called.
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "start_ticket_run") throw "backend exploded";
+      if (cmd === "chat_record_system_message") {
+        const content = (args?.content as string) ?? "";
+        return {
+          id: `sys-${Date.now()}`,
+          session_id: "s",
+          run_id: null,
+          role: "system",
+          content,
+          metadata: null,
+          created_at: Date.now(),
+        };
+      }
+      return undefined;
+    });
+
+    const user = userEvent.setup();
+    render(<ChatPane />);
+
+    await user.type(screen.getByTestId("chat-input"), "/plan #99 do thing");
+    await user.click(screen.getByTestId("chat-send"));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith(
+        "chat_record_system_message",
+        expect.objectContaining({
+          content: expect.stringContaining("Command failed:"),
+          workspaceId: "default",
+        }),
+      );
+    });
+
+    // Also assert the error content itself is present
+    const recordCall = invokeMock.mock.calls.find(
+      ([cmd]) => cmd === "chat_record_system_message",
+    );
+    expect(recordCall).toBeDefined();
+    expect(recordCall![1]).toMatchObject({
+      content: expect.stringContaining("backend exploded"),
+    });
+  });
+
   it("slash parse error calls chat_record_system_message with the formatted error string", async () => {
     // /plan --backend=bad-format triggers a parse error (bad backend value)
     // recordSystem mock: return a system ChatMessage so the hook appends it.
