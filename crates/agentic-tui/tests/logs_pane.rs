@@ -12,9 +12,12 @@
 //!   - Level Info: DIM; Warn: YELLOW; Error: RED; Tool: BLUE
 //!   - Message: FG
 //!   - Tool call: tool_name BLUE, result DIM
+//!
+//! GH #100: vertical scroll fields and key handling for the logs pane.
 
 use agentic_tui::app::{AppState, LogEntry, LogLevel, Pane};
 use agentic_tui::draw_app;
+use crossterm::event::KeyCode;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
@@ -534,4 +537,269 @@ fn logs_pane_renders_each_agent_in_its_own_color() {
         "reviewer: expected YELLOW at ({rev_col}, {rev_row}), got {:?}",
         rev_cell.style().fg
     );
+}
+
+// ── GH #100: Scroll field defaults ───────────────────────────────────────────
+
+/// `AppState::default()` must initialise `log_scroll = 0` and
+/// `log_sticky_tail = true` (auto-follow on by default).
+#[test]
+fn log_scroll_field_default_zero_and_sticky_tail_true() {
+    let s = AppState::default();
+    assert_eq!(s.log_scroll, 0, "log_scroll must default to 0");
+    assert!(s.log_sticky_tail, "log_sticky_tail must default to true");
+}
+
+// ── GH #100: j key increments scroll in Logs pane ────────────────────────────
+
+/// Pressing `j` while focus=Logs and Normal mode must increment `log_scroll`
+/// by 1 and set `log_sticky_tail = false` (user scrolled away from bottom).
+#[test]
+fn j_key_in_logs_pane_increments_scroll() {
+    let mut s = AppState {
+        focus: Pane::Logs,
+        log: (0..5).map(|i| make_log_entry(i)).collect(),
+        log_scroll: 0,
+        log_sticky_tail: true,
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char('j'));
+    assert_eq!(s.log_scroll, 1, "j must increment log_scroll by 1");
+    assert!(
+        !s.log_sticky_tail,
+        "j must set log_sticky_tail = false (not at bottom yet)"
+    );
+}
+
+// ── GH #100: k key decrements scroll, saturating ─────────────────────────────
+
+/// Pressing `k` when `log_scroll = 0` must leave it at 0 (saturating sub).
+#[test]
+fn k_key_in_logs_pane_decrements_scroll_saturating() {
+    let mut s = AppState {
+        focus: Pane::Logs,
+        log_scroll: 0,
+        log_sticky_tail: false,
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char('k'));
+    assert_eq!(
+        s.log_scroll, 0,
+        "k must not underflow below 0 (saturating sub)"
+    );
+}
+
+// ── GH #100: k decrements when > 0 ──────────────────────────────────────────
+
+/// Pressing `k` when `log_scroll > 0` must decrement it by 1 and set
+/// `log_sticky_tail = false`.
+#[test]
+fn k_key_in_logs_pane_decrements_scroll_when_nonzero() {
+    let mut s = AppState {
+        focus: Pane::Logs,
+        log_scroll: 3,
+        log_sticky_tail: false,
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char('k'));
+    assert_eq!(s.log_scroll, 2, "k must decrement log_scroll by 1");
+    assert!(
+        !s.log_sticky_tail,
+        "log_sticky_tail must stay false after k"
+    );
+}
+
+// ── GH #100: j/k do not affect log_scroll when focus = Chat ─────────────────
+
+/// When focus is Chat, `j` must not touch `log_scroll`.
+#[test]
+fn j_in_chat_pane_does_not_affect_log_scroll() {
+    let mut s = AppState {
+        focus: Pane::Chat,
+        log: (0..5).map(|i| make_log_entry(i)).collect(),
+        log_scroll: 0,
+        log_sticky_tail: true,
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char('j'));
+    assert_eq!(
+        s.log_scroll, 0,
+        "j in Chat pane must not change log_scroll"
+    );
+}
+
+// ── GH #100: render shows +N earlier indicator when log_scroll > 0 ───────────
+
+/// Build a TestBackend tall enough for 5 rows (4 log rows + 1 indicator).
+/// With 10 entries and log_scroll=3, the top row must contain "+3 earlier"
+/// and the visible rows must be entries 3..7 (not 0..4).
+#[test]
+fn render_with_scroll_offset_skips_top_rows_and_shows_indicator() {
+    // 10 log entries, each with a unique distinguishable message.
+    let log: Vec<LogEntry> = (0..10)
+        .map(|i| LogEntry {
+            timestamp: "00:00:00".to_string(),
+            agent: "architect".to_string(),
+            level: LogLevel::Info,
+            message: format!("entry-{i:02}"),
+        })
+        .collect();
+
+    // Terminal: 140 wide, 9 high (5 body rows + 4 chrome rows).
+    // draw_app uses rows: 1 title + 1 issue-header + 0 pipeline + 2 tab-bar = 4 chrome.
+    // So body height = 9 - 4 - 1(status) = 4 body rows.
+    // With log_scroll=3: row 0 = "+3 earlier", rows 1-3 = entries 3,4,5.
+    let state = AppState {
+        focus: Pane::Logs,
+        pipeline: vec![],
+        log,
+        log_scroll: 3,
+        log_sticky_tail: false,
+        ..Default::default()
+    };
+
+    let backend = TestBackend::new(140, 9);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buf = terminal.backend().buffer().clone();
+
+    // The indicator "+3 earlier" must appear somewhere in the buffer.
+    let found_indicator = find_in_buffer(&buf, "+3 earlier", 140, 9).is_some();
+    assert!(
+        found_indicator,
+        "buffer must contain '+3 earlier' when log_scroll=3"
+    );
+
+    // entry-00, entry-01, entry-02 must NOT be visible.
+    let found_entry_00 = find_in_buffer(&buf, "entry-00", 140, 9).is_some();
+    assert!(
+        !found_entry_00,
+        "entry-00 must not be visible when scrolled past it"
+    );
+
+    // entry-03 must be visible (first visible log row after indicator).
+    let found_entry_03 = find_in_buffer(&buf, "entry-03", 140, 9).is_some();
+    assert!(found_entry_03, "entry-03 must be visible at scroll offset 3");
+}
+
+// ── GH #100: render shows no indicator when log_scroll = 0 ──────────────────
+
+/// When `log_scroll = 0` the "+N earlier" indicator must NOT appear.
+#[test]
+fn render_with_no_scroll_does_not_show_indicator() {
+    let log: Vec<LogEntry> = (0..5)
+        .map(|i| LogEntry {
+            timestamp: "00:00:00".to_string(),
+            agent: "architect".to_string(),
+            level: LogLevel::Info,
+            message: format!("entry-{i}"),
+        })
+        .collect();
+
+    let state = AppState {
+        focus: Pane::Logs,
+        pipeline: vec![],
+        log,
+        log_scroll: 0,
+        log_sticky_tail: true,
+        ..Default::default()
+    };
+
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let content: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+
+    assert!(
+        !content.contains("earlier"),
+        "no 'earlier' indicator should appear when log_scroll = 0"
+    );
+}
+
+// ── GH #100: sticky tail keeps scroll at bottom after new entries ─────────────
+
+/// When `log_sticky_tail = true` and more entries exist than fit the visible
+/// area, the render must clamp `log_scroll` to keep the bottom row visible.
+/// We verify by asserting the last entry (entry-09) is visible after render
+/// with sticky tail on and many entries pushed.
+#[test]
+fn sticky_tail_clamps_scroll_to_keep_bottom_visible() {
+    // 20 entries, terminal body height = 4 (9-row terminal, 4 chrome + 1 status = 5 overhead).
+    let log: Vec<LogEntry> = (0..20)
+        .map(|i| LogEntry {
+            timestamp: "00:00:00".to_string(),
+            agent: "architect".to_string(),
+            level: LogLevel::Info,
+            message: format!("line-{i:02}"),
+        })
+        .collect();
+
+    let state = AppState {
+        focus: Pane::Logs,
+        pipeline: vec![],
+        log,
+        log_scroll: 0,      // starts at top
+        log_sticky_tail: true, // sticky tail on
+        ..Default::default()
+    };
+
+    let backend = TestBackend::new(140, 9);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buf = terminal.backend().buffer().clone();
+
+    // With sticky tail = true, the last entry ("line-19") must be visible.
+    let found_last = find_in_buffer(&buf, "line-19", 140, 9).is_some();
+    assert!(
+        found_last,
+        "sticky_tail=true must keep the last log entry visible after render"
+    );
+}
+
+// ── GH #100: Down arrow in Logs pane increments scroll ───────────────────────
+
+/// Down arrow in Logs pane behaves identically to `j`.
+#[test]
+fn down_arrow_in_logs_pane_increments_scroll() {
+    let mut s = AppState {
+        focus: Pane::Logs,
+        log: (0..5).map(|i| make_log_entry(i)).collect(),
+        log_scroll: 0,
+        log_sticky_tail: true,
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Down);
+    assert_eq!(s.log_scroll, 1, "Down arrow must increment log_scroll by 1");
+}
+
+// ── GH #100: Up arrow in Logs pane decrements scroll ─────────────────────────
+
+/// Up arrow in Logs pane behaves identically to `k`.
+#[test]
+fn up_arrow_in_logs_pane_decrements_scroll_saturating() {
+    let mut s = AppState {
+        focus: Pane::Logs,
+        log_scroll: 0,
+        log_sticky_tail: false,
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Up);
+    assert_eq!(s.log_scroll, 0, "Up arrow must not underflow log_scroll");
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+fn make_log_entry(i: usize) -> LogEntry {
+    LogEntry {
+        timestamp: "00:00:00".to_string(),
+        agent: "architect".to_string(),
+        level: LogLevel::Info,
+        message: format!("msg-{i}"),
+    }
 }
