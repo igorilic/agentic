@@ -793,6 +793,104 @@ fn up_arrow_in_logs_pane_decrements_scroll_saturating() {
     assert_eq!(s.log_scroll, 0, "Up arrow must not underflow log_scroll");
 }
 
+// ── GH #100 fix-loop 1: k in Chat pane does not affect log_scroll ─────────────
+
+/// Pressing `k` when focus=Chat must not touch `log_scroll` or `log_sticky_tail`.
+#[test]
+fn k_in_chat_pane_does_not_affect_log_scroll() {
+    let mut s = AppState {
+        focus: Pane::Chat,
+        log: (0..5).map(make_log_entry).collect(),
+        log_scroll: 2,
+        log_sticky_tail: false,
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char('k'));
+    assert_eq!(
+        s.log_scroll, 2,
+        "k in Chat pane must not change log_scroll"
+    );
+    assert!(
+        !s.log_sticky_tail,
+        "k in Chat pane must not change log_sticky_tail"
+    );
+}
+
+// ── GH #100 fix-loop 1: j is a no-op on empty log ────────────────────────────
+
+/// Pressing `j` when the log is empty must leave `log_scroll=0` and
+/// `log_sticky_tail=true` unchanged.
+#[test]
+fn j_is_noop_on_empty_log() {
+    let mut s = AppState {
+        focus: Pane::Logs,
+        log: vec![],
+        log_scroll: 0,
+        log_sticky_tail: true,
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char('j'));
+    assert_eq!(s.log_scroll, 0, "j on empty log must not change log_scroll");
+    assert!(
+        s.log_sticky_tail,
+        "j on empty log must not disable log_sticky_tail"
+    );
+}
+
+// ── GH #100 fix-loop 1: j clamps at log.len()-1 ──────────────────────────────
+
+/// Pressing `j` when already at the bottom (log_scroll == log.len()-1) must
+/// not increment further, and must re-enable sticky tail.
+#[test]
+fn j_clamps_at_log_len_minus_one() {
+    // 5 entries: valid scroll range is 0..=4.
+    let mut s = AppState {
+        focus: Pane::Logs,
+        log: (0..5).map(make_log_entry).collect(),
+        log_scroll: 4,
+        log_sticky_tail: false,
+        last_known_log_height: 1, // height=1 → max_scroll = 5-1 = 4, at bottom
+        ..Default::default()
+    };
+    s.handle_key(KeyCode::Char('j'));
+    assert_eq!(
+        s.log_scroll, 4,
+        "j at bottom must not increment log_scroll beyond log.len()-1"
+    );
+}
+
+// ── GH #100 fix-loop 1: scrolling to bottom re-enables sticky tail ────────────
+
+/// After scrolling up (sticky=false), pressing j enough times to reach the
+/// bottom must re-enable `log_sticky_tail = true`.
+///
+/// Setup: 5 entries, last_known_log_height = 2 (so max_scroll = 5 - (2-1) = 4).
+/// Start at log_scroll=1 (sticky=false), press j 3 times → log_scroll=4 == max_scroll.
+/// Expect: log_sticky_tail becomes true again.
+#[test]
+fn scrolling_to_bottom_re_enables_sticky_tail() {
+    let mut s = AppState {
+        focus: Pane::Logs,
+        log: (0..5).map(make_log_entry).collect(),
+        log_scroll: 1,
+        log_sticky_tail: false,
+        last_known_log_height: 2,
+        ..Default::default()
+    };
+    // Press j three times: 1→2→3→4 (== max_scroll = 5 - (2-1) = 4).
+    s.handle_key(KeyCode::Char('j'));
+    s.handle_key(KeyCode::Char('j'));
+    s.handle_key(KeyCode::Char('j'));
+    assert_eq!(
+        s.log_scroll, 4,
+        "log_scroll should be 4 after three j presses from 1"
+    );
+    assert!(
+        s.log_sticky_tail,
+        "reaching the bottom must re-enable log_sticky_tail"
+    );
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 fn make_log_entry(i: usize) -> LogEntry {
