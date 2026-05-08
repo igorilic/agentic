@@ -17,6 +17,7 @@ path = "src/lib.rs"
 agentic-core = { path = "../agentic-core" }
 crossterm = { workspace = true }
 ratatui = { workspace = true }
+unicode-width = "0.2"
 
 [dev-dependencies]
 ratatui = { workspace = true, features = ["all-widgets"] }

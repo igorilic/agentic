@@ -18,9 +18,51 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
+use unicode_width::UnicodeWidthChar;
 
 use crate::app::AppState;
 use crate::theme;
+
+/// Truncate `s` so that its display width (in terminal columns) is at most
+/// `max_width`, appending `…` when truncation occurs.
+///
+/// Uses `unicode_width` per-char iteration so that CJK wide characters (2
+/// columns each) and other non-ASCII chars are handled correctly.
+/// Multi-codepoint ZWJ sequences (complex emoji) are NOT specially handled;
+/// each codepoint is measured independently. This is acceptable for the
+/// issue-header use case (ticket titles are rarely ZWJ emoji strings).
+fn truncate_with_ellipsis(s: &str, max_width: usize) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+    let ellipsis = '…';
+    let ellipsis_width = ellipsis.width().unwrap_or(1);
+
+    // Measure full display width first.
+    let full_width: usize = s.chars().map(|c| c.width().unwrap_or(0)).sum();
+    if full_width <= max_width {
+        return s.to_owned();
+    }
+
+    // Need to truncate. Reserve columns for the ellipsis.
+    if max_width < ellipsis_width {
+        return String::new();
+    }
+    let budget = max_width - ellipsis_width;
+
+    let mut result = String::new();
+    let mut used = 0usize;
+    for ch in s.chars() {
+        let w = ch.width().unwrap_or(0);
+        if used + w > budget {
+            break;
+        }
+        result.push(ch);
+        used += w;
+    }
+    result.push(ellipsis);
+    result
+}
 
 /// Render the issue header into `area`. `area.height` should be 1.
 pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
@@ -48,6 +90,20 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
                 theme::BLUE
             };
 
+            // Width of fixed left content (without title): "▰ agentic │ " + label + " "
+            // "▰ agentic" = 9 chars, " │ " = 3, label, " " = 1 before title.
+            let prefix_width: usize =
+                "▰ agentic".chars().count() + " │ ".chars().count() + label.chars().count() + 1; // leading space before title
+
+            // Compute available columns for the title text.
+            let total_width = area.width as usize;
+            let available_for_title = total_width
+                .saturating_sub(prefix_width)
+                .saturating_sub(pill_width as usize);
+
+            // Truncate title to available_for_title columns (with ellipsis if needed).
+            let title_display = truncate_with_ellipsis(title, available_for_title);
+
             // Left group: "▰ agentic │ AGT-204 <title>"
             // We build a single Line so ratatui handles clipping/fill.
             let left_spans = vec![
@@ -59,14 +115,17 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
                 ),
                 Span::styled(" │ ", Style::default().fg(theme::DIM)),
                 Span::styled(label.clone(), Style::default().fg(theme::FG)),
-                Span::styled(format!(" {title}"), Style::default().fg(theme::DIM)),
+                Span::styled(format!(" {title_display}"), Style::default().fg(theme::DIM)),
             ];
 
-            // Measure left content width (in chars; all ASCII-safe spans).
-            let left_width: usize = left_spans.iter().map(|s| s.content.chars().count()).sum();
+            // Measure left content display width.
+            let left_width: usize = "▰ agentic".chars().count()
+                + " │ ".chars().count()
+                + label.chars().count()
+                + 1 // space before title
+                + title_display.chars().count();
 
             // Pad between left and right to right-align the pill within area.width.
-            let total_width = area.width as usize;
             let pad_width = total_width
                 .saturating_sub(left_width)
                 .saturating_sub(pill_width as usize);
