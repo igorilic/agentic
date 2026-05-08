@@ -18,7 +18,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
-use unicode_width::UnicodeWidthChar;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::app::AppState;
 use crate::theme;
@@ -119,11 +119,14 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
             ];
 
             // Measure left content display width.
+            // Use UnicodeWidthStr::width for title_display so that CJK wide
+            // chars (2 display columns each) are counted correctly instead of
+            // chars().count() which counts codepoints, not columns.
             let left_width: usize = "▰ agentic".chars().count()
                 + " │ ".chars().count()
                 + label.chars().count()
                 + 1 // space before title
-                + title_display.chars().count();
+                + UnicodeWidthStr::width(title_display.as_str());
 
             // Pad between left and right to right-align the pill within area.width.
             let pad_width = total_width
