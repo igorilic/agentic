@@ -287,6 +287,136 @@ fn issue_header_blank_has_header_bg() {
     );
 }
 
+// ── ellipsis truncation (spec §4.3) ──────────────────────────────────────
+
+/// When the combined content is wider than the terminal, the title must be
+/// truncated and `…` must appear in the buffer.  The tail of the title
+/// (text that couldn't fit) must NOT appear.
+#[test]
+fn truncates_long_title_with_ellipsis_when_combined_width_exceeds_area() {
+    // Identity prefix: "▰ agentic │ AGT-XXX " (19 chars) + pill "● running 02:34" (15 chars)
+    // = 34 chars of fixed content. Use width=40 so only 6 chars remain for the title,
+    // but the actual title is 67 chars → must truncate.
+    let width = 40u16;
+    let backend = TestBackend::new(width, 5);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        run_label: Some("AGT-XXX".into()),
+        run_title: Some(
+            "An extremely long ticket title that won't fit on a narrow terminal".into(),
+        ),
+        run_elapsed_secs: 0,
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // Issue header is on row 1.
+    let row = row_string(&buffer, 1, width);
+
+    assert!(
+        row.contains('…'),
+        "expected '…' in header row when title overflows, got:\n{row}"
+    );
+
+    // The tail of the title ("terminal") must not be present.
+    assert!(
+        !row.contains("terminal"),
+        "expected truncated tail 'terminal' to be absent, got:\n{row}"
+    );
+}
+
+/// Identity prefix and pill must survive when the title is truncated.
+#[test]
+fn preserves_identity_and_pill_when_title_truncated() {
+    let width = 40u16;
+    let backend = TestBackend::new(width, 5);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        run_label: Some("AGT-XXX".into()),
+        run_title: Some(
+            "An extremely long ticket title that won't fit on a narrow terminal".into(),
+        ),
+        run_elapsed_secs: 0,
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    let row = row_string(&buffer, 1, width);
+
+    assert!(
+        row.contains("▰ agentic │ AGT-XXX"),
+        "expected identity '▰ agentic │ AGT-XXX' still present when title truncated, got:\n{row}"
+    );
+    assert!(
+        row.contains("running 00:00"),
+        "expected pill 'running 00:00' still present when title truncated, got:\n{row}"
+    );
+}
+
+/// When everything fits in the available width, no `…` should appear.
+#[test]
+fn does_not_truncate_when_everything_fits() {
+    let width = 120u16;
+    let backend = TestBackend::new(width, 5);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        run_label: Some("AGT-XXX".into()),
+        run_title: Some("Short title".into()),
+        run_elapsed_secs: 0,
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    let row = row_string(&buffer, 1, width);
+
+    assert!(
+        !row.contains('…'),
+        "expected no '…' when content fits in {width} cols, got:\n{row}"
+    );
+}
+
+/// Truncation must occur on a grapheme/char boundary — a CJK or emoji title
+/// must not leave a half-rendered character in the buffer.
+/// Wide CJK chars are 2 columns each; the truncation point must fall on a
+/// column boundary, not mid-character.
+#[test]
+fn handles_unicode_grapheme_widths_correctly() {
+    // Each '中' is 2 display columns.  Use a narrow terminal so truncation
+    // falls somewhere in the middle of the CJK string.
+    let width = 45u16;
+    let backend = TestBackend::new(width, 5);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        run_label: Some("AGT-XXX".into()),
+        run_title: Some("中文标题很长很长很长很长很长很长很长".into()),
+        run_elapsed_secs: 0,
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    let row = row_string(&buffer, 1, width);
+
+    // The buffer must contain `…` (truncation happened).
+    assert!(
+        row.contains('…'),
+        "expected '…' for CJK overflow at width {width}, got:\n{row}"
+    );
+
+    // Identity prefix must still be intact.
+    assert!(
+        row.contains("▰ agentic │ AGT-XXX"),
+        "expected identity still present with CJK title, got:\n{row}"
+    );
+}
+
 // ── F-3: run-state dot pulses via frame_parity ────────────────────────────
 
 /// When frame_parity is false the dot `●` must be rendered in BLUE
