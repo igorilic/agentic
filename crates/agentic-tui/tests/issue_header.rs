@@ -485,3 +485,148 @@ fn pill_dot_is_dim_when_parity_true() {
         cell.style().fg
     );
 }
+
+// ── F2: exact-fit boundary tests ─────────────────────────────────────────
+
+/// Layout constants (label = "AGT-XXX", elapsed = 0):
+///   prefix_width = "▰ agentic"(9) + " │ "(3) + "AGT-XXX"(7) + " "(1) = 20
+///   pill_width   = "● running 00:00"(15)
+///   available_for_title(W) = W - 20 - 15 = W - 35
+///
+/// With area.width = 45: available_for_title = 10.
+/// A title of exactly 10 ASCII chars must NOT be truncated (no `…`).
+#[test]
+fn does_not_truncate_at_exact_fit_boundary() {
+    // available_for_title = 45 - 35 = 10; title is exactly 10 chars wide.
+    let width = 45u16;
+    let title = "0123456789"; // 10 ASCII chars, 10 display columns
+    assert_eq!(title.chars().count(), 10, "fixture sanity check");
+
+    let backend = TestBackend::new(width, 5);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        run_label: Some("AGT-XXX".into()),
+        run_title: Some(title.into()),
+        run_elapsed_secs: 0,
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+    let row = row_string(&buffer, 1, width);
+
+    assert!(
+        !row.contains('…'),
+        "expected no '…' when title display-width == available_for_title, got:\n{row}"
+    );
+    assert!(
+        row.contains(title),
+        "expected full title '{}' in buffer, got:\n{row}",
+        title
+    );
+}
+
+/// A title with display-width = available_for_title + 1 (one column over budget)
+/// must be truncated and `…` must appear. The last char of the title must be absent.
+///
+/// With area.width = 45: available_for_title = 10.
+/// A title of 11 ASCII chars is one over — it must be truncated.
+#[test]
+fn truncates_at_one_over_exact_fit_boundary() {
+    // available_for_title = 45 - 35 = 10; title is 11 chars (one over budget).
+    let width = 45u16;
+    let title = "01234567890"; // 11 ASCII chars, 11 display columns
+    assert_eq!(title.chars().count(), 11, "fixture sanity check");
+
+    let backend = TestBackend::new(width, 5);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        run_label: Some("AGT-XXX".into()),
+        run_title: Some(title.into()),
+        run_elapsed_secs: 0,
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+    let row = row_string(&buffer, 1, width);
+
+    assert!(
+        row.contains('…'),
+        "expected '…' when title display-width == available_for_title + 1, got:\n{row}"
+    );
+    // The last char '0' (at index 10) must be absent — the title was cut.
+    // We check that the full 11-char title does not appear.
+    assert!(
+        !row.contains(title),
+        "expected full 11-char title to be absent (truncated), got:\n{row}"
+    );
+}
+
+// ── F1: CJK pill-drift regression ────────────────────────────────────────
+
+/// When the title contains CJK wide chars (2 display columns each) and is
+/// truncated, the pill `●` must still land at column `area.width - pill_width`.
+///
+/// The bug: `left_width` used `title_display.chars().count()` instead of
+/// the display-width sum. For a CJK title, chars().count() underestimates
+/// the actual rendered width, so pad_width is inflated and the pill drifts left.
+///
+/// Layout with label "AGT-XXX" (7), elapsed 0, width 50:
+///   prefix_width = 20, pill_width = 15
+///   available_for_title = 50 - 20 - 15 = 15 columns
+///   CJK title "中文标题很长" = 6 chars × 2 cols = 12 cols → fits, no truncation needed.
+///   Use a longer title that forces truncation so we have a mixed-width title_display.
+///
+/// We use width 45 and title "中文标题很长很长很长" (9 CJK chars = 18 display cols).
+///   available = 45 - 35 = 10 cols
+///   truncated: budget = 10 - 1(ellipsis) = 9 cols → 4 CJK chars (8 cols) + "…" (1) = 9 cols → fits
+///   title_display display-width = 4×2 + 1 = 9
+///   left_width (correct) = 20 + 9 = 29
+///   pad_width (correct) = 45 - 29 - 15 = 1
+///   pill_dot col (correct) = 45 - 15 = 30
+///
+///   With the bug, chars().count() on "中中中中…" = 5, so left_width = 25,
+///   pad_width = 45 - 25 - 15 = 5, dot col = 45 - 15 - 4 padding excess = 26. Wrong.
+#[test]
+fn pill_column_correct_after_cjk_title_truncation() {
+    let width = 45u16;
+    // 9 CJK wide chars; each is 2 display columns = 18 total, exceeds available_for_title=10.
+    // 10 CJK wide chars; each is 2 display columns = 20 total, exceeds available_for_title=10.
+    let cjk_title = "中文标题很长很长很长";
+    assert_eq!(cjk_title.chars().count(), 10, "fixture: 10 CJK chars");
+
+    let backend = TestBackend::new(width, 5);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = AppState {
+        run_label: Some("AGT-XXX".into()),
+        run_title: Some(cjk_title.into()),
+        run_elapsed_secs: 0,
+        frame_parity: false, // dot in BLUE so we can check color too
+        ..Default::default()
+    };
+
+    terminal.draw(|f| draw_app(f, &state)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    // The row must contain '…' (truncation happened).
+    let row = row_string(&buffer, 1, width);
+    assert!(
+        row.contains('…'),
+        "expected '…' for CJK overflow at width {width}, got:\n{row}"
+    );
+
+    // Pill dot '●' must be at the expected column: width - pill_char_count.
+    // pill_text = "● running 00:00" = 15 chars; dot at col 45 - 15 = 30.
+    let pill_char_count = "● running 00:00".chars().count() as u16; // 15
+    let expected_dot_col = width - pill_char_count; // 30
+
+    let dot_cell = buffer.cell((expected_dot_col, 1)).unwrap();
+    assert_eq!(
+        dot_cell.symbol(),
+        "●",
+        "pill '●' must be at col {expected_dot_col} (width {width} - pill {pill_char_count}), \
+         got {:?} — pill drifted left due to CJK chars() count underestimating display width",
+        dot_cell.symbol()
+    );
+}
