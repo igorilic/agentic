@@ -558,7 +558,7 @@ fn log_scroll_field_default_zero_and_sticky_tail_true() {
 fn j_key_in_logs_pane_increments_scroll() {
     let mut s = AppState {
         focus: Pane::Logs,
-        log: (0..5).map(|i| make_log_entry(i)).collect(),
+        log: (0..5).map(make_log_entry).collect(),
         log_scroll: 0,
         log_sticky_tail: true,
         ..Default::default()
@@ -616,16 +616,13 @@ fn k_key_in_logs_pane_decrements_scroll_when_nonzero() {
 fn j_in_chat_pane_does_not_affect_log_scroll() {
     let mut s = AppState {
         focus: Pane::Chat,
-        log: (0..5).map(|i| make_log_entry(i)).collect(),
+        log: (0..5).map(make_log_entry).collect(),
         log_scroll: 0,
         log_sticky_tail: true,
         ..Default::default()
     };
     s.handle_key(KeyCode::Char('j'));
-    assert_eq!(
-        s.log_scroll, 0,
-        "j in Chat pane must not change log_scroll"
-    );
+    assert_eq!(s.log_scroll, 0, "j in Chat pane must not change log_scroll");
 }
 
 // ── GH #100: render shows +N earlier indicator when log_scroll > 0 ───────────
@@ -679,7 +676,10 @@ fn render_with_scroll_offset_skips_top_rows_and_shows_indicator() {
 
     // entry-03 must be visible (first visible log row after indicator).
     let found_entry_03 = find_in_buffer(&buf, "entry-03", 140, 9).is_some();
-    assert!(found_entry_03, "entry-03 must be visible at scroll offset 3");
+    assert!(
+        found_entry_03,
+        "entry-03 must be visible at scroll offset 3"
+    );
 }
 
 // ── GH #100: render shows no indicator when log_scroll = 0 ──────────────────
@@ -744,7 +744,7 @@ fn sticky_tail_clamps_scroll_to_keep_bottom_visible() {
         focus: Pane::Logs,
         pipeline: vec![],
         log,
-        log_scroll: 0,      // starts at top
+        log_scroll: 0,         // starts at top
         log_sticky_tail: true, // sticky tail on
         ..Default::default()
     };
@@ -769,7 +769,7 @@ fn sticky_tail_clamps_scroll_to_keep_bottom_visible() {
 fn down_arrow_in_logs_pane_increments_scroll() {
     let mut s = AppState {
         focus: Pane::Logs,
-        log: (0..5).map(|i| make_log_entry(i)).collect(),
+        log: (0..5).map(make_log_entry).collect(),
         log_scroll: 0,
         log_sticky_tail: true,
         ..Default::default()

@@ -185,6 +185,14 @@ pub struct AppState {
     /// Log entries rendered in the logs pane (spec §4.6).
     /// Populated by the runner wiring in T.13.x; empty by default.
     pub log: Vec<LogEntry>,
+    /// Vertical scroll offset for the logs pane: number of rows scrolled
+    /// past the top. 0 = top of log visible. Reset when sticky tail
+    /// clamps at render time. (GH #100)
+    pub log_scroll: usize,
+    /// When true the logs pane auto-follows new entries (sticky tail).
+    /// Set to false when the user scrolls up; restored when they scroll
+    /// back to the bottom. Defaults to true. (GH #100)
+    pub log_sticky_tail: bool,
     /// Chat messages rendered in the chat pane (spec §4.6).
     /// Populated by the runner wiring in T.13.x; empty by default.
     pub chat: Vec<ChatMessage>,
@@ -223,6 +231,8 @@ impl Default for AppState {
             frame_parity: false,
             pipeline: vec![],
             log: vec![],
+            log_scroll: 0,
+            log_sticky_tail: true,
             chat: vec![],
             pending_perms: vec![],
             flash: None,
@@ -337,6 +347,16 @@ impl AppState {
                         };
                     }
                     KeyCode::Tab => self.handle(AppEvent::ToggleFocus),
+                    // Scroll logs down when Logs pane is focused. (GH #100)
+                    KeyCode::Char('j') | KeyCode::Down if self.focus == Pane::Logs => {
+                        self.log_scroll = self.log_scroll.saturating_add(1);
+                        self.log_sticky_tail = false;
+                    }
+                    // Scroll logs up when Logs pane is focused. (GH #100)
+                    KeyCode::Char('k') | KeyCode::Up if self.focus == Pane::Logs => {
+                        self.log_scroll = self.log_scroll.saturating_sub(1);
+                        self.log_sticky_tail = false;
+                    }
                     // Scroll diff down when Chat+diff is active; no-op otherwise
                     // (findings navigation removed, refs #99).
                     KeyCode::Char('j')

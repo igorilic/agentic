@@ -44,6 +44,45 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
         return;
     }
 
+    // ── Sticky-tail clamping (GH #100) ───────────────────────────────────────
+    // When log_scroll > 0, one body row is consumed by the "+N earlier"
+    // indicator, leaving (visible_height - 1) rows for log entries.
+    //
+    // sticky tail: pin so the last entry is always in the last body row.
+    //   - If log fits without scroll: effective_scroll = 0, no indicator,
+    //     all visible_height rows available.
+    //   - If log overflows AND effective_scroll would be 0: same — no indicator.
+    //   - If log overflows AND effective_scroll > 0: indicator takes 1 row, so
+    //     capacity = visible_height - 1. We need len - effective_scroll <=
+    //     visible_height - 1, i.e. effective_scroll >= len - (visible_height - 1).
+    //
+    // Two-phase resolution:
+    //   1. Compute tentative effective_scroll assuming no indicator.
+    //   2. If it's > 0, the indicator appears → capacity shrinks by 1 →
+    //      recompute with capacity = visible_height - 1.
+    let visible_height = area.height as usize;
+
+    let effective_scroll = if state.log_sticky_tail {
+        let len = state.log.len();
+        if len <= visible_height {
+            // Fits without scrolling.
+            0
+        } else {
+            // Indicator will appear (scroll > 0), so capacity = visible_height - 1.
+            len.saturating_sub(visible_height.saturating_sub(1))
+        }
+    } else {
+        state.log_scroll
+    };
+
+    // When the indicator row is needed, we lose one visible slot for log rows.
+    let has_indicator = effective_scroll > 0;
+    let log_rows_capacity = if has_indicator {
+        visible_height.saturating_sub(1)
+    } else {
+        visible_height
+    };
+
     // Use a block scope so the mutable borrow of `f` via `buf` ends before
     // we call `perm_card::render(... f)` below.
     let log_rows: u16 = {
@@ -59,16 +98,39 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
             }
         }
 
-        // Render each log entry as a row; track how many rows were used.
         let mut rows_used: u16 = 0;
-        for (i, entry) in state.log.iter().enumerate() {
-            let row = area.y + i as u16;
+
+        // Render the "+N earlier" indicator on the first row if scrolled. (GH #100)
+        if has_indicator {
+            let indicator = format!("+{} earlier", effective_scroll);
+            write_text(
+                buf,
+                area.x,
+                area.y,
+                &indicator,
+                area.width,
+                theme::DIM,
+                area.x + area.width,
+            );
+            rows_used += 1;
+        }
+
+        // Render the visible window of log entries.
+        let visible_entries = state
+            .log
+            .iter()
+            .skip(effective_scroll)
+            .take(log_rows_capacity);
+
+        for entry in visible_entries {
+            let row = area.y + rows_used;
             if row >= area.y + area.height {
                 break;
             }
             render_entry(buf, area, row, entry);
-            rows_used = i as u16 + 1;
+            rows_used += 1;
         }
+
         rows_used
     };
 
