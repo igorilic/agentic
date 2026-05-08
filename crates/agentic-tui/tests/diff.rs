@@ -267,46 +267,15 @@ fn k_in_chat_focus_with_diff_set_scrolls_diff_up_saturating() {
 }
 
 #[test]
-fn j_in_cockpit_focus_still_navigates_findings_not_diff() {
-    use agentic_core::events::{Event, EventEnvelope, Severity};
+fn j_in_cockpit_focus_does_not_scroll_diff() {
+    // After FindingsState removal: 'j' in Logs focus with a diff loaded
+    // must not mutate diff_scroll_offset (diff is not visible in Logs pane).
     let mut s = AppState {
         focus: Pane::Logs,
         current_diff: Some(SAMPLE.to_string()),
         ..Default::default()
     };
-    // Seed a finding so cursor_down has somewhere to go.
-    s.apply_envelope(&EventEnvelope {
-        schema_version: 1,
-        event_id: "e1".into(),
-        run_id: "run1".into(),
-        step_id: Some("run1-step-3-reviewer".into()),
-        timestamp_ms: 0,
-        event: Event::Finding {
-            finding_id: "f1".into(),
-            severity: Severity::Warning,
-            file: None,
-            line: None,
-            message: "x".into(),
-            suggestion: None,
-        },
-    });
-    s.apply_envelope(&EventEnvelope {
-        schema_version: 1,
-        event_id: "e2".into(),
-        run_id: "run1".into(),
-        step_id: Some("run1-step-3-reviewer".into()),
-        timestamp_ms: 0,
-        event: Event::Finding {
-            finding_id: "f2".into(),
-            severity: Severity::Warning,
-            file: None,
-            line: None,
-            message: "y".into(),
-            suggestion: None,
-        },
-    });
     s.handle_key(KeyCode::Char('j'));
-    assert_eq!(s.findings.cursor, 1);
     assert_eq!(
         s.diff_scroll_offset, 0,
         "j in cockpit focus must not scroll diff"
@@ -322,5 +291,4 @@ fn j_in_chat_focus_without_a_diff_is_a_noop() {
     };
     s.handle_key(KeyCode::Char('j'));
     assert_eq!(s.diff_scroll_offset, 0);
-    assert_eq!(s.findings.cursor, 0);
 }

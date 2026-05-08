@@ -11,7 +11,6 @@ use std::time::{Duration, Instant};
 use agentic_core::events::{Event, EventEnvelope};
 use crossterm::event::KeyCode;
 
-use crate::findings::{FindingsState, Triage};
 use crate::modes::{AppCommand, Mode, ParseResult, parse_command};
 use crate::run::RunState;
 
@@ -145,9 +144,6 @@ pub struct AppState {
     pub run: RunState,
     /// Normal vs. Command — see `modes.rs`.
     pub mode: Mode,
-    /// Reviewer findings — renders below the stepper, navigated with
-    /// `j`/`k`, triaged with `f`/`t`/`i`.
-    pub findings: FindingsState,
     /// One-line user-facing status — set when a command parse fails so
     /// the user sees feedback. Cleared when a command succeeds. The
     /// chat pane renders this in place of the hint line.
@@ -215,7 +211,6 @@ impl Default for AppState {
             focus: Pane::Logs,
             run: RunState::default(),
             mode: Mode::Normal,
-            findings: FindingsState::default(),
             last_status: None,
             current_diff: None,
             diff_scroll_offset: 0,
@@ -259,7 +254,6 @@ impl AppState {
     /// `EventBus::subscribe`.
     pub fn apply_envelope(&mut self, envelope: &EventEnvelope) {
         self.run.apply_envelope(envelope);
-        self.findings.ingest(envelope);
 
         match &envelope.event {
             Event::Finding { message, .. } => {
@@ -343,33 +337,26 @@ impl AppState {
                         };
                     }
                     KeyCode::Tab => self.handle(AppEvent::ToggleFocus),
-                    KeyCode::Char('j') => {
-                        if self.focus == Pane::Chat && self.current_diff.is_some() {
-                            self.diff_scroll_offset = self.diff_scroll_offset.saturating_add(1);
-                        } else {
-                            self.findings.cursor_down();
-                        }
+                    // Scroll diff down when Chat+diff is active; no-op otherwise
+                    // (findings navigation removed, refs #99).
+                    KeyCode::Char('j')
+                        if self.focus == Pane::Chat && self.current_diff.is_some() =>
+                    {
+                        self.diff_scroll_offset = self.diff_scroll_offset.saturating_add(1);
                     }
-                    KeyCode::Char('k') => {
-                        if self.focus == Pane::Chat && self.current_diff.is_some() {
-                            self.diff_scroll_offset = self.diff_scroll_offset.saturating_sub(1);
-                        } else {
-                            self.findings.cursor_up();
-                        }
+                    // Scroll diff up when Chat+diff is active; no-op otherwise.
+                    KeyCode::Char('k')
+                        if self.focus == Pane::Chat && self.current_diff.is_some() =>
+                    {
+                        self.diff_scroll_offset = self.diff_scroll_offset.saturating_sub(1);
                     }
-                    KeyCode::Char('f') => self.findings.triage_selected(Triage::Fix),
-                    KeyCode::Char('t') => self.findings.triage_selected(Triage::TechDebt),
-                    KeyCode::Char('i') => match self.focus {
-                        Pane::Logs | Pane::Chat => {
-                            self.mode = Mode::Insert;
-                        }
-                        Pane::Issue => {
-                            if !self.findings.items.is_empty() {
-                                self.findings.triage_selected(Triage::Ignore);
-                            }
-                            // else: no-op — mode stays Normal
-                        }
-                    },
+                    // Enter Insert mode from Logs/Chat; Issue pane no-op
+                    // (triage UI removed, refs #99).
+                    KeyCode::Char('i')
+                        if (self.focus == Pane::Logs || self.focus == Pane::Chat) =>
+                    {
+                        self.mode = Mode::Insert;
+                    }
                     KeyCode::Char('1') => self.focus = Pane::Logs,
                     KeyCode::Char('2') => self.focus = Pane::Chat,
                     KeyCode::Char('3') => self.focus = Pane::Issue,

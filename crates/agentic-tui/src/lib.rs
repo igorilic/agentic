@@ -9,7 +9,6 @@
 #![deny(unsafe_code)]
 
 pub mod app;
-pub mod findings;
 pub mod modes;
 pub mod run;
 pub mod theme;

@@ -1,48 +1,26 @@
-//! Step T.13.6: Pane-scoped `i` key — insert in Logs/Chat, triage in Issue.
+//! Step T.13.6: Pane-scoped `i` key — insert in Logs/Chat, no-op in Issue.
 //!
-//! Contract:
+//! After FindingsState removal (#99 fix-loop 1): The Issue pane 'i' key
+//! no longer triages findings (that dead plumbing has been removed).
+//! This file tests the surviving contracts:
 //! - `pane == Logs` or `pane == Chat`, mode == Normal: `i` → `Mode::Insert`.
-//! - `pane == Issue` with a finding present at cursor: `i` → `Triage::Ignore`.
-//! - `pane == Issue` with no findings (cursor hits nothing): `i` → no-op.
+//! - `pane == Issue` with mode == Normal: `i` → no-op (mode stays Normal).
 //! - `Mode::Insert` + `Esc` → `Mode::Normal`.
-//! - `f` and `t` triage unconditionally (NOT scoped — regression guard).
+//! - `f` and `t` keys in Normal mode are no-ops when FindingsState is gone.
 
-use agentic_core::events::Severity;
 use agentic_tui::app::{AppState, Pane};
-use agentic_tui::findings::{Finding, FindingsState, Triage};
 use agentic_tui::modes::Mode;
 use crossterm::event::KeyCode;
 
-// ── Helper ────────────────────────────────────────────────────────────────────
-
-/// Build a minimal `FindingsState` seeded with one finding at cursor 0.
-fn state_with_finding() -> FindingsState {
-    let finding = Finding {
-        id: "f-001".into(),
-        severity: Severity::Error,
-        file: None,
-        line: None,
-        message: "test finding".into(),
-        triage: None,
-    };
-    FindingsState {
-        items: vec![finding],
-        cursor: 0,
-    }
-}
-
-// ── Test 1: `i` in Logs pane → Mode::Insert, findings unchanged ──────────────
+// ── Test 1: `i` in Logs pane → Mode::Insert ──────────────────────────────────
 
 #[test]
 fn i_in_logs_pane_enters_insert_mode() {
     let mut state = AppState {
         focus: Pane::Logs,
         mode: Mode::Normal,
-        findings: state_with_finding(),
         ..Default::default()
     };
-    let findings_count_before = state.findings.items.len();
-    let triage_before = state.findings.items[0].triage;
 
     state.handle_key(KeyCode::Char('i'));
 
@@ -51,16 +29,6 @@ fn i_in_logs_pane_enters_insert_mode() {
         Mode::Insert,
         "expected Mode::Insert after pressing 'i' in Logs pane, got {:?}",
         state.mode
-    );
-    assert_eq!(
-        state.findings.items.len(),
-        findings_count_before,
-        "findings count must not change when 'i' entered insert mode"
-    );
-    assert_eq!(
-        state.findings.items[0].triage, triage_before,
-        "findings triage must not change when 'i' entered insert mode in Logs, got {:?}",
-        state.findings.items[0].triage
     );
 }
 
@@ -71,10 +39,8 @@ fn i_in_chat_pane_enters_insert_mode() {
     let mut state = AppState {
         focus: Pane::Chat,
         mode: Mode::Normal,
-        findings: state_with_finding(),
         ..Default::default()
     };
-    let triage_before = state.findings.items[0].triage;
 
     state.handle_key(KeyCode::Char('i'));
 
@@ -84,52 +50,15 @@ fn i_in_chat_pane_enters_insert_mode() {
         "expected Mode::Insert after pressing 'i' in Chat pane, got {:?}",
         state.mode
     );
-    assert_eq!(
-        state.findings.items[0].triage, triage_before,
-        "findings triage must not change when 'i' entered insert mode in Chat, got {:?}",
-        state.findings.items[0].triage
-    );
 }
 
-// ── Test 3: `i` in Issue pane with finding → Triage::Ignore, mode stays Normal
+// ── Test 3: `i` in Issue pane → no-op (mode stays Normal) ────────────────────
 
 #[test]
-fn i_in_issue_pane_with_selection_triages_ignore() {
+fn i_in_issue_pane_is_noop() {
     let mut state = AppState {
         focus: Pane::Issue,
         mode: Mode::Normal,
-        findings: state_with_finding(),
-        ..Default::default()
-    };
-    assert!(
-        !state.findings.items.is_empty(),
-        "precondition: findings must be non-empty"
-    );
-
-    state.handle_key(KeyCode::Char('i'));
-
-    assert_eq!(
-        state.findings.items[0].triage,
-        Some(Triage::Ignore),
-        "expected finding triage to be Ignore after 'i' in Issue pane with selection, got {:?}",
-        state.findings.items[0].triage
-    );
-    assert_eq!(
-        state.mode,
-        Mode::Normal,
-        "expected mode to stay Normal after triage in Issue pane, got {:?}",
-        state.mode
-    );
-}
-
-// ── Test 4: `i` in Issue pane with no findings → no-op ───────────────────────
-
-#[test]
-fn i_in_issue_pane_without_selection_is_noop() {
-    let mut state = AppState {
-        focus: Pane::Issue,
-        mode: Mode::Normal,
-        findings: FindingsState::default(), // empty — cursor=0 hits nothing
         ..Default::default()
     };
 
@@ -138,17 +67,12 @@ fn i_in_issue_pane_without_selection_is_noop() {
     assert_eq!(
         state.mode,
         Mode::Normal,
-        "expected mode to stay Normal after 'i' in Issue pane with no findings, got {:?}",
+        "expected mode to stay Normal after 'i' in Issue pane (no findings to triage), got {:?}",
         state.mode
-    );
-    assert!(
-        state.findings.items.is_empty(),
-        "expected findings to remain empty, got {:?} items",
-        state.findings.items.len()
     );
 }
 
-// ── Test 5: Esc in Insert mode → Mode::Normal ────────────────────────────────
+// ── Test 4: Esc in Insert mode → Mode::Normal ────────────────────────────────
 
 #[test]
 fn esc_in_insert_mode_returns_to_normal() {
@@ -167,7 +91,7 @@ fn esc_in_insert_mode_returns_to_normal() {
     );
 }
 
-// ── Test 6: Esc-closes-help still fires first (T.13.5 guard) ─────────────────
+// ── Test 5: Esc-closes-help still fires first ────────────────────────────────
 
 #[test]
 fn esc_closes_help_before_insert_mode_exit() {
@@ -192,13 +116,12 @@ fn esc_closes_help_before_insert_mode_exit() {
     );
 }
 
-// ── Test 8: `i` while already in Insert mode is a no-op ─────────────────────
+// ── Test 6: `i` while already in Insert mode is a no-op ─────────────────────
 
 #[test]
 fn i_in_insert_mode_is_noop() {
     // Pressing 'i' a second time while already composing must not reset the
-    // mode or do anything observable — the outer `match self.mode` returns
-    // early in the Insert arm (only Esc is handled there).
+    // mode — only Esc is handled in the Insert arm.
     let mut state = AppState {
         focus: Pane::Logs,
         mode: Mode::Insert,
@@ -211,8 +134,7 @@ fn i_in_insert_mode_is_noop() {
         "i in Insert mode should not re-trigger; mode stays Insert"
     );
 
-    // 'f' and 't' in Insert mode are also no-ops — triage dispatch is gated
-    // behind the Normal-mode arm.
+    // 'f' and 't' in Insert mode are also no-ops.
     state.handle_key(KeyCode::Char('f'));
     assert_eq!(
         state.mode,
@@ -226,44 +148,5 @@ fn i_in_insert_mode_is_noop() {
         Mode::Insert,
         "t in Insert mode must not exit Insert; got {:?}",
         state.mode
-    );
-    assert!(
-        state.findings.items.is_empty(),
-        "no findings should appear from key presses in Insert mode"
-    );
-}
-
-// ── Test 7 (original): Regression — `f` and `t` triage unconditionally in non-Issue pane
-
-#[test]
-fn f_and_t_keys_still_triage_unconditionally_in_logs() {
-    // 'f' in Logs pane — should still triage Fix (NOT scoped like 'i').
-    let mut state = AppState {
-        focus: Pane::Logs,
-        mode: Mode::Normal,
-        findings: state_with_finding(),
-        ..Default::default()
-    };
-    state.handle_key(KeyCode::Char('f'));
-    assert_eq!(
-        state.findings.items[0].triage,
-        Some(Triage::Fix),
-        "expected Triage::Fix after 'f' in Logs pane (unconditional), got {:?}",
-        state.findings.items[0].triage
-    );
-
-    // 't' in Logs pane — should still triage TechDebt.
-    let mut state2 = AppState {
-        focus: Pane::Logs,
-        mode: Mode::Normal,
-        findings: state_with_finding(),
-        ..Default::default()
-    };
-    state2.handle_key(KeyCode::Char('t'));
-    assert_eq!(
-        state2.findings.items[0].triage,
-        Some(Triage::TechDebt),
-        "expected Triage::TechDebt after 't' in Logs pane (unconditional), got {:?}",
-        state2.findings.items[0].triage
     );
 }
