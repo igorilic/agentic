@@ -50,7 +50,10 @@ fn finding_envelope_pushes_warn_entry_to_state_log() {
         LogLevel::Warn,
         "Finding must produce a LogLevel::Warn entry"
     );
-    assert_eq!(entry.agent, "reviewer", "agent must be derived from step_id");
+    assert_eq!(
+        entry.agent, "reviewer",
+        "agent must be derived from step_id"
+    );
     assert_eq!(
         entry.message, "missing test",
         "message must match the Finding message"
@@ -69,7 +72,11 @@ fn two_finding_envelopes_push_two_warn_entries() {
     s.apply_envelope(&finding_envelope("f1", "reviewer", "first finding", 0));
     s.apply_envelope(&finding_envelope("f2", "qa", "second finding", 0));
 
-    assert_eq!(s.log.len(), 2, "each Finding envelope must produce one log row");
+    assert_eq!(
+        s.log.len(),
+        2,
+        "each Finding envelope must produce one log row"
+    );
     assert_eq!(s.log[0].message, "first finding");
     assert_eq!(s.log[1].message, "second finding");
     assert!(matches!(s.log[0].level, LogLevel::Warn));
@@ -99,7 +106,10 @@ fn agent_falls_back_to_empty_string_when_step_id_is_none() {
     s.apply_envelope(&env);
 
     assert_eq!(s.log.len(), 1);
-    assert_eq!(s.log[0].agent, "", "absent step_id must yield empty agent string");
+    assert_eq!(
+        s.log[0].agent, "",
+        "absent step_id must yield empty agent string"
+    );
 }
 
 // ── timestamp edge case: zero ms ──────────────────────────────────────────────
@@ -112,5 +122,64 @@ fn zero_timestamp_ms_formats_as_midnight() {
     assert_eq!(
         s.log[0].timestamp, "00:00:00",
         "0 ms must format as 00:00:00"
+    );
+}
+
+// ── agent_from_step_id boundary cases ────────────────────────────────────────
+
+/// `step_id` with no `-step-` separator → `agent` field must be empty string.
+#[test]
+fn agent_from_step_id_no_separator_yields_empty_string() {
+    let mut s = AppState::default();
+    let env = EventEnvelope {
+        schema_version: 1,
+        event_id: "evt-b1".to_string(),
+        run_id: "run1".to_string(),
+        step_id: Some("run1".to_string()), // no "-step-" separator
+        timestamp_ms: 0,
+        event: Event::Finding {
+            finding_id: "fb1".to_string(),
+            severity: Severity::Warning,
+            file: None,
+            line: None,
+            message: "no separator".to_string(),
+            suggestion: None,
+        },
+    };
+    s.apply_envelope(&env);
+
+    assert_eq!(s.log.len(), 1);
+    assert_eq!(
+        s.log[0].agent, "",
+        "step_id with no '-step-' separator must yield empty agent string"
+    );
+}
+
+/// `step_id = Some("-step-")` (empty agent portion after separator) →
+/// `agent` field must be empty string.
+#[test]
+fn agent_from_step_id_empty_after_separator_yields_empty_string() {
+    let mut s = AppState::default();
+    let env = EventEnvelope {
+        schema_version: 1,
+        event_id: "evt-b2".to_string(),
+        run_id: "run1".to_string(),
+        step_id: Some("-step-".to_string()), // separator present, agent part is ""
+        timestamp_ms: 0,
+        event: Event::Finding {
+            finding_id: "fb2".to_string(),
+            severity: Severity::Warning,
+            file: None,
+            line: None,
+            message: "empty after separator".to_string(),
+            suggestion: None,
+        },
+    };
+    s.apply_envelope(&env);
+
+    assert_eq!(s.log.len(), 1);
+    assert_eq!(
+        s.log[0].agent, "",
+        "step_id='-step-' must yield empty agent string (empty portion after separator)"
     );
 }
