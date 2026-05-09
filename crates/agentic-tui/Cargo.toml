@@ -19,7 +19,7 @@ crossterm = { workspace = true }
 ratatui = { workspace = true }
 rusqlite = { workspace = true }
 tracing = { workspace = true }
-unicode-width = "0.2"
+unicode-width = { workspace = true }
 
 [dev-dependencies]
 ratatui = { workspace = true, features = ["all-widgets"] }
