@@ -11,11 +11,11 @@ fn workflow_yaml_path() -> PathBuf {
         .join(".github/workflows/test.yml")
 }
 
-fn load_workflow() -> serde_yml::Value {
+fn load_workflow() -> serde_yaml_ng::Value {
     let p = workflow_yaml_path();
     let content = std::fs::read_to_string(&p)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", p.display()));
-    serde_yml::from_str(&content).expect("workflow is not valid YAML")
+    serde_yaml_ng::from_str(&content).expect("workflow is not valid YAML")
 }
 
 #[test]

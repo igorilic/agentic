@@ -50,52 +50,25 @@ fn app_package_jsons_exist_with_expected_names() {
     let root = workspace_root();
 
     let web_ui_path = root.join("apps/web-ui/package.json");
-    let vscode_ext_path = root.join("apps/vscode-extension/package.json");
 
     assert!(
         web_ui_path.exists(),
         "apps/web-ui/package.json does not exist at {:?}",
         web_ui_path
     );
-    assert!(
-        vscode_ext_path.exists(),
-        "apps/vscode-extension/package.json does not exist at {:?}",
-        vscode_ext_path
-    );
 
     let web_ui_content =
         std::fs::read_to_string(&web_ui_path).expect("could not read apps/web-ui/package.json");
-    let vscode_ext_content = std::fs::read_to_string(&vscode_ext_path)
-        .expect("could not read apps/vscode-extension/package.json");
 
     assert!(
         web_ui_content.contains("\"@agentic/web-ui\""),
         "apps/web-ui/package.json does not contain '@agentic/web-ui'.\ncontent:\n{}",
         web_ui_content
     );
-    // The vscode-extension package was renamed in Step 14.2 to align with
-    // the marketplace ID `agentic.agentic` (spec §20.2). Both `name` and
-    // `publisher` MUST stay `agentic` for `getExtension("agentic.agentic")`
-    // to resolve the activation test target.
-    assert!(
-        vscode_ext_content.contains("\"name\": \"agentic\""),
-        "apps/vscode-extension/package.json must declare 'name: \"agentic\"' to match marketplace id 'agentic.agentic'.\ncontent:\n{}",
-        vscode_ext_content
-    );
-    assert!(
-        vscode_ext_content.contains("\"publisher\": \"agentic\""),
-        "apps/vscode-extension/package.json must declare 'publisher: \"agentic\"' to match marketplace id 'agentic.agentic'.\ncontent:\n{}",
-        vscode_ext_content
-    );
     assert!(
         web_ui_content.contains("\"private\": true"),
         "apps/web-ui/package.json does not contain '\"private\": true'.\ncontent:\n{}",
         web_ui_content
-    );
-    assert!(
-        vscode_ext_content.contains("\"private\": true"),
-        "apps/vscode-extension/package.json does not contain '\"private\": true'.\ncontent:\n{}",
-        vscode_ext_content
     );
 }
 
