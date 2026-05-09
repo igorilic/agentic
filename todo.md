@@ -11,8 +11,10 @@ Execution contract:
 - Stack invariants (do not re-decide per step): Rust edition 2024, tokio, rusqlite (bundled), reqwest (rustls), keyring, directories, serde, thiserror, anyhow, tracing. Tests: `cargo test`, `proptest`, `mockito`/`wiremock`, `tempfile`, `assert_fs`, `insta` (optional for snapshot).
 - Commit style: Conventional Commits. One test-first commit per TDD cycle is allowed but the default pattern in this plan is to land the RED→GREEN→REFACTOR loop as a single `feat(...)` or `fix(...)` commit containing both the test and the implementation. Use `test(...)` only for pure test additions (e.g. fixtures).
 
+**Status note (2026-05-09)**: Phase 14 (VS Code extension + `agentic-node` napi bridge) has been **cancelled**. The VS Code consumer was abandoned and the `crates/agentic-node/` and `apps/vscode-extension/` directories were removed. Steps 14.1–14.6, the related tech-debt entries, and references in earlier sections (workspace scaffolding, decision points) are kept below as historical record only.
+
 Legend:
-- Crate shorthand: `core` = `agentic-core`, `tui` = `agentic-tui`, `tauri` = `agentic-tauri`, `node` = `agentic-node`, `web` = `apps/web-ui`, `vsx` = `apps/vscode-extension`, `cli` = `agentic-cli` (dev smoke-test binary, post-MVP-mergeable into a shell).
+- Crate shorthand: `core` = `agentic-core`, `tui` = `agentic-tui`, `tauri` = `agentic-tauri`, `web` = `apps/web-ui`, `cli` = `agentic-cli` (dev smoke-test binary, post-MVP-mergeable into a shell).
 
 ## Pre-CP-11 polish
 

@@ -1,8 +1,0 @@
-# Build artifacts produced by `pnpm build` / `pnpm build:debug`.
-# Regenerate locally via `cd crates/agentic-node && pnpm build:debug`.
-*.node
-index.js
-index.d.ts
-
-# pnpm
-node_modules/

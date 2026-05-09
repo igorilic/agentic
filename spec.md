@@ -1192,14 +1192,11 @@ agentic/                                  # new repo
 │   │   ├── src/main.rs
 │   │   ├── tauri.conf.json
 │   │   └── Cargo.toml
-│   ├── agentic-tui/                      # ratatui binary
-│   │   ├── src/main.rs
-│   │   └── Cargo.toml
-│   └── agentic-node/                     # napi-rs bindings for VS Code
-│       ├── src/lib.rs
-│       └── package.json
+│   └── agentic-tui/                      # ratatui binary
+│       ├── src/main.rs
+│       └── Cargo.toml
 ├── apps/
-│   ├── web-ui/                           # React/Svelte app for Tauri + VS Code webview
+│   └── web-ui/                           # React app for Tauri
 │   │   ├── src/
 │   │   ├── package.json
 │   │   └── vite.config.ts

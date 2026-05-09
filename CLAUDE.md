@@ -88,7 +88,7 @@ amendment: same flow, plus the explicit tech-debt discipline above.
 
 - Rust 2024 workspace (`Cargo.toml` resolver = "3"). Crates under `crates/*`.
 - React + Vite + Vitest + Testing Library + Tailwind for `apps/web-ui`.
-- napi-rs for `crates/agentic-node`. pnpm for JS workspaces.
+- pnpm for JS workspaces.
 - ratatui + crossterm for `crates/agentic-tui`.
 - Tauri 2.x for `crates/agentic-tauri`.
 - Workspace tests: `cargo test --workspace --all-features` + per-app `pnpm test`.
