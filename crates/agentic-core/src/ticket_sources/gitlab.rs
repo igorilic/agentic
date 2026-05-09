@@ -1,61 +1,43 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 
+use super::cli::run_cli;
 use super::{
     Ticket, TicketComment, TicketSource, TicketSourceError, github::parse_acceptance_criteria,
 };
 use crate::events::{TicketKind, TicketRef};
 
-#[derive(Debug, Clone, Copy)]
-pub enum GitlabAuth {
-    PrivateToken,
-    Bearer,
-}
-
 pub struct GitlabTicketSource {
-    /// Base URL. Defaults to "https://gitlab.com/api/v4".
-    /// For self-hosted: "https://gitlab.example.com/api/v4".
-    base_url: String,
-    /// PAT or OAuth token. Empty disables auth (limited to public projects).
-    token: String,
-    /// Whether `token` is a PAT (PRIVATE-TOKEN header) or OAuth (Bearer).
-    auth_kind: GitlabAuth,
-    client: reqwest::Client,
+    /// Path to the `glab` binary. Defaults to `"glab"` (resolved via PATH).
+    /// Override via `with_binary_path` for tests using a fake-glab shell script.
+    binary_path: PathBuf,
 }
 
 impl GitlabTicketSource {
-    pub fn new(
-        base_url: impl Into<String>,
-        token: impl Into<String>,
-        auth_kind: GitlabAuth,
-    ) -> Self {
+    /// Create a source that uses `glab` resolved from `$PATH`.
+    pub fn new() -> Self {
         Self {
-            base_url: base_url.into(),
-            token: token.into(),
-            auth_kind,
-            client: super::http::shared_client(),
+            binary_path: PathBuf::from("glab"),
         }
     }
 
-    /// Convenience: gitlab.com with the given token.
-    pub fn gitlab_com(token: impl Into<String>, auth_kind: GitlabAuth) -> Self {
-        Self::new("https://gitlab.com/api/v4", token, auth_kind)
-    }
-
-    async fn send_authed(&self, url: &str) -> Result<reqwest::Response, TicketSourceError> {
-        let mut req = self.client.get(url);
-        if !self.token.is_empty() {
-            req = match self.auth_kind {
-                GitlabAuth::PrivateToken => req.header("PRIVATE-TOKEN", &self.token),
-                GitlabAuth::Bearer => req.bearer_auth(&self.token),
-            };
+    /// Create a source that uses the given binary path (for testing).
+    pub fn with_binary_path(path: impl Into<PathBuf>) -> Self {
+        Self {
+            binary_path: path.into(),
         }
-        req.send().await.map_err(|e| TicketSourceError::Transport {
-            source: Box::new(e),
-        })
     }
 }
 
-fn parse_ref(reference: &str) -> Result<(String, u64), TicketSourceError> {
+impl Default for GitlabTicketSource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Parse a `group/project#N` reference into `(project_path, iid)`.
+fn parse_ref(reference: &str) -> Result<(&str, u64), TicketSourceError> {
     let (path, num_str) = reference
         .rsplit_once('#')
         .ok_or_else(|| TicketSourceError::Parse {
@@ -69,32 +51,33 @@ fn parse_ref(reference: &str) -> Result<(String, u64), TicketSourceError> {
     let iid: u64 = num_str.parse().map_err(|_| TicketSourceError::Parse {
         reason: format!("expected numeric iid, got: {num_str}"),
     })?;
-    Ok((path.to_string(), iid))
+    Ok((path, iid))
 }
 
 fn url_encode_path(path: &str) -> String {
     path.replace('/', "%2F")
 }
 
+/// Shape of `glab issue view <iid> --repo <path> --output json`
 #[derive(serde::Deserialize)]
-struct GitlabIssueResponse {
+struct GlabIssueView {
     title: String,
-    /// `description` may be null for empty issues; defaults to "".
     description: Option<String>,
     web_url: String,
 }
 
+/// Shape of `glab api /projects/<encoded>/issues/<iid>/notes`
 #[derive(serde::Deserialize)]
-struct GitlabNoteResponse {
+struct GlabNote {
     body: String,
-    author: GitlabAuthor,
+    author: GlabAuthor,
     created_at: String,
     #[serde(default)]
     system: bool,
 }
 
 #[derive(serde::Deserialize)]
-struct GitlabAuthor {
+struct GlabAuthor {
     username: String,
 }
 
@@ -108,42 +91,41 @@ impl TicketSource for GitlabTicketSource {
             });
         }
         let (project_path, iid) = parse_ref(&reference.reference)?;
-        let project_id = url_encode_path(&project_path);
+        let iid_str = iid.to_string();
+        let encoded_path = url_encode_path(project_path);
 
-        let issue_url = format!("{}/projects/{}/issues/{}", self.base_url, project_id, iid);
-        let resp = self.send_authed(&issue_url).await?;
+        // Fetch issue via glab issue view
+        let stdout = run_cli(
+            &self.binary_path,
+            &[
+                "issue",
+                "view",
+                &iid_str,
+                "--repo",
+                project_path,
+                "--output",
+                "json",
+            ],
+            &reference.reference,
+        )
+        .await?;
 
-        match resp.status().as_u16() {
-            200 => {}
-            404 => {
-                return Err(TicketSourceError::NotFound {
-                    reference: reference.reference.clone(),
-                });
-            }
-            401 | 403 => {
-                return Err(TicketSourceError::Auth {
-                    reason: format!("HTTP {}", resp.status()),
-                });
-            }
-            other => {
-                return Err(TicketSourceError::Transport {
-                    source: format!("unexpected HTTP status: {other}").into(),
-                });
-            }
-        }
-
-        let issue: GitlabIssueResponse =
-            resp.json().await.map_err(|e| TicketSourceError::Parse {
-                reason: format!("issue body json: {e}"),
+        let issue: GlabIssueView =
+            serde_json::from_str(&stdout).map_err(|e| TicketSourceError::Parse {
+                reason: format!("glab issue view json: {e}"),
             })?;
 
-        let notes_url = format!(
-            "{}/projects/{}/issues/{}/notes",
-            self.base_url, project_id, iid
-        );
-        let comments: Vec<TicketComment> = match self.send_authed(&notes_url).await {
-            Ok(r) if r.status().is_success() => {
-                let raw: Vec<GitlabNoteResponse> = r.json().await.unwrap_or_default();
+        // Fetch notes (comments) via glab api
+        let notes_path = format!("/projects/{encoded_path}/issues/{iid_str}/notes");
+        let notes: Vec<TicketComment> = match run_cli(
+            &self.binary_path,
+            &["api", &notes_path],
+            &reference.reference,
+        )
+        .await
+        {
+            Ok(out) => {
+                let raw: Vec<GlabNote> = serde_json::from_str(&out).unwrap_or_default();
                 raw.into_iter()
                     .filter(|n| !n.system)
                     .map(|n| TicketComment {
@@ -155,7 +137,7 @@ impl TicketSource for GitlabTicketSource {
                     })
                     .collect()
             }
-            _ => Vec::new(),
+            Err(_) => Vec::new(),
         };
 
         let description = issue.description.unwrap_or_default();
@@ -164,7 +146,7 @@ impl TicketSource for GitlabTicketSource {
         Ok(Ticket {
             title: issue.title,
             body: description,
-            comments,
+            comments: notes,
             ac_field,
             url: Some(issue.web_url),
         })

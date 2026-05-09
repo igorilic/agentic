@@ -50,7 +50,10 @@ async fn gh_get_ticket_includes_comments() {
     assert_eq!(ticket.comments.len(), 1);
     assert_eq!(ticket.comments[0].author, "alice");
     assert_eq!(ticket.comments[0].body, "first comment");
-    assert!(ticket.comments[0].created_at > 0, "created_at should be positive");
+    assert!(
+        ticket.comments[0].created_at > 0,
+        "created_at should be positive"
+    );
 }
 
 // ── acceptance criteria parsing ───────────────────────────────────────────────
@@ -61,7 +64,10 @@ async fn gh_acceptance_criteria_parsed_from_body() {
     let r = github_ref("owner/repo#42");
     let ticket = src.fetch(&r).await.unwrap();
 
-    let ac = ticket.ac_field.as_deref().expect("AC field should be present");
+    let ac = ticket
+        .ac_field
+        .as_deref()
+        .expect("AC field should be present");
     assert!(ac.contains("Feature works"), "AC should contain first item");
     assert!(ac.contains("Tests pass"), "AC should contain second item");
     assert!(
@@ -96,8 +102,7 @@ async fn gh_no_ac_field_when_section_absent() {
 
 #[tokio::test]
 async fn gh_get_ticket_returns_not_found_when_cli_exits_nonzero_with_not_found_stderr() {
-    let src =
-        GithubTicketSource::with_binary_path(fixture_bin("fake-gh-issue-view-not-found.sh"));
+    let src = GithubTicketSource::with_binary_path(fixture_bin("fake-gh-issue-view-not-found.sh"));
     let r = github_ref("owner/repo#999");
     let err = src.fetch(&r).await.unwrap_err();
     assert!(

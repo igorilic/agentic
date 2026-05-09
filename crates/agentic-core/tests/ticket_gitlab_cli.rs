@@ -26,13 +26,15 @@ fn gitlab_ref(reference: &str) -> TicketRef {
 
 #[tokio::test]
 async fn glab_get_ticket_returns_parsed_ticket_on_success() {
-    let src =
-        GitlabTicketSource::with_binary_path(fixture_bin("fake-glab-issue-view-success.sh"));
+    let src = GitlabTicketSource::with_binary_path(fixture_bin("fake-glab-issue-view-success.sh"));
     let r = gitlab_ref("group/repo#42");
     let ticket = src.fetch(&r).await.unwrap();
 
     assert_eq!(ticket.title, "Add feature");
-    assert!(ticket.body.contains("Body."), "body should contain description");
+    assert!(
+        ticket.body.contains("Body."),
+        "body should contain description"
+    );
     assert_eq!(
         ticket.url.as_deref(),
         Some("https://gitlab.com/group/repo/-/issues/42")
@@ -41,27 +43,31 @@ async fn glab_get_ticket_returns_parsed_ticket_on_success() {
 
 #[tokio::test]
 async fn glab_get_ticket_includes_comments() {
-    let src =
-        GitlabTicketSource::with_binary_path(fixture_bin("fake-glab-issue-view-success.sh"));
+    let src = GitlabTicketSource::with_binary_path(fixture_bin("fake-glab-issue-view-success.sh"));
     let r = gitlab_ref("group/repo#42");
     let ticket = src.fetch(&r).await.unwrap();
 
     assert_eq!(ticket.comments.len(), 1);
     assert_eq!(ticket.comments[0].author, "bob");
     assert_eq!(ticket.comments[0].body, "first note");
-    assert!(ticket.comments[0].created_at > 0, "created_at should be positive");
+    assert!(
+        ticket.comments[0].created_at > 0,
+        "created_at should be positive"
+    );
 }
 
 // ── acceptance criteria parsing ───────────────────────────────────────────────
 
 #[tokio::test]
 async fn glab_acceptance_criteria_parsed_from_body() {
-    let src =
-        GitlabTicketSource::with_binary_path(fixture_bin("fake-glab-issue-view-success.sh"));
+    let src = GitlabTicketSource::with_binary_path(fixture_bin("fake-glab-issue-view-success.sh"));
     let r = gitlab_ref("group/repo#42");
     let ticket = src.fetch(&r).await.unwrap();
 
-    let ac = ticket.ac_field.as_deref().expect("AC field should be present");
+    let ac = ticket
+        .ac_field
+        .as_deref()
+        .expect("AC field should be present");
     assert!(ac.contains("Works"), "AC should contain the item");
     assert!(
         !ac.contains("More"),
@@ -126,8 +132,7 @@ async fn glab_get_ticket_passes_correct_argv() {
 
 #[tokio::test]
 async fn glab_rejects_non_gitlab_kind() {
-    let src =
-        GitlabTicketSource::with_binary_path(fixture_bin("fake-glab-issue-view-success.sh"));
+    let src = GitlabTicketSource::with_binary_path(fixture_bin("fake-glab-issue-view-success.sh"));
     let r = TicketRef {
         kind: TicketKind::GithubIssue,
         reference: "owner/repo#1".into(),

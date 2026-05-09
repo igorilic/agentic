@@ -1,35 +1,40 @@
-use async_trait::async_trait;
-use reqwest::Client;
+use std::path::PathBuf;
 
-use super::{Ticket, TicketComment, TicketSource, TicketSourceError};
+use async_trait::async_trait;
+
+use super::{Ticket, TicketComment, TicketSource, TicketSourceError, cli::run_cli};
 use crate::events::{TicketKind, TicketRef};
 
 pub struct GithubTicketSource {
-    /// Base URL. Defaults to "https://api.github.com" for github.com.
-    /// For GHES set to "https://ghes.example.com/api/v3".
-    base_url: String,
-    /// Personal access token. Empty string disables auth (anonymous,
-    /// limited to public repos).
-    token: String,
-    client: Client,
+    /// Path to the `gh` binary. Defaults to `"gh"` (resolved via PATH).
+    /// Override via `with_binary_path` for tests using a fake-gh shell script.
+    binary_path: PathBuf,
 }
 
 impl GithubTicketSource {
-    pub fn new(base_url: impl Into<String>, token: impl Into<String>) -> Self {
+    /// Create a source that uses `gh` resolved from `$PATH`.
+    pub fn new() -> Self {
         Self {
-            base_url: base_url.into(),
-            token: token.into(),
-            client: super::http::shared_client(),
+            binary_path: PathBuf::from("gh"),
         }
     }
 
-    /// Convenience: github.com with the given token.
-    pub fn github_com(token: impl Into<String>) -> Self {
-        Self::new("https://api.github.com", token)
+    /// Create a source that uses the given binary path (for testing).
+    pub fn with_binary_path(path: impl Into<PathBuf>) -> Self {
+        Self {
+            binary_path: path.into(),
+        }
     }
 }
 
-fn parse_ref(reference: &str) -> Result<(String, String, u64), TicketSourceError> {
+impl Default for GithubTicketSource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Parse a `owner/repo#N` reference into `(owner, repo, number)`.
+fn parse_ref(reference: &str) -> Result<(&str, &str, u64), TicketSourceError> {
     let (owner_repo, num_str) =
         reference
             .rsplit_once('#')
@@ -44,7 +49,7 @@ fn parse_ref(reference: &str) -> Result<(String, String, u64), TicketSourceError
     let num: u64 = num_str.parse().map_err(|_| TicketSourceError::Parse {
         reason: format!("expected numeric issue id, got: {num_str}"),
     })?;
-    Ok((owner.to_string(), repo.to_string(), num))
+    Ok((owner, repo, num))
 }
 
 pub(crate) fn parse_acceptance_criteria(body: &str) -> Option<String> {
@@ -78,29 +83,33 @@ pub(crate) fn parse_acceptance_criteria(body: &str) -> Option<String> {
     }
 }
 
-fn parse_iso8601(s: &str) -> i64 {
-    chrono::DateTime::parse_from_rfc3339(s)
-        .map(|dt| dt.timestamp_millis())
-        .unwrap_or(0)
-}
-
+/// Shape of `gh issue view --json title,body,labels,state,url,comments`
 #[derive(serde::Deserialize)]
-struct GithubIssueResponse {
+struct GhIssueView {
     title: String,
     body: Option<String>,
-    html_url: String,
+    url: Option<String>,
+    #[serde(default)]
+    comments: Vec<GhComment>,
 }
 
 #[derive(serde::Deserialize)]
-struct GithubCommentResponse {
-    user: GithubUser,
+struct GhComment {
+    author: GhAuthor,
     body: String,
+    #[serde(rename = "createdAt")]
     created_at: String,
 }
 
 #[derive(serde::Deserialize)]
-struct GithubUser {
+struct GhAuthor {
     login: String,
+}
+
+fn parse_iso8601(s: &str) -> i64 {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .map(|dt| dt.timestamp_millis())
+        .unwrap_or(0)
 }
 
 #[async_trait]
@@ -113,77 +122,47 @@ impl TicketSource for GithubTicketSource {
             });
         }
         let (owner, repo, num) = parse_ref(&reference.reference)?;
+        let owner_repo = format!("{owner}/{repo}");
+        let num_str = num.to_string();
 
-        let url = format!("{}/repos/{}/{}/issues/{}", self.base_url, owner, repo, num);
-        let mut req = self
-            .client
-            .get(&url)
-            .header("Accept", "application/vnd.github+json");
-        if !self.token.is_empty() {
-            req = req.bearer_auth(&self.token);
-        }
-        let resp = req.send().await.map_err(|e| TicketSourceError::Transport {
-            source: Box::new(e),
-        })?;
+        let stdout = run_cli(
+            &self.binary_path,
+            &[
+                "issue",
+                "view",
+                &num_str,
+                "--repo",
+                &owner_repo,
+                "--json",
+                "title,body,labels,state,url,comments",
+            ],
+            &reference.reference,
+        )
+        .await?;
 
-        match resp.status().as_u16() {
-            200 => {}
-            404 => {
-                return Err(TicketSourceError::NotFound {
-                    reference: reference.reference.clone(),
-                });
-            }
-            401 | 403 => {
-                return Err(TicketSourceError::Auth {
-                    reason: format!("HTTP {}", resp.status()),
-                });
-            }
-            other => {
-                return Err(TicketSourceError::Transport {
-                    source: format!("unexpected HTTP status: {other}").into(),
-                });
-            }
-        }
-
-        let issue: GithubIssueResponse =
-            resp.json().await.map_err(|e| TicketSourceError::Parse {
-                reason: format!("issue body json: {e}"),
+        let issue: GhIssueView =
+            serde_json::from_str(&stdout).map_err(|e| TicketSourceError::Parse {
+                reason: format!("gh issue view json: {e}"),
             })?;
-
-        let comments_url = format!(
-            "{}/repos/{}/{}/issues/{}/comments",
-            self.base_url, owner, repo, num
-        );
-        let mut comments_req = self
-            .client
-            .get(&comments_url)
-            .header("Accept", "application/vnd.github+json");
-        if !self.token.is_empty() {
-            comments_req = comments_req.bearer_auth(&self.token);
-        }
-        let comments: Vec<TicketComment> = match comments_req.send().await {
-            Ok(r) if r.status().is_success() => {
-                let raw: Vec<GithubCommentResponse> = r.json().await.unwrap_or_default();
-                raw.into_iter()
-                    .map(|c| TicketComment {
-                        author: c.user.login,
-                        body: c.body,
-                        created_at: parse_iso8601(&c.created_at),
-                    })
-                    .collect()
-            }
-            _ => Vec::new(),
-        };
 
         let body = issue.body.unwrap_or_default();
         let ac_field = parse_acceptance_criteria(&body);
+        let comments = issue
+            .comments
+            .into_iter()
+            .map(|c| TicketComment {
+                author: c.author.login,
+                body: c.body,
+                created_at: parse_iso8601(&c.created_at),
+            })
+            .collect();
 
         Ok(Ticket {
             title: issue.title,
             body,
             comments,
             ac_field,
-            url: Some(issue.html_url),
+            url: issue.url,
         })
     }
 }

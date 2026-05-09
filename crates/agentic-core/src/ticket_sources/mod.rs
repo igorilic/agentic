@@ -7,11 +7,13 @@ pub use free_text::FreeTextTicketSource;
 
 pub(crate) mod http;
 
+pub(crate) mod cli;
+
 mod github;
 pub use github::GithubTicketSource;
 
 mod gitlab;
-pub use gitlab::{GitlabAuth, GitlabTicketSource};
+pub use gitlab::GitlabTicketSource;
 
 mod jira;
 pub use jira::{JiraAuth, JiraTicketSource};
