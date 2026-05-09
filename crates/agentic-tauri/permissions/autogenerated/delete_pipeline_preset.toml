@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-pipeline-preset"
+description = "Enables the delete_pipeline_preset command without any pre-configured scope."
+commands.allow = ["delete_pipeline_preset"]
+
+[[permission]]
+identifier = "deny-delete-pipeline-preset"
+description = "Denies the delete_pipeline_preset command without any pre-configured scope."
+commands.deny = ["delete_pipeline_preset"]

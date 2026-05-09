@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-pipeline-presets"
+description = "Enables the list_pipeline_presets command without any pre-configured scope."
+commands.allow = ["list_pipeline_presets"]
+
+[[permission]]
+identifier = "deny-list-pipeline-presets"
+description = "Denies the list_pipeline_presets command without any pre-configured scope."
+commands.deny = ["list_pipeline_presets"]
