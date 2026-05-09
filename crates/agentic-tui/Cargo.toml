@@ -21,3 +21,4 @@ unicode-width = "0.2"
 
 [dev-dependencies]
 ratatui = { workspace = true, features = ["all-widgets"] }
+tokio = { workspace = true }
