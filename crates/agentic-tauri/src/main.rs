@@ -17,7 +17,7 @@ use agentic_core::events::EventBus;
 use agentic_core::permissions::gate_async::AsyncGate;
 use agentic_core::pipeline::PipelineOrchestrator;
 use agentic_core::{Db, Paths, attach_event_bus, init as init_logging};
-use commands::auth::{AuthState, WebbrowserOpener};
+use commands::auth::AuthState;
 use commands::chat::ChatState;
 use commands::events::EventBusState;
 use commands::findings::FindingsState;
@@ -131,9 +131,6 @@ fn main() {
             let auth_state = AuthState {
                 repo: AuthRepo::new(&db),
                 secrets: Arc::new(KeyringSecretStore::new("io.agentic.app")),
-                opener: Arc::new(WebbrowserOpener),
-                github_base_url: "https://github.com".to_string(),
-                callback_timeout_secs: 5 * 60,
                 gh_binary: std::path::PathBuf::from("gh"),
             };
             app.manage(auth_state);
@@ -157,7 +154,6 @@ fn main() {
             commands::findings::list_findings,
             commands::auth::list_auth_accounts,
             commands::auth::delete_auth_account,
-            commands::auth::connect_github,
             commands::auth::connect_github_via_gh,
             commands::ticket::start_ticket_run,
             commands::runs::list_runs,
