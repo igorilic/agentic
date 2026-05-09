@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use std::sync::Arc;
 
+use agentic_core::Db;
 use agentic_core::events::{Event, EventBus, EventEnvelope, PermissionDecision, PermissionSource};
 use crossterm::event::KeyCode;
 
@@ -222,11 +223,17 @@ pub struct AppState {
     /// need bus egress (existing tests construct `AppState::default()`).
     /// Set by `run.rs` from the runtime bus after `EventBus::subscribe`.
     pub bus: Option<Arc<EventBus>>,
+    /// Database handle used to look up `file_changes.diff` BLOBs when an
+    /// `Event::FileChange` envelope arrives. `None` in tests that don't
+    /// need DB access and in the production binary until GH #113 wires the
+    /// runtime Db. When `None`, `FileChange` envelopes are silently ignored.
+    pub db: Option<Arc<Db>>,
 }
 
 impl std::fmt::Debug for AppState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // bus is excluded — EventBus does not implement Debug.
+        // bus/db are excluded from auto-derive — neither EventBus nor Db
+        // implement Debug; render them as opaque sentinel strings instead.
         f.debug_struct("AppState")
             .field("focus", &self.focus)
             .field("mode", &self.mode)
@@ -234,6 +241,7 @@ impl std::fmt::Debug for AppState {
             .field("flash", &self.flash)
             .field("help_open", &self.help_open)
             .field("bus", &self.bus.as_ref().map(|_| "<EventBus>"))
+            .field("db", &self.db.as_ref().map(|_| "<Db>"))
             .finish_non_exhaustive()
     }
 }
@@ -265,6 +273,7 @@ impl Default for AppState {
             flash_set_at: None,
             help_open: false,
             bus: None,
+            db: None,
         }
     }
 }
@@ -293,6 +302,19 @@ impl AppState {
         self.run.apply_envelope(envelope);
 
         match &envelope.event {
+            Event::FileChange { after_hash, .. } => {
+                if let Some(db) = &self.db {
+                    match lookup_file_change_diff(db, &envelope.run_id, after_hash) {
+                        Some(diff) => self.set_diff(Some(diff)),
+                        None => tracing::warn!(
+                            target: "agentic_tui",
+                            run_id = %envelope.run_id,
+                            after_hash = %after_hash,
+                            "FileChange lookup miss: no matching row in file_changes"
+                        ),
+                    }
+                }
+            }
             Event::Finding { message, .. } => {
                 self.log.push(LogEntry {
                     timestamp: format_hms(envelope.timestamp_ms),
@@ -512,6 +534,28 @@ impl AppState {
                 },
             );
             bus.publish(envelope);
+        }
+    }
+}
+
+/// Look up the `diff` BLOB from `file_changes` by `(run_id, after_hash)`.
+///
+/// Returns `Some(diff_text)` on a hit, `None` on a miss or IO error.
+/// The BLOB is stored as raw bytes; lossy UTF-8 conversion is acceptable
+/// for diff text (diff patches are ASCII-safe in practice).
+fn lookup_file_change_diff(db: &Db, run_id: &str, after_hash: &str) -> Option<String> {
+    let conn = db.conn().ok()?;
+    let result: rusqlite::Result<Vec<u8>> = conn.query_row(
+        "SELECT diff FROM file_changes WHERE run_id = ?1 AND after_hash = ?2 LIMIT 1",
+        rusqlite::params![run_id, after_hash],
+        |row| row.get::<_, Vec<u8>>(0),
+    );
+    match result {
+        Ok(bytes) => Some(String::from_utf8_lossy(&bytes).into_owned()),
+        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(e) => {
+            tracing::warn!(target: "agentic_tui", error = %e, "file_changes diff query error");
+            None
         }
     }
 }

@@ -18,11 +18,7 @@ use agentic_tui::app::AppState;
 /// workspace → run → step → `file_changes` row with the given `diff` text.
 ///
 /// Returns `(Db, run_id, step_id)` so callers can build matching envelopes.
-fn seed_file_change(
-    diff_text: &str,
-    before_hash: &str,
-    after_hash: &str,
-) -> (Db, String, String) {
+fn seed_file_change(diff_text: &str, before_hash: &str, after_hash: &str) -> (Db, String, String) {
     let db = Db::open_in_memory().expect("open in-memory db");
     let conn = db.conn().unwrap();
 
@@ -96,8 +92,10 @@ fn apply_file_change_envelope_populates_current_diff_from_db() {
     let diff_text = "--- a/foo.rs\n+++ b/foo.rs\n@@ -1,3 +1,3 @@\n-old\n+new";
     let (db, run_id, step_id) = seed_file_change(diff_text, "hash-before", "hash-after");
 
-    let mut state = AppState::default();
-    state.db = Some(Arc::new(db));
+    let mut state = AppState {
+        db: Some(Arc::new(db)),
+        ..Default::default()
+    };
 
     let env = file_change_envelope(
         &run_id,
@@ -124,13 +122,7 @@ fn apply_file_change_envelope_with_no_db_is_noop() {
     let mut state = AppState::default();
     assert!(state.db.is_none(), "db must default to None");
 
-    let env = file_change_envelope(
-        "run-1",
-        None,
-        "src/bar.rs",
-        "hash-before",
-        "hash-after",
-    );
+    let env = file_change_envelope("run-1", None, "src/bar.rs", "hash-before", "hash-after");
     state.apply_envelope(&env);
 
     assert!(
@@ -146,12 +138,13 @@ fn apply_file_change_envelope_with_no_db_is_noop() {
 #[test]
 fn apply_file_change_envelope_with_no_matching_row_leaves_current_diff_unchanged() {
     let diff_text = "sentinel";
-    let (db, run_id, step_id) =
-        seed_file_change(diff_text, "hash-before", "hash-after-inserted");
+    let (db, run_id, step_id) = seed_file_change(diff_text, "hash-before", "hash-after-inserted");
 
-    let mut state = AppState::default();
-    state.current_diff = Some("existing-diff".to_string());
-    state.db = Some(Arc::new(db));
+    let mut state = AppState {
+        current_diff: Some("existing-diff".to_string()),
+        db: Some(Arc::new(db)),
+        ..Default::default()
+    };
 
     // Use a *different* after_hash so no row is found.
     let env = file_change_envelope(
@@ -179,9 +172,11 @@ fn apply_file_change_envelope_replaces_previous_diff() {
     let new_diff = "--- a/bar.rs\n+++ b/bar.rs\n@@ -0,0 +1 @@\n+added";
     let (db, run_id, step_id) = seed_file_change(new_diff, "bh", "ah");
 
-    let mut state = AppState::default();
-    state.current_diff = Some("old diff text".to_string());
-    state.db = Some(Arc::new(db));
+    let mut state = AppState {
+        current_diff: Some("old diff text".to_string()),
+        db: Some(Arc::new(db)),
+        ..Default::default()
+    };
 
     let env = file_change_envelope(&run_id, Some(&step_id), "src/bar.rs", "bh", "ah");
     state.apply_envelope(&env);
@@ -202,9 +197,11 @@ fn set_diff_resets_scroll_offset() {
     let diff_text = "--- a/reset.rs\n+++ b/reset.rs";
     let (db, run_id, step_id) = seed_file_change(diff_text, "bh", "ah");
 
-    let mut state = AppState::default();
-    state.diff_scroll_offset = 42; // pre-set to a non-zero value
-    state.db = Some(Arc::new(db));
+    let mut state = AppState {
+        diff_scroll_offset: 42, // pre-set to a non-zero value
+        db: Some(Arc::new(db)),
+        ..Default::default()
+    };
 
     let env = file_change_envelope(&run_id, Some(&step_id), "src/reset.rs", "bh", "ah");
     state.apply_envelope(&env);

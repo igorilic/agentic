@@ -17,6 +17,8 @@ path = "src/lib.rs"
 agentic-core = { path = "../agentic-core" }
 crossterm = { workspace = true }
 ratatui = { workspace = true }
+rusqlite = { workspace = true }
+tracing = { workspace = true }
 unicode-width = "0.2"
 
 [dev-dependencies]
