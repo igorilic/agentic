@@ -46,8 +46,8 @@ pub mod settings;
 pub use settings::{EnvProvider, Key, MockEnv, RealEnv, Resolver, Setting, SettingsError, Source};
 pub mod ticket_sources;
 pub use ticket_sources::{
-    FreeTextTicketSource, GithubTicketSource, GitlabTicketSource, JiraAuth, JiraTicketSource,
-    Ticket, TicketComment, TicketSource, TicketSourceError,
+    FreeTextTicketSource, GithubTicketSource, JiraAuth, JiraTicketSource, Ticket, TicketComment,
+    TicketSource, TicketSourceError,
 };
 pub mod auth;
 #[cfg(any(test, feature = "testing"))]

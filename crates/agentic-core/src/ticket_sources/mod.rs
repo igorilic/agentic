@@ -12,9 +12,6 @@ pub(crate) mod cli;
 mod github;
 pub use github::GithubTicketSource;
 
-mod gitlab;
-pub use gitlab::GitlabTicketSource;
-
 mod jira;
 pub use jira::{JiraAuth, JiraTicketSource};
 
