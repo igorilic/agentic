@@ -30,8 +30,9 @@ type PromptDialogProps = {
 function PromptDialog({ open, title, initialValue, onSubmit, onCancel }: PromptDialogProps) {
   const [value, setValue] = useState(initialValue);
 
-  // Sync when the dialog opens with a new initial value
+  // Sync when the dialog opens with a new initial value (e.g. rename pre-fill).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: syncs controlled input when dialog re-opens with a different preset name; dep-change response, not a cascade.
     if (open) setValue(initialValue);
   }, [open, initialValue]);
 

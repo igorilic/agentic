@@ -57,6 +57,7 @@ export function usePipelinePresets(): UsePipelinePresetsResult {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: initial fetch on mount; setState called in the async result, not synchronously. Same pattern as useFindings.
     void refresh();
   }, [refresh]);
 
