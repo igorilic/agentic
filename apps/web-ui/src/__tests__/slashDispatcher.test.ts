@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { dispatchSlashCommand, type SlashServices } from "../slash/dispatcher";
+import { SLASH_COMMAND_LIBRARY } from "../slash/library";
 
 function makeMockServices(overrides: Partial<SlashServices> = {}): SlashServices {
   return {
@@ -58,5 +59,29 @@ describe("dispatchSlashCommand", () => {
     await expect(
       dispatchSlashCommand({ kind: "plan", ticket: "x" }, services),
     ).rejects.toThrow("backend down");
+  });
+
+  // /help dispatcher tests
+  it("dispatcher_help_produces_system_message_with_all_library_commands", async () => {
+    const services = makeMockServices();
+    const result = await dispatchSlashCommand({ kind: "help" }, services);
+    // Must list all library commands by name
+    for (const cmd of SLASH_COMMAND_LIBRARY) {
+      expect(result.message).toContain(cmd.name);
+    }
+    // Specifically assert the 4 known names + help itself
+    expect(result.message).toContain("plan");
+    expect(result.message).toContain("brainstorm");
+    expect(result.message).toContain("develop");
+    expect(result.message).toContain("spec");
+    expect(result.message).toContain("help");
+  });
+
+  it("dispatcher_help_does_not_invoke_backend — no service calls are made", async () => {
+    const services = makeMockServices();
+    await dispatchSlashCommand({ kind: "help" }, services);
+    expect(services.plan).not.toHaveBeenCalled();
+    expect(services.status).not.toHaveBeenCalled();
+    expect(services.cancel).not.toHaveBeenCalled();
   });
 });

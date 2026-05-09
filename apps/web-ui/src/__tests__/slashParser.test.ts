@@ -172,4 +172,29 @@ describe("parseSlashCommand", () => {
       formatSlashParseError({ kind: "extra_argument", cmd: "status", surplus: "trailing" }),
     ).toContain("trailing");
   });
+
+  // /help tests
+  it("parser_recognizes_help_with_no_args — /help returns { kind: 'help' }", () => {
+    const r = parseSlashCommand("/help");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.command.kind).toBe("help");
+  });
+
+  it("parser_recognizes_help_case_insensitive — /HELP returns { kind: 'help' }", () => {
+    const r = parseSlashCommand("/HELP");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.command.kind).toBe("help");
+  });
+
+  it("parser_accepts_help_with_trailing_args — /help foo silently ignores args", () => {
+    const r = parseSlashCommand("/help foo");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.command.kind).toBe("help");
+  });
+
+  it("parser_rejects_help_command_substring — /helper is unknown, not /help", () => {
+    const r = parseSlashCommand("/helper");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe("unknown_command");
+  });
 });
