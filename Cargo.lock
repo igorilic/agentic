@@ -126,6 +126,8 @@ dependencies = [
  "agentic-core",
  "crossterm",
  "ratatui",
+ "tokio",
+ "unicode-width 0.2.0",
 ]
 
 [[package]]

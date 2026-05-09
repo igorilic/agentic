@@ -23,11 +23,8 @@ fn make_bus() -> Arc<EventBus> {
 /// Drain all envelopes from a receiver into a Vec (non-blocking).
 fn drain(rx: &mut Receiver<EventEnvelope>) -> Vec<EventEnvelope> {
     let mut out = Vec::new();
-    loop {
-        match rx.try_recv() {
-            Ok(env) => out.push(env),
-            Err(_) => break,
-        }
+    while let Ok(env) = rx.try_recv() {
+        out.push(env);
     }
     out
 }
@@ -45,10 +42,11 @@ fn make_perm(request_id: &str) -> PermissionRequest {
 }
 
 fn state_with_bus_and_perm(bus: Arc<EventBus>, request_id: &str) -> AppState {
-    let mut state = AppState::default();
-    state.bus = Some(bus);
-    state.pending_perms = vec![make_perm(request_id)];
-    state
+    AppState {
+        bus: Some(bus),
+        pending_perms: vec![make_perm(request_id)],
+        ..Default::default()
+    }
 }
 
 // ── Test 1: y publishes PermissionResolved with AllowOnce ────────────────────
@@ -76,7 +74,11 @@ fn y_publishes_permission_resolved_with_allow_once() {
             source,
         } => {
             assert_eq!(request_id, "req-1", "request_id mismatch");
-            assert_eq!(*decision, PermissionDecision::AllowOnce, "decision mismatch");
+            assert_eq!(
+                *decision,
+                PermissionDecision::AllowOnce,
+                "decision mismatch"
+            );
             assert_eq!(*source, PermissionSource::User, "source should be User");
         }
         other => panic!("expected PermissionResolved, got {:?}", other),
@@ -172,8 +174,10 @@ fn n_publishes_permission_resolved_with_deny() {
 fn y_with_no_pending_request_publishes_nothing() {
     let bus = make_bus();
     let mut rx = bus.subscribe();
-    let mut state = AppState::default();
-    state.bus = Some(bus);
+    let mut state = AppState {
+        bus: Some(bus),
+        ..Default::default()
+    };
     // pending_perms is empty
 
     state.handle_key(KeyCode::Char('y'));
@@ -192,9 +196,11 @@ fn y_with_no_pending_request_publishes_nothing() {
 fn y_publishes_for_first_pending_when_multiple_present() {
     let bus = make_bus();
     let mut rx = bus.subscribe();
-    let mut state = AppState::default();
-    state.bus = Some(Arc::clone(&bus));
-    state.pending_perms = vec![make_perm("req-first"), make_perm("req-second")];
+    let mut state = AppState {
+        bus: Some(Arc::clone(&bus)),
+        pending_perms: vec![make_perm("req-first"), make_perm("req-second")],
+        ..Default::default()
+    };
 
     state.handle_key(KeyCode::Char('y'));
 
@@ -217,11 +223,7 @@ fn y_publishes_for_first_pending_when_multiple_present() {
         other => panic!("expected PermissionResolved, got {:?}", other),
     }
 
-    assert_eq!(
-        state.pending_perms.len(),
-        1,
-        "one perm should remain"
-    );
+    assert_eq!(state.pending_perms.len(), 1, "one perm should remain");
     assert_eq!(state.pending_perms[0].request_id, "req-second");
 }
 

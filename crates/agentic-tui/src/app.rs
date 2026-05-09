@@ -9,8 +9,14 @@
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
-use agentic_core::events::{Event, EventEnvelope};
+use std::sync::Arc;
+
+use agentic_core::events::{Event, EventBus, EventEnvelope, PermissionDecision, PermissionSource};
 use crossterm::event::KeyCode;
+
+/// Re-export the wire `PermissionRisk` so callers that previously used the
+/// local `app::PermissionRisk` continue to work without import changes.
+pub use agentic_core::events::PermissionRisk;
 
 use crate::modes::{AppCommand, Mode, ParseResult, parse_command};
 use crate::run::RunState;
@@ -86,14 +92,6 @@ pub struct Flash {
     pub text: String,
 }
 
-/// Risk level of a pending permission request (spec §4.7).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PermissionRisk {
-    Low,
-    Medium,
-    High,
-}
-
 /// A single permission request pending user approval (spec §4.7).
 #[derive(Debug, Clone)]
 pub struct PermissionRequest {
@@ -138,7 +136,7 @@ pub enum AppEvent {
     ToggleFocus,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppState {
     pub focus: Pane,
     /// Pipeline run state — renders as the cockpit stepper.
@@ -219,6 +217,25 @@ pub struct AppState {
     /// Toggled by `?` in Normal mode; closed by Esc (takes precedence over
     /// all other Esc handling).
     pub help_open: bool,
+    /// Bus handle for publishing `PermissionResolved` envelopes back to the
+    /// orchestrator when the user presses y/s/n. `None` in tests that don't
+    /// need bus egress (existing tests construct `AppState::default()`).
+    /// Set by `run.rs` from the runtime bus after `EventBus::subscribe`.
+    pub bus: Option<Arc<EventBus>>,
+}
+
+impl std::fmt::Debug for AppState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // bus is excluded — EventBus does not implement Debug.
+        f.debug_struct("AppState")
+            .field("focus", &self.focus)
+            .field("mode", &self.mode)
+            .field("pending_perms", &self.pending_perms)
+            .field("flash", &self.flash)
+            .field("help_open", &self.help_open)
+            .field("bus", &self.bus.as_ref().map(|_| "<EventBus>"))
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for AppState {
@@ -247,6 +264,7 @@ impl Default for AppState {
             flash: None,
             flash_set_at: None,
             help_open: false,
+            bus: None,
         }
     }
 }
@@ -298,7 +316,7 @@ impl AppState {
                     command: arg.clone(),
                     reason: reason.clone(),
                     scope: scope.clone(),
-                    risk: map_wire_risk(*risk),
+                    risk: *risk,
                 });
             }
             Event::PermissionResolved { request_id, .. } => {
@@ -406,6 +424,7 @@ impl AppState {
                             text: format!("✓ once: {} \"{}\"", prefix, perm.command),
                         });
                         self.flash_set_at = Some(Instant::now());
+                        self.publish_resolution(perm.request_id, PermissionDecision::AllowOnce);
                     }
                     KeyCode::Char('s') if !self.pending_perms.is_empty() => {
                         let perm = self.pending_perms.remove(0);
@@ -414,6 +433,7 @@ impl AppState {
                             text: format!("✓ session: {} \"{}\"", prefix, perm.command),
                         });
                         self.flash_set_at = Some(Instant::now());
+                        self.publish_resolution(perm.request_id, PermissionDecision::AllowSession);
                     }
                     KeyCode::Char('n') if !self.pending_perms.is_empty() => {
                         let perm = self.pending_perms.remove(0);
@@ -422,6 +442,7 @@ impl AppState {
                             text: format!("✗ denied: {} \"{}\"", prefix, perm.command),
                         });
                         self.flash_set_at = Some(Instant::now());
+                        self.publish_resolution(perm.request_id, PermissionDecision::Deny);
                     }
                     KeyCode::Char('?') => {
                         self.help_open = !self.help_open;
@@ -471,17 +492,27 @@ impl AppState {
             }
         }
     }
-}
 
-/// Translate the wire-format `events::PermissionRisk` to the TUI-local
-/// `app::PermissionRisk`. Both enums have identical variants. Deferred
-/// consolidation (dropping the local enum in favour of re-exporting the
-/// wire one) is tracked as tech-debt in the TUI runner integration issue.
-fn map_wire_risk(risk: agentic_core::events::PermissionRisk) -> PermissionRisk {
-    match risk {
-        agentic_core::events::PermissionRisk::Low => PermissionRisk::Low,
-        agentic_core::events::PermissionRisk::Medium => PermissionRisk::Medium,
-        agentic_core::events::PermissionRisk::High => PermissionRisk::High,
+    /// Publish a `PermissionResolved` envelope to the bus when the user
+    /// resolves a pending permission with y/s/n. No-op when `self.bus` is
+    /// `None` (test mode or not yet wired to the runtime bus).
+    fn publish_resolution(&self, request_id: String, decision: PermissionDecision) {
+        if let Some(bus) = &self.bus {
+            let run_id = self
+                .run_label
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
+            let envelope = EventEnvelope::now(
+                run_id,
+                None,
+                Event::PermissionResolved {
+                    request_id,
+                    decision,
+                    source: PermissionSource::User,
+                },
+            );
+            bus.publish(envelope);
+        }
     }
 }
 
