@@ -87,8 +87,6 @@ pub async fn connect_github_via_gh(state: State<'_, AuthState>) -> Result<AuthAc
         provider: "github".to_string(),
         host: GITHUB_HOST.to_string(),
         username: None,
-        client_id: None, // delegated session has no Agentic-owned client_id
-        token_expires_at: None,
         created_at: now,
         last_used_at: None,
     };

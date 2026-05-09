@@ -55,8 +55,6 @@ async fn list_auth_accounts_returns_inserted_rows() {
             provider: "github".to_string(),
             host: "github.com".to_string(),
             username: Some("octocat".to_string()),
-            client_id: Some("Iv1.abc".to_string()),
-            token_expires_at: None,
             created_at: 100,
             last_used_at: None,
         })
@@ -82,8 +80,6 @@ async fn delete_auth_account_removes_db_row_and_keychain_entry() {
             provider: "github".to_string(),
             host: "github.com".to_string(),
             username: None,
-            client_id: None,
-            token_expires_at: None,
             created_at: 1,
             last_used_at: None,
         })

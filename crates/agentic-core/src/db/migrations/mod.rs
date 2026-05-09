@@ -47,6 +47,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "findings_composite_pk",
         sql: include_str!("0008_findings_composite_pk.sql"),
     },
+    Migration {
+        version: 9,
+        name: "drop_oauth_columns",
+        sql: include_str!("0009_drop_oauth_columns.sql"),
+    },
 ];
 
 pub struct Migrator;

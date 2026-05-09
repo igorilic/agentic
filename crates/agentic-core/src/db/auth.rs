@@ -1,8 +1,8 @@
 //! Auth-account repository.
 //!
 //! Persists *metadata* about auth accounts (id, provider, host, username,
-//! client_id, expiry, timestamps) to the `auth_accounts` table. **Tokens
-//! are NEVER stored in this table** — they live in the OS keychain via
+//! timestamps) to the `auth_accounts` table. **Tokens are NEVER stored in
+//! this table** — they live in the OS keychain via
 //! [`crate::auth::SecretStore`], keyed by the account id. This keeps
 //! secrets off-disk while letting the UI list accounts without unlocking
 //! the keychain.
@@ -22,12 +22,6 @@ pub struct AuthAccount {
     pub provider: String,
     pub host: String,
     pub username: Option<String>,
-    /// OAuth client_id for BYO-app flows (GHES). `None` if the account uses
-    /// a bundled / default Agentic OAuth app.
-    pub client_id: Option<String>,
-    /// Unix epoch ms when the access token expires. `None` for non-expiring
-    /// tokens (e.g., classic GitHub PATs).
-    pub token_expires_at: Option<i64>,
     pub created_at: i64,
     pub last_used_at: Option<i64>,
 }
@@ -56,15 +50,13 @@ impl AuthRepo {
         let conn = self.pool.get()?;
         conn.execute(
             "INSERT INTO auth_accounts \
-             (id, provider, host, username, client_id, token_expires_at, created_at, last_used_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             (id, provider, host, username, created_at, last_used_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 acc.id,
                 acc.provider,
                 acc.host,
                 acc.username,
-                acc.client_id,
-                acc.token_expires_at,
                 acc.created_at,
                 acc.last_used_at,
             ],
@@ -76,7 +68,7 @@ impl AuthRepo {
     pub fn list(&self) -> Result<Vec<AuthAccount>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
-            "SELECT id, provider, host, username, client_id, token_expires_at, \
+            "SELECT id, provider, host, username, \
                     created_at, last_used_at \
              FROM auth_accounts \
              ORDER BY created_at ASC",
@@ -90,7 +82,7 @@ impl AuthRepo {
     pub fn get(&self, id: &str) -> Result<Option<AuthAccount>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
-            "SELECT id, provider, host, username, client_id, token_expires_at, \
+            "SELECT id, provider, host, username, \
                     created_at, last_used_at \
              FROM auth_accounts \
              WHERE id = ?1",
@@ -129,9 +121,7 @@ fn row_to_account(r: &rusqlite::Row<'_>) -> rusqlite::Result<AuthAccount> {
         provider: r.get(1)?,
         host: r.get(2)?,
         username: r.get(3)?,
-        client_id: r.get(4)?,
-        token_expires_at: r.get(5)?,
-        created_at: r.get(6)?,
-        last_used_at: r.get(7)?,
+        created_at: r.get(4)?,
+        last_used_at: r.get(5)?,
     })
 }

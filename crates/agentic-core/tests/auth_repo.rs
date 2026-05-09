@@ -13,8 +13,6 @@ fn sample(id: &str, provider: &str, host: &str) -> AuthAccount {
         provider: provider.to_string(),
         host: host.to_string(),
         username: Some("octocat".to_string()),
-        client_id: Some("Iv1.abc123".to_string()),
-        token_expires_at: None,
         created_at: 100,
         last_used_at: None,
     }
@@ -145,7 +143,14 @@ fn migration_0009_drops_client_id_and_token_expires_at_columns() {
     );
 
     // Verify the expected surviving columns are still present.
-    for expected in &["id", "provider", "host", "username", "created_at", "last_used_at"] {
+    for expected in &[
+        "id",
+        "provider",
+        "host",
+        "username",
+        "created_at",
+        "last_used_at",
+    ] {
         assert!(
             columns.contains(&expected.to_string()),
             "expected column {expected} to survive migration 0009; found: {columns:?}"
