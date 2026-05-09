@@ -206,12 +206,9 @@ async fn delete_unknown_id_errors() {
     let db = Db::open_in_memory().unwrap();
     let app = build_app(&db);
 
-    let err = delete_pipeline_preset(
-        app.state::<Db>(),
-        "01ABCFAKEUNKNOWNID000000000".to_string(),
-    )
-    .await
-    .expect_err("unknown id must error");
+    let err = delete_pipeline_preset(app.state::<Db>(), "01ABCFAKEUNKNOWNID000000000".to_string())
+        .await
+        .expect_err("unknown id must error");
 
     assert!(!err.is_empty());
 }

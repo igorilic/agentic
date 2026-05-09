@@ -6,6 +6,7 @@ pub mod findings;
 pub mod jira;
 pub mod mention;
 pub mod permissions;
+pub mod pipeline_presets;
 pub mod runs;
 pub mod scripted;
 pub mod ticket;
