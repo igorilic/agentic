@@ -19,6 +19,7 @@ import { findingsToActionItems } from "./utils/findingsToActionItems";
 import { isTauriDense } from "./utils/isTauriDense";
 import { usePipelineMutation } from "./hooks/usePipelineMutation";
 import { useBackend } from "./hooks/useBackend";
+import PipelinePresetDropdown from "./components/PipelinePresetDropdown";
 
 const PLACEHOLDER_TICKET: IssueTicket = {
   id: "AGT-000",
@@ -177,6 +178,11 @@ export default function App() {
           />
         }
         pipelineBar={
+          <>
+          <PipelinePresetDropdown
+            pipelineAgents={pipelineAgents}
+            onLoadPreset={setPipelineAgents}
+          />
           <PipelineBar
             agents={pipelineAgents}
             statuses={pipelineStatuses}
@@ -187,6 +193,7 @@ export default function App() {
             onRemove={onRemove}
             onSkip={onSkip}
           />
+          </>
         }
       >
         <ChatPane

@@ -170,6 +170,30 @@ async function mockInvoke(cmd: string, args?: Record<string, unknown>): Promise<
     }
     case "get_workspace_id":
       return "ws-dev-mock-1234567";
+    case "list_pipeline_presets":
+      return [];
+    case "save_pipeline_preset": {
+      const now = Date.now();
+      return {
+        id: `preset-${now}`,
+        name: (args?.name as string | undefined) ?? "Unnamed",
+        agents: (args?.agents as string[] | undefined) ?? [],
+        created_at: now,
+        updated_at: now,
+      };
+    }
+    case "update_pipeline_preset": {
+      const now = Date.now();
+      return {
+        id: (args?.id as string | undefined) ?? "unknown",
+        name: (args?.name as string | undefined) ?? "Unnamed",
+        agents: (args?.agents as string[] | undefined) ?? [],
+        created_at: now,
+        updated_at: now,
+      };
+    }
+    case "delete_pipeline_preset":
+      return undefined;
     case "list_runs":
     case "list_auth_accounts":
     case "get_event_history":

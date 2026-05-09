@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -271,6 +271,7 @@ describe("PipelinePresetDropdown", () => {
   it("popover closes on outside click", async () => {
     invokeMock.mockResolvedValueOnce([]);
 
+    const user = userEvent.setup();
     render(
       <div>
         <div data-testid="outside">outside</div>
@@ -279,10 +280,10 @@ describe("PipelinePresetDropdown", () => {
     );
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("list_pipeline_presets"));
-    fireEvent.click(screen.getByTestId("preset-dropdown-toggle"));
+    await user.click(screen.getByTestId("preset-dropdown-toggle"));
     expect(screen.getByTestId("preset-popover")).toBeInTheDocument();
 
-    fireEvent.mouseDown(screen.getByTestId("outside"));
+    await user.click(screen.getByTestId("outside"));
     expect(screen.queryByTestId("preset-popover")).not.toBeInTheDocument();
   });
 
