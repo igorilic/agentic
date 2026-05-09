@@ -118,3 +118,37 @@ fn insert_rejects_unknown_provider() {
     let result = repo.insert(&bad);
     assert!(result.is_err(), "expected error for unknown provider");
 }
+
+#[test]
+fn migration_0009_drops_client_id_and_token_expires_at_columns() {
+    // After migration 0009 the auth_accounts table must no longer have
+    // client_id or token_expires_at columns — they were only used by the
+    // OAuth flows deleted in Stages 1+2 of the auth-refactor.
+    let (db, _repo) = setup();
+    let conn = db.conn().expect("conn");
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(auth_accounts)")
+        .expect("prepare pragma");
+    let columns: Vec<String> = stmt
+        .query_map([], |r| r.get::<_, String>(1))
+        .expect("query_map")
+        .map(|r| r.expect("column name"))
+        .collect();
+
+    assert!(
+        !columns.contains(&"client_id".to_string()),
+        "client_id column should not exist after migration 0009; found columns: {columns:?}"
+    );
+    assert!(
+        !columns.contains(&"token_expires_at".to_string()),
+        "token_expires_at column should not exist after migration 0009; found columns: {columns:?}"
+    );
+
+    // Verify the expected surviving columns are still present.
+    for expected in &["id", "provider", "host", "username", "created_at", "last_used_at"] {
+        assert!(
+            columns.contains(&expected.to_string()),
+            "expected column {expected} to survive migration 0009; found: {columns:?}"
+        );
+    }
+}
