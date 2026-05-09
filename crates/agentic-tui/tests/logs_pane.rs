@@ -15,6 +15,8 @@
 //!
 //! GH #100: vertical scroll fields and key handling for the logs pane.
 
+use std::cell::Cell;
+
 use agentic_tui::app::{AppState, LogEntry, LogLevel, Pane};
 use agentic_tui::draw_app;
 use crossterm::event::KeyCode;
@@ -806,10 +808,7 @@ fn k_in_chat_pane_does_not_affect_log_scroll() {
         ..Default::default()
     };
     s.handle_key(KeyCode::Char('k'));
-    assert_eq!(
-        s.log_scroll, 2,
-        "k in Chat pane must not change log_scroll"
-    );
+    assert_eq!(s.log_scroll, 2, "k in Chat pane must not change log_scroll");
     assert!(
         !s.log_sticky_tail,
         "k in Chat pane must not change log_sticky_tail"
@@ -849,7 +848,7 @@ fn j_clamps_at_log_len_minus_one() {
         log: (0..5).map(make_log_entry).collect(),
         log_scroll: 4,
         log_sticky_tail: false,
-        last_known_log_height: 1, // height=1 → max_scroll = 5-1 = 4, at bottom
+        last_known_log_height: Cell::new(1), // height=1 → max_scroll = 5-1 = 4, at bottom
         ..Default::default()
     };
     s.handle_key(KeyCode::Char('j'));
@@ -874,7 +873,7 @@ fn scrolling_to_bottom_re_enables_sticky_tail() {
         log: (0..5).map(make_log_entry).collect(),
         log_scroll: 1,
         log_sticky_tail: false,
-        last_known_log_height: 2,
+        last_known_log_height: Cell::new(2),
         ..Default::default()
     };
     // Press j three times: 1→2→3→4 (== max_scroll = 5 - (2-1) = 4).

@@ -6,6 +6,7 @@
 //! [`AppState::handle`]. Both surfaces are pure mutators so the bin
 //! and tests share them.
 
+use std::cell::Cell;
 use std::time::{Duration, Instant};
 
 use agentic_core::events::{Event, EventEnvelope};
@@ -193,6 +194,13 @@ pub struct AppState {
     /// Set to false when the user scrolls up; restored when they scroll
     /// back to the bottom. Defaults to true. (GH #100)
     pub log_sticky_tail: bool,
+    /// Last render-time height of the logs pane body area in rows.
+    /// Written by `views/logs_pane::render` on every frame via interior
+    /// mutability so the j/Down handler can compute the true bottom
+    /// without needing a mutable reference to AppState. Defaults to 0
+    /// (means "unknown"; the handler treats 0 as height=1 for safety).
+    /// (GH #100 fix-loop 1)
+    pub last_known_log_height: Cell<usize>,
     /// Chat messages rendered in the chat pane (spec §4.6).
     /// Populated by the runner wiring in T.13.x; empty by default.
     pub chat: Vec<ChatMessage>,
@@ -233,6 +241,7 @@ impl Default for AppState {
             log: vec![],
             log_scroll: 0,
             log_sticky_tail: true,
+            last_known_log_height: Cell::new(0),
             chat: vec![],
             pending_perms: vec![],
             flash: None,
@@ -348,9 +357,19 @@ impl AppState {
                     }
                     KeyCode::Tab => self.handle(AppEvent::ToggleFocus),
                     // Scroll logs down when Logs pane is focused. (GH #100)
-                    KeyCode::Char('j') | KeyCode::Down if self.focus == Pane::Logs => {
-                        self.log_scroll = self.log_scroll.saturating_add(1);
-                        self.log_sticky_tail = false;
+                    KeyCode::Char('j') | KeyCode::Down
+                        if self.focus == Pane::Logs && !self.log.is_empty() =>
+                    {
+                        // Clamp at log.len()-1 so scroll never exceeds content.
+                        self.log_scroll = (self.log_scroll.saturating_add(1))
+                            .min(self.log.len().saturating_sub(1));
+                        // Re-enable sticky tail when the user scrolls back to
+                        // the bottom. max_scroll mirrors the renderer's formula:
+                        //   len - (visible_height - 1)   [when indicator present]
+                        // We use last_known_log_height; treat 0 as 1 (safe floor).
+                        let h = self.last_known_log_height.get().max(1);
+                        let max_scroll = self.log.len().saturating_sub(h.saturating_sub(1));
+                        self.log_sticky_tail = self.log_scroll >= max_scroll;
                     }
                     // Scroll logs up when Logs pane is focused. (GH #100)
                     KeyCode::Char('k') | KeyCode::Up if self.focus == Pane::Logs => {

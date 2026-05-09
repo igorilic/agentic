@@ -62,6 +62,10 @@ pub fn render(area: Rect, f: &mut Frame<'_>, state: &AppState) {
     //      recompute with capacity = visible_height - 1.
     let visible_height = area.height as usize;
 
+    // Record this frame's height so the j/Down handler can compute max_scroll
+    // without needing a mutable borrow of AppState. (GH #100 fix-loop 1)
+    state.last_known_log_height.set(visible_height);
+
     let effective_scroll = if state.log_sticky_tail {
         let len = state.log.len();
         if len <= visible_height {
