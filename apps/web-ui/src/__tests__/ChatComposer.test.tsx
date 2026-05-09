@@ -439,7 +439,7 @@ describe("ChatComposer", () => {
       expect(textarea).toHaveValue("/pl");
     });
 
-    it("ArrowUp from index 0 wraps to last command (spec)", () => {
+    it("ArrowUp from index 0 wraps to last command (help)", () => {
       render(<ChatComposer onSend={vi.fn()} />);
       const textarea = screen.getByTestId("chat-composer-textarea");
 
@@ -447,7 +447,7 @@ describe("ChatComposer", () => {
       fireEvent.keyDown(textarea, { key: "ArrowUp" });
       fireEvent.keyDown(textarea, { key: "Enter" });
 
-      expect(textarea).toHaveValue("/spec ");
+      expect(textarea).toHaveValue("/help ");
     });
 
     it("popover does NOT open when input contains a space (/plan AGT-99)", () => {

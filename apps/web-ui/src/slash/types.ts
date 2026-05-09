@@ -12,7 +12,8 @@ export const ALLOWED_BACKENDS: readonly BackendKind[] = [
 export type SlashCommand =
   | { kind: "plan"; ticket: string; backend?: BackendKind }
   | { kind: "status"; runId: string | null }
-  | { kind: "cancel"; runId: string };
+  | { kind: "cancel"; runId: string }
+  | { kind: "help" };
 
 /**
  * Result of parsing a candidate slash command. Either a typed command or

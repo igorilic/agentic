@@ -74,6 +74,10 @@ export function parseSlashCommand(input: string): SlashParseResult {
       }
       return { ok: true, command: { kind: "cancel", runId: args[0] } };
     }
+    case "help": {
+      // Trailing args are silently ignored — users may type "/help something"
+      return { ok: true, command: { kind: "help" } };
+    }
     default: {
       return { ok: false, error: { kind: "unknown_command", cmd: rawCmd } };
     }

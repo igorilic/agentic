@@ -1,3 +1,4 @@
+import { SLASH_COMMAND_LIBRARY } from "./library";
 import type { BackendKind, SlashCommand } from "./types";
 
 /**
@@ -52,6 +53,12 @@ export async function dispatchSlashCommand(
           ? `Cancelled run ${cmd.runId}`
           : `No active run with id ${cmd.runId}`,
       };
+    }
+    case "help": {
+      const helpText = SLASH_COMMAND_LIBRARY
+        .map((c) => `/${c.name} — ${c.desc}`)
+        .join("\n");
+      return { message: helpText };
     }
   }
 }
