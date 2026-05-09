@@ -230,10 +230,13 @@ describe("SpecDialog", () => {
     });
 
     it("populates title and body on successful pull", async () => {
+      // The Rust IPC `fetch_jira_ticket_inner` returns `body` already combined
+      // with the AC section (see crates/agentic-tauri/src/commands/jira.rs).
+      // SpecDialog uses `dto.body` directly; this mock matches that contract.
       const dto = {
         key: "PROJ-1",
         title: "Fix bug",
-        body: "Steps:\n1. …",
+        body: "Steps:\n1. …\n\n## Acceptance Criteria\nGiven X, when Y, then Z",
         ac: "Given X, when Y, then Z",
       };
       mockFetch.mockResolvedValueOnce(dto);

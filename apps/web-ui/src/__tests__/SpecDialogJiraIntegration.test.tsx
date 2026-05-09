@@ -64,16 +64,17 @@ describe("SpecDialog → IPC integration smoke test", () => {
   it("end-to-end: user pulls from Jira, edits, submits", async () => {
     const user = userEvent.setup();
 
-    // The Rust backend (F.2.1) already appends AC to body in the DTO.
-    // So the IPC mock returns body WITHOUT the AC section (ac is separate).
-    // SpecDialog appends the AC section in handlePull.
+    // The Rust IPC `fetch_jira_ticket_inner` already returns `body` with the
+    // AC section appended (see crates/agentic-tauri/src/commands/jira.rs).
+    // SpecDialog uses `dto.body` directly — no combining on the JS side.
+    // This mock matches that contract.
     mockInvoke.mockImplementation(async (cmd: string, args: unknown) => {
       if (cmd === "fetch_jira_ticket") {
         expect((args as { key: string }).key).toBe("PROJ-42");
         return {
           key: "PROJ-42",
           title: "Refactor X",
-          body: "Why\nThis needs doing",
+          body: "Why\nThis needs doing\n\n## Acceptance Criteria\nAC text",
           ac: "AC text",
         };
       }
