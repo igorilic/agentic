@@ -52,6 +52,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "drop_oauth_columns",
         sql: include_str!("0009_drop_oauth_columns.sql"),
     },
+    Migration {
+        version: 10,
+        name: "pipeline_presets",
+        sql: include_str!("0010_pipeline_presets.sql"),
+    },
 ];
 
 pub struct Migrator;

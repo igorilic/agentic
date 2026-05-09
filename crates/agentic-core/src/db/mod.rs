@@ -4,6 +4,7 @@ pub mod auth;
 pub mod chat;
 pub mod findings;
 pub mod migrations;
+pub mod pipeline_presets;
 pub mod runs;
 mod status;
 pub mod steps;

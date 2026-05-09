@@ -56,7 +56,10 @@ fn migration_0010_creates_pipeline_presets_table() {
 
     // Verify NOT NULL constraints
     for col in &cols {
-        if matches!(col.name.as_str(), "id" | "name" | "agents" | "created_at" | "updated_at") {
+        if matches!(
+            col.name.as_str(),
+            "id" | "name" | "agents" | "created_at" | "updated_at"
+        ) {
             assert!(
                 col.not_null || col.name == "id", // id is PK, implicitly not null
                 "column {} should be NOT NULL",
@@ -103,7 +106,12 @@ fn create_returns_a_preset_with_fresh_ulid_and_timestamps() {
     let agents = default_agents();
     let preset = repo.create("default", &agents).expect("create");
 
-    assert_eq!(preset.id.len(), 26, "ULID should be 26 chars: {}", preset.id);
+    assert_eq!(
+        preset.id.len(),
+        26,
+        "ULID should be 26 chars: {}",
+        preset.id
+    );
     assert_eq!(preset.name, "default");
     assert_eq!(preset.agents, agents);
     assert!(preset.created_at > 0, "created_at should be non-zero");
@@ -130,7 +138,8 @@ fn create_persists_to_db() {
 #[test]
 fn create_with_duplicate_name_errors() {
     let (_db, repo) = setup();
-    repo.create("my-preset", &default_agents()).expect("first create");
+    repo.create("my-preset", &default_agents())
+        .expect("first create");
     let result = repo.create("my-preset", &default_agents());
     assert!(result.is_err(), "expected error for duplicate name");
 }
@@ -155,7 +164,11 @@ fn create_with_exactly_64_char_name_succeeds() {
     let (_db, repo) = setup();
     let name = "a".repeat(64);
     let result = repo.create(&name, &default_agents());
-    assert!(result.is_ok(), "64-char name should be accepted: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "64-char name should be accepted: {:?}",
+        result
+    );
 }
 
 #[test]
@@ -186,7 +199,10 @@ fn update_changes_name_and_agents_and_bumps_updated_at() {
     assert_eq!(updated.id, preset.id);
     assert_eq!(updated.name, "renamed");
     assert_eq!(updated.agents, new_agents);
-    assert_eq!(updated.created_at, original_created_at, "created_at must not change");
+    assert_eq!(
+        updated.created_at, original_created_at,
+        "created_at must not change"
+    );
     assert!(
         updated.updated_at > original_created_at,
         "updated_at ({}) must be > created_at ({})",
@@ -205,12 +221,18 @@ fn update_with_unknown_id_errors() {
 #[test]
 fn update_to_duplicate_name_errors() {
     let (_db, repo) = setup();
-    let a = repo.create("preset-a", &default_agents()).expect("create a");
-    repo.create("preset-b", &default_agents()).expect("create b");
+    let a = repo
+        .create("preset-a", &default_agents())
+        .expect("create a");
+    repo.create("preset-b", &default_agents())
+        .expect("create b");
 
     // Try to rename a to b's name
     let result = repo.update(&a.id, "preset-b", &default_agents());
-    assert!(result.is_err(), "expected error for duplicate name on update");
+    assert!(
+        result.is_err(),
+        "expected error for duplicate name on update"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +284,8 @@ fn get_by_id_returns_none_when_absent() {
 #[test]
 fn get_by_name_returns_some_when_present() {
     let (_db, repo) = setup();
-    repo.create("known-preset", &default_agents()).expect("create");
+    repo.create("known-preset", &default_agents())
+        .expect("create");
 
     let found = repo.get_by_name("known-preset").expect("get_by_name");
     assert!(found.is_some());
@@ -284,7 +307,8 @@ fn get_by_name_returns_none_when_absent() {
 fn list_orders_by_name_asc() {
     let (_db, repo) = setup();
     repo.create("zeta", &default_agents()).expect("create zeta");
-    repo.create("alpha", &default_agents()).expect("create alpha");
+    repo.create("alpha", &default_agents())
+        .expect("create alpha");
     repo.create("mu", &default_agents()).expect("create mu");
 
     let list = repo.list().expect("list");
