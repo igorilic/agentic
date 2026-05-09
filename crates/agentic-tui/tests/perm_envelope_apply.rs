@@ -6,8 +6,7 @@
 //! `perm_card.rs`.
 
 use agentic_core::events::{
-    CURRENT_SCHEMA_VERSION, Event, EventEnvelope, PermissionDecision, PermissionRisk as WireRisk,
-    PermissionSource,
+    CURRENT_SCHEMA_VERSION, Event, EventEnvelope, PermissionDecision, PermissionSource,
 };
 use agentic_tui::app::{AppState, PermissionRequest, PermissionRisk};
 
@@ -35,7 +34,7 @@ fn perm_request_event(request_id: &str) -> EventEnvelope {
         tool: "Bash".into(),
         arg: "rm -rf node_modules".into(),
         scope: "shell.destructive".into(),
-        risk: WireRisk::High,
+        risk: PermissionRisk::High,
         reason: "destructive shell".into(),
     })
 }
@@ -67,7 +66,7 @@ fn apply_permission_request_envelope_appends_to_pending_perms() {
         tool: "Bash".into(),
         arg: "rm -rf node_modules".into(),
         scope: "shell.destructive".into(),
-        risk: WireRisk::High,
+        risk: PermissionRisk::High,
         reason: "destructive shell".into(),
     });
 
@@ -152,9 +151,10 @@ fn unmatched_resolved_is_noop() {
 
 // ── Test 5: Low risk arm is mapped correctly through the wire ─────────────────
 
-/// `map_wire_risk` has three arms (Low / Medium / High). Test 1 covers High
-/// and test 4 covers Medium via fixture. This test pins the Low arm so a
-/// future enum extension or refactor cannot silently drop it.
+/// All three `PermissionRisk` variants (Low / Medium / High) flow through
+/// `apply_envelope` unchanged via the re-export from `agentic_core::events`.
+/// Test 1 covers High and test 4 covers Medium via fixture. This test pins
+/// the Low arm so a future enum extension or refactor cannot silently drop it.
 #[test]
 fn apply_permission_request_envelope_maps_low_risk() {
     let mut state = AppState::default();
@@ -164,7 +164,7 @@ fn apply_permission_request_envelope_maps_low_risk() {
         tool: "Read".into(),
         arg: "/tmp/safe.txt".into(),
         scope: "fs.read".into(),
-        risk: WireRisk::Low,
+        risk: PermissionRisk::Low,
         reason: "read-only".into(),
     });
 
@@ -199,7 +199,7 @@ fn multiple_requests_resolve_independently() {
         tool: "Write".into(),
         arg: "git push --force".into(),
         scope: "git.push.force".into(),
-        risk: WireRisk::Medium,
+        risk: PermissionRisk::Medium,
         reason: "force push after rebase".into(),
     });
     state.apply_envelope(&env2);

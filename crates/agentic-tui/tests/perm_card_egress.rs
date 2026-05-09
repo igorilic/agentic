@@ -282,9 +282,5 @@ fn published_envelope_contains_run_id() {
 
     let published = drain(&mut rx);
     assert_eq!(published.len(), 1);
-    // The run_id must be non-empty (exact value depends on implementation).
-    assert!(
-        !published[0].run_id.is_empty(),
-        "published envelope run_id should not be empty"
-    );
+    assert_eq!(published[0].run_id, "run-42");
 }
