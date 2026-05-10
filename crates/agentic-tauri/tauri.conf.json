@@ -4,11 +4,15 @@
   "version": "0.1.0",
   "identifier": "io.agentic.app",
   "build": {
-    "frontendDist": "frontend"
+    "frontendDist": "frontend",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm --filter @agentic/web-ui dev"
   },
   "app": {
-    "windows": [{"title": "Agentic", "width": 1200, "height": 800}],
-    "security": {"csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data:;"}
+    "windows": [{ "title": "Agentic", "width": 1200, "height": 800, "dragDropEnabled": false }],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data:;"
+    }
   },
-  "bundle": {"active": false, "targets": "all"}
+  "bundle": { "active": false, "targets": "all" }
 }
