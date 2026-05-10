@@ -527,10 +527,139 @@ describe("PipelineBar", () => {
 
   describe("drag-reorder", () => {
     // Gap index N = "before card at position N".
-    // Gaps 1-3 are between cards; gap 4 is after the last card (before + Add agent).
+    // Gap 0 is before the first card; gaps 1-3 are between cards;
+    // gap 4 is after the last card (before + Add agent).
     // onReorder(fromIndex, finalToIndex) — consumer does a plain splice without adjustment.
     // Adjusted-index contract: finalToIndex = (fromIndex < gapN) ? gapN - 1 : gapN.
     // Self-drop (adjusted === fromIndex) is a no-op; onReorder must NOT be called.
+
+    // --- Bug B: gap-0 must exist as a drop target before the first card ---
+
+    it("gap-0 exists as a drop target before the first card", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      expect(screen.getByTestId("pipeline-gap-0")).toBeInTheDocument();
+    });
+
+    it("gap-0 initially has data-drop-active='false'", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      expect(screen.getByTestId("pipeline-gap-0")).toHaveAttribute(
+        "data-drop-active",
+        "false"
+      );
+    });
+
+    it("drag reviewer(3) to gap-0 calls onReorder(3, 0)", () => {
+      const onReorder = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={onReorder}
+        />
+      );
+      const card = screen.getByTestId("agent-card-reviewer");
+      const gap0 = screen.getByTestId("pipeline-gap-0");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap0);
+      fireEvent.drop(gap0);
+      expect(onReorder).toHaveBeenCalledTimes(1);
+      expect(onReorder).toHaveBeenCalledWith(3, 0);
+    });
+
+    it("drag developer(1) to gap-0 calls onReorder(1, 0)", () => {
+      const onReorder = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={onReorder}
+        />
+      );
+      const card = screen.getByTestId("agent-card-developer");
+      const gap0 = screen.getByTestId("pipeline-gap-0");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap0);
+      fireEvent.drop(gap0);
+      expect(onReorder).toHaveBeenCalledTimes(1);
+      expect(onReorder).toHaveBeenCalledWith(1, 0);
+    });
+
+    it("drag architect(0) to gap-0 (self-adjacent) does NOT call onReorder", () => {
+      const onReorder = vi.fn();
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={onReorder}
+        />
+      );
+      const card = screen.getByTestId("agent-card-architect");
+      const gap0 = screen.getByTestId("pipeline-gap-0");
+      fireEvent.dragStart(card);
+      fireEvent.dragOver(gap0);
+      fireEvent.drop(gap0);
+      expect(onReorder).not.toHaveBeenCalled();
+    });
+
+    // --- Bug A: dataTransfer.setData must be called in onDragStart ---
+    // WKWebView (macOS Tauri) and Webview2 (Windows) require at least one
+    // dataTransfer entry to treat a dragstart as valid. jsdom does not
+    // enforce this requirement, so existing tests pass regardless.
+
+    it("onDragStart calls dataTransfer.setData('text/plain', stringified index)", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      const card = screen.getByTestId("agent-card-architect");
+      const mockDataTransfer = {
+        setData: vi.fn(),
+        effectAllowed: "" as DataTransfer["effectAllowed"],
+        dropEffect: "none" as DataTransfer["dropEffect"],
+      };
+      fireEvent.dragStart(card, { dataTransfer: mockDataTransfer });
+      expect(mockDataTransfer.setData).toHaveBeenCalledWith("text/plain", "0");
+    });
+
+    it("onDragStart sets dataTransfer.effectAllowed to 'move'", () => {
+      render(
+        <PipelineBar
+          agents={defaultAgents}
+          statuses={defaultStatuses}
+          activeIndex={1}
+          onReorder={vi.fn()}
+        />
+      );
+      const card = screen.getByTestId("agent-card-developer"); // index 1
+      const mockDataTransfer = {
+        setData: vi.fn(),
+        effectAllowed: "" as DataTransfer["effectAllowed"],
+        dropEffect: "none" as DataTransfer["dropEffect"],
+      };
+      fireEvent.dragStart(card, { dataTransfer: mockDataTransfer });
+      expect(mockDataTransfer.effectAllowed).toBe("move");
+    });
 
     it("renders gap drop targets pipeline-gap-1 through pipeline-gap-4", () => {
       render(
