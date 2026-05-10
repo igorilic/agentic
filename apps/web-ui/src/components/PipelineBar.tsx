@@ -48,12 +48,32 @@ function useDragReorder(onReorder?: (from: number, to: number) => void) {
       onDragLeave() {
         setDropGapIndex((prev) => (prev === rightIndex ? null : prev));
       },
-      onDrop() {
-        if (dragFromIndex !== null) {
-          const adjusted =
-            dragFromIndex < rightIndex ? rightIndex - 1 : rightIndex;
-          if (adjusted !== dragFromIndex) {
-            onReorder?.(dragFromIndex, adjusted);
+      onDrop(e: React.DragEvent) {
+        e.preventDefault();
+        // Read the source index from dataTransfer rather than React state so
+        // the drop handler is independent of dragstart→dragend→drop event
+        // ordering. WKWebView in some Tauri/wry versions fires `dragend`
+        // before `drop` (in violation of the HTML5 spec ordering); when that
+        // happens, `onCardDragEnd` has already cleared `dragFromIndex` to
+        // null and the React-state path is a silent no-op. Reading from
+        // dataTransfer recovers the index from the drag itself.
+        let fromIndex: number | null = null;
+        if (e.dataTransfer) {
+          const raw = e.dataTransfer.getData("text/plain");
+          const parsed = raw === "" ? NaN : Number(raw);
+          if (Number.isInteger(parsed) && parsed >= 0) {
+            fromIndex = parsed;
+          }
+        }
+        // Fallback to closure state for jsdom tests that don't populate
+        // dataTransfer on synthetic drag events.
+        if (fromIndex === null) {
+          fromIndex = dragFromIndex;
+        }
+        if (fromIndex !== null) {
+          const adjusted = fromIndex < rightIndex ? rightIndex - 1 : rightIndex;
+          if (adjusted !== fromIndex) {
+            onReorder?.(fromIndex, adjusted);
           }
         }
         setDragFromIndex(null);
