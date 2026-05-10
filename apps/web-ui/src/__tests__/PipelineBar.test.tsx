@@ -106,7 +106,9 @@ describe("PipelineBar", () => {
   });
 
   describe("connectors", () => {
-    it("renders 3 connector testids for 4 agents", () => {
+    it("renders 4 connector testids for 4 agents", () => {
+      // gap-0 (before first card) + gaps 1, 2, 3 (between cards) each include
+      // a Connector. The trailing end-gap (gap-4) does not include a Connector.
       render(
         <PipelineBar
           agents={defaultAgents}
@@ -115,7 +117,7 @@ describe("PipelineBar", () => {
         />
       );
       const connectors = screen.getAllByTestId("connector");
-      expect(connectors).toHaveLength(3);
+      expect(connectors).toHaveLength(4);
     });
 
     it("each connector has data-active='false'", () => {
@@ -159,7 +161,9 @@ describe("PipelineBar", () => {
   });
 
   describe("2-agent variant", () => {
-    it("renders 1 connector and 2 cards in order for ['architect','qa']", () => {
+    it("renders 2 connectors and 2 cards in order for ['architect','qa']", () => {
+      // gap-0 (before first card) + gap-1 (between the two cards) each include
+      // a Connector; the trailing end-gap does not.
       render(
         <PipelineBar
           agents={["architect", "qa"]}
@@ -167,7 +171,7 @@ describe("PipelineBar", () => {
           activeIndex={0}
         />
       );
-      expect(screen.getAllByTestId("connector")).toHaveLength(1);
+      expect(screen.getAllByTestId("connector")).toHaveLength(2);
       const cards = Array.from(
         screen.getAllByTestId(/^agent-card-(architect|qa)$/)
       ).map((el) => el.dataset.testid);
@@ -226,7 +230,11 @@ describe("PipelineBar", () => {
   });
 
   describe("insert chips", () => {
-    it("renders 3 insert chips for a 4-agent pipeline", () => {
+    it("renders 4 insert chips for a 4-agent pipeline", () => {
+      // gap-0 (before first card) adds pipeline-insert-0; gaps 1-3 (between
+      // cards) add pipeline-insert-1 through pipeline-insert-3. The trailing
+      // end-gap (gap-4) has no insert button — that role is filled by
+      // the '+ Add agent' end cap.
       render(
         <PipelineBar
           agents={defaultAgents}
@@ -236,7 +244,7 @@ describe("PipelineBar", () => {
         />
       );
       const chips = screen.queryAllByTestId(/^pipeline-insert-\d+$/);
-      expect(chips).toHaveLength(3);
+      expect(chips).toHaveLength(4);
     });
 
     it("each chip has aria-label 'Insert agent at position {atIndex}'", () => {
@@ -337,7 +345,8 @@ describe("PipelineBar", () => {
       expect(onInsert).not.toHaveBeenCalled();
     });
 
-    it("2-agent pipeline has exactly 1 insert chip at pipeline-insert-1", () => {
+    it("2-agent pipeline has exactly 2 insert chips at pipeline-insert-0 and pipeline-insert-1", () => {
+      // gap-0 (before first card) + gap-1 (between the two cards).
       render(
         <PipelineBar
           agents={["architect", "qa"]}
@@ -347,7 +356,8 @@ describe("PipelineBar", () => {
         />
       );
       const chips = screen.queryAllByTestId(/^pipeline-insert-\d+$/);
-      expect(chips).toHaveLength(1);
+      expect(chips).toHaveLength(2);
+      expect(screen.getByTestId("pipeline-insert-0")).toBeInTheDocument();
       expect(screen.getByTestId("pipeline-insert-1")).toBeInTheDocument();
     });
 

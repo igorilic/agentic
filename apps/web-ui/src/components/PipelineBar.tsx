@@ -19,7 +19,15 @@ function useDragReorder(onReorder?: (from: number, to: number) => void) {
   const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
   const [dropGapIndex, setDropGapIndex] = useState<number | null>(null);
 
-  function onCardDragStart(index: number) {
+  function onCardDragStart(index: number, e: React.DragEvent) {
+    // WKWebView (macOS Tauri) and Webview2 (Windows) require dataTransfer to
+    // have at least one data type for the drag to register; without setData,
+    // dragover/drop events may not fire on gap targets in real webviews.
+    // jsdom does not always provide dataTransfer; guard with optional chaining.
+    if (e.dataTransfer) {
+      e.dataTransfer.setData("text/plain", String(index));
+      e.dataTransfer.effectAllowed = "move";
+    }
     setDragFromIndex(index);
   }
 
@@ -32,6 +40,9 @@ function useDragReorder(onReorder?: (from: number, to: number) => void) {
     return {
       onDragOver(e: React.DragEvent) {
         e.preventDefault();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = "move";
+        }
         setDropGapIndex(rightIndex);
       },
       onDragLeave() {
@@ -156,23 +167,26 @@ export default function PipelineBar({
           <span>Add an agent to get started</span>
         </div>
       ) : (
-        agents.map((agent, i) => (
-          <div key={agent} className="contents">
-            <AgentCard
-              agent={agent}
-              status={statuses[agent] ?? "queued"}
-              index={i}
-              skipped={skipped?.has(agent) ?? false}
-              draggable={true}
-              dragging={dragFromIndex === i}
-              onDragStart={() => onCardDragStart(i)}
-              onDragEnd={() => onCardDragEnd()}
-              onRemove={() => onRemove?.(i)}
-              onSkip={() => onSkip?.(i)}
-            />
-            {i < agents.length - 1 && renderInterCardGap(i + 1)}
-          </div>
-        ))
+        <>
+          {renderInterCardGap(0)}
+          {agents.map((agent, i) => (
+            <div key={agent} className="contents">
+              <AgentCard
+                agent={agent}
+                status={statuses[agent] ?? "queued"}
+                index={i}
+                skipped={skipped?.has(agent) ?? false}
+                draggable={true}
+                dragging={dragFromIndex === i}
+                onDragStart={(e) => onCardDragStart(i, e)}
+                onDragEnd={() => onCardDragEnd()}
+                onRemove={() => onRemove?.(i)}
+                onSkip={() => onSkip?.(i)}
+              />
+              {i < agents.length - 1 && renderInterCardGap(i + 1)}
+            </div>
+          ))}
+        </>
       )}
       {/* gap-N after the last card, before + Add agent */}
       {agents.length > 0 && renderEndGap()}
